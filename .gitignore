@@ -1,0 +1,16 @@
+#----- Git Ignore File -----# 
+
+# Data directory
+data/bathymetry/
+data/cce/
+data/mitgcm/
+data/calcofi/
+
+# Figs directory
+
+# Docs directory 
+docs/
+
+# Src directory
+
+# Tools directory
