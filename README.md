@@ -37,7 +37,7 @@ WaveSpectrum/
 │   ├── cce
 │   ├── mitgcm
 │   ├── bathymetry
-│   └── CalCOFI
+│   └── calcofi
 ├── figs
 ├── src
 └── tools
