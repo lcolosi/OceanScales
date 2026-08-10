@@ -1,0 +1,22 @@
+name: ocean_scales
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - netcdf4
+  - numpy
+  - matplotlib
+  - jupyterlab
+  - geopandas
+  - xeofs
+  - cmocean
+  - cartopy
+  - scipy
+  - xgcm
+  - pandas
+  - xarray
+  - pooch
+  - gsw
+  - seaborn
+  - geopy
+  - mpmath
