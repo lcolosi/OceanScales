@@ -12,5 +12,7 @@ data/calcofi/
 docs/
 
 # Src directory
+src/__pycache__/
 
 # Tools directory
+tools/__pycache__/
