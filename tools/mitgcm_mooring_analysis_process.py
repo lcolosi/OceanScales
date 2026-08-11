@@ -26,9 +26,9 @@ from xmitgcm import open_mdsdataset
 # Set data analysis parameters
 # -----------------------------------------------------------------------------
 
-# ------------# 
-# --- Note ---# 
-# ------------#
+# ------------ # 
+# --- Note --- # 
+# ------------ #
 #
 # - delta_t: Model time step in seconds (time increments of the diagnostics can differ).
 # - lat_cce: Latitude locations of the CCE mooring sites.
@@ -39,7 +39,7 @@ from xmitgcm import open_mdsdataset
 # - PATH_nc: Directory where netCDF files are saved.
 # - file_dim: Diagnostic file dimension (3D for T, S, drhodr, and velocity; 2D for etan).
 #
-# ------------# 
+# ------------ # 
 
 # Model parameters 
 delta_t = 150  
@@ -59,9 +59,9 @@ file_dim    = '3D'
 # Load the grid and diagnostics data into a python structure
 # -----------------------------------------------------------------------------
 
-#------------#  
-#--- Note ---#
-#------------# 
+# ------------ #  
+# --- Note --- # 
+# ------------ # 
 #
 # - PATH_OUTPUT: Directory containing model output (.data and .meta files).
 # - PATH_GRID: Directory containing the model grid.
@@ -72,7 +72,7 @@ file_dim    = '3D'
 # - ref_date: Start time of the simulation, including model spin-up.
 # - geometry: Model grid uses spherical-polar coordinates.
 #
-# ------------# 
+# ------------ # 
 
 # Create dataset 
 ds = open_mdsdataset(

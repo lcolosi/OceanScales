@@ -21,13 +21,11 @@
 import sys
 import xarray as xr
 import numpy as np
-import matplotlib.pyplot as plt 
 from netCDF4 import Dataset, num2date
 from datetime import datetime
 import os
 from scipy.interpolate import interp1d
 import gsw
-from pyproj import Proj, Transformer
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
