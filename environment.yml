@@ -3,20 +3,21 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - netcdf4
-  - numpy
-  - matplotlib
-  - jupyterlab
-  - geopandas
-  - xeofs
-  - cmocean
-  - cartopy
-  - scipy
-  - xgcm
-  - pandas
-  - xarray
-  - pooch
-  - gsw
-  - seaborn
-  - geopy
-  - mpmath
+  - netcdf4=1.7.2
+  - numpy=2.3.2
+  - matplotlib=3.10.5
+  - jupyterlab=4.4.6
+  - geopandas=1.1.1
+  - xeofs=3.0.4
+  - cmocean=4.0.3
+  - cartopy=0.25.0
+  - scipy=1.16.1
+  - xgcm=0.8.1
+  - pandas=2.3.1
+  - xarray=2025.8.0
+  - pooch=1.8.2
+  - gsw=3.6.20
+  - seaborn=0.13.2
+  - geopy=2.4.1
+  - mpmath=1.3.0
+  - xmitgcm=0.5.2
