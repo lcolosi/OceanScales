@@ -5,6 +5,7 @@
 # Description:
 #   Computes intermediate derived variables from the model diagnostics for the cross-
 #   shelf transect decorrelation time scale analysis. These include: 
+# 
 #       (1) Conservative Temperature
 #       (2) Absolute Salinity
 #       (3) Potential Density (referenced to the surface)
@@ -38,8 +39,10 @@ import gsw
 #                Options include: 'vel' or 'density'
 # - option_depth_mask: Specifies whether there is a depth mask applied to the data for 
 #                      computing the depth average velocity. 
-# - depth_thresh: Specify the lower depth limit of depth average if option_mask is true.
-#                 Units: meters. 
+# - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
+#                     option_mask is true. Units: meters. 
+# - sig_depth_thresh: Specify the lower depth limit of density depth average. 
+#                     Units: meters. 
 # - R_earth: Specify the radius of the Earth. Units: kilometers.
 # - g: Specify the acceleration due to gravity. Units: m/s^2.
 #
@@ -50,7 +53,8 @@ option_proc          = 'vel'
 option_depth_mask    = 1      
 
 # Set physical parameters 
-depth_thresh = 400   
+vel_depth_thresh = 400   
+sig_depth_thresh = -500 
 R_earth      = 6371 
 g            = 9.81 
 
@@ -62,7 +66,7 @@ PATH = ROOT + 'data/mitgcm/transect/'
 # Load mitgcm data netcdf files 
 # -----------------------------------------------------------------------------
 
-# --- Velocity Processing --- # 
+# --- Velocity --- # 
 if option_proc == 'vel':
 
     # Obtain filename paths
@@ -91,7 +95,7 @@ if option_proc == 'vel':
     u_m = np.transpose(u_m, (2, 0, 1))
     v_m = np.transpose(v_m, (2, 0, 1))
 
-# --- Density Processing --- # 
+# --- Density --- # 
 elif option_proc == 'density':
 
     # Obtain filename paths
@@ -145,8 +149,8 @@ if option_proc == 'vel':
     # Mask depth levels below threshold if requested
     if option_depth_mask == 1:
 
-        # Mask depth levels deeper than depth_thresh
-        mask_depth = depth_pos <= depth_thresh
+        # Mask depth levels deeper than vel_depth_thresh
+        mask_depth = depth_pos <= vel_depth_thresh
 
         # Select shallower depths
         depth_sel = depth_pos[mask_depth]
@@ -273,7 +277,7 @@ if option_proc == 'density':
     ndist, ntime, ndepth = np.shape(sigma0)
 
     # Compute the mean density in the upper 500 m for reference density
-    rho0 = np.ma.mean(rho_theta[:,:,(depth <= depth[0]) & (depth >= -500)]) 
+    rho0 = np.ma.mean(rho_theta[:,:,(depth <= depth[0]) & (depth >= sig_depth_thresh)]) 
 
     # Compute the time-mean fields 
     SA_mean = np.mean(SA, axis=1)        

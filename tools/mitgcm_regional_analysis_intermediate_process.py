@@ -5,6 +5,7 @@
 # Description:
 #   Computes intermediate derived variables from the model diagnostics for the regional 
 #   decorrelation time scale analysis. These include: 
+# 
 #       (1) Conservative Temperature
 #       (2) Absolute Salinity
 #       (3) Potential Density (referenced to the surface)
@@ -229,7 +230,7 @@ if option_proc == 'ssh':
 # --- Velocity --- # 
 if option_proc == 'vel': 
 
-    #--- Coordinates ---# 
+    # --- Coordinates --- # 
     Depth = xr.DataArray(data=depth, 
                         dims=(),
                         attrs=dict(
@@ -238,7 +239,7 @@ if option_proc == 'vel':
                             )
     )
 
-    #--- Velocity Components ---#
+    # --- Velocity Components --- #
     u = xr.DataArray(data=u_int,
                         dims=['time','lat','lon'],
                         coords=dict(time=time_dt,lat=lat,lon=lon),
@@ -267,7 +268,7 @@ if option_proc == 'vel':
 # --- Density --- # 
 if option_proc == 'density': 
 
-    #--- Coordinates ---# 
+    # --- Coordinates --- # 
     Depth = xr.DataArray(data=depth, 
                         dims=(),
                         attrs=dict(
@@ -276,7 +277,7 @@ if option_proc == 'density':
                             )
     )
 
-    #--- Sea State Varibles ---# 
+    # --- Sea State Varibles --- # 
     Pressure = xr.DataArray(data=pressure, 
                         dims=['time','lat','lon'],
                         coords=dict(time=time_dt,lat=lat,lon=lon),
@@ -322,7 +323,7 @@ if option_proc == 'density':
 # --- Sea Surface Height --- # 
 if option_proc == 'ssh':
 
-    #--- Sea Surface Height ---#
+    # --- Sea Surface Height --- #
     ssh = xr.DataArray(data=ssh_m,
                         dims=['time','lat','lon'],
                         coords=dict(time=time_dt,lat=lat,lon=lon),
