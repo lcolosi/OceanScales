@@ -38,6 +38,8 @@ from xmitgcm import open_mdsdataset
 # - PATH_OUTPUT: Directory containing model diagnostics.
 # - PATH_nc: Directory where netCDF files are saved.
 # - file_dim: Diagnostic file dimension (3D for T, S, drhodr, and velocity; 2D for etan).
+#
+# ------------# 
 
 # Model parameters 
 delta_t = 150  
@@ -70,6 +72,8 @@ file_dim    = '2D'
 # - prefix: Load diagnostics corresponding to the specified file dimension.
 # - ref_date: Start time of the simulation, including model spin-up.
 # - geometry: Model grid uses spherical-polar coordinates.
+#
+# ------------# 
 
 # Create dataset 
 ds = open_mdsdataset(
@@ -174,4 +178,3 @@ for var_name, da in vars_to_save.items():
             format='NETCDF4',         
             encoding=encoding            
         )
-
