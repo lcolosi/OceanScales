@@ -11,14 +11,12 @@ The coastal-open ocean transition zone (COTZ) encompasses the continental shelf,
 The shallow coastal seas and the deep open ocean continuously exchange energy, heat, freshwater, and nutrients through ocean currents, waves, and eddies. Understanding how coastal and open-ocean waters are connected is important because coastal oceans help regulate Earth's climate, support productive marine ecosystems, and sustain ocean fisheries. Understanding these connections requires knowledge of how the ocean evolves over time, so we can accurately measure, map, and model ocean variables such as temperature, salinity, and density. However, we do not fully understand how long ocean features and conditions tend to persist before changing, how this persistence varies from the coast to the open ocean, whether these spatial changes in persistence occur gradually or abruptly, or what drives this variability. This study uses data from a high-resolution ocean model and mooring observations to determine the persistence of ocean density off the California coast and how this persistence varies throughout the water column and across the coastal ocean. We find that the persistence of ocean density varies significantly throughout the ocean, with the most pronounced changes at transitions in ocean currents, water depth, and how density changes with depth. These results show that ocean density does not vary in a simple, uniform way across the coastal ocean, and that assuming a single typical timescale is not sufficient to describe or predict variability. This has important implications for how we design observing systems and build models that aim to represent the full range of ocean variability.
 
 # Authors 
-* [Luke V. Colosi](https://lcolosi.github.io/)<<lcolosi@ucsd.edu>>
-* [Matthew R. Mazloff]([https://scripps.ucsd.edu/profiles/npizzo](https://mmazloff.scrippsprofiles.ucsd.edu/)) <<mmazloff@ucsd.edu>>
-* [Sarah T. Gille]([https://airsea.ucsd.edu/people/](https://sgille.scrippsprofiles.ucsd.edu/)) <<sgille@ucsd.edu>>
+* [Luke V. Colosi](https://lcolosi.github.io/) <<lcolosi@ucsd.edu>>
+* [Matthew R. Mazloff](https://mmazloff.scrippsprofiles.ucsd.edu/) <<mmazloff@ucsd.edu>>
+* [Sarah T. Gille](https://sgille.scrippsprofiles.ucsd.edu/) <<sgille@ucsd.edu>>
 
 # Data
 All data needed to reproduce the analysis in this paper will be available for download through the University of California Digital Collections.
-
-
 
 # Funding
 This work was supported by the Office of Naval Research (Grant #), by the National Defense Science and Engineering Graduate Fellowship.
