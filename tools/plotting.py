@@ -16,35 +16,38 @@
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+import matplotlib.dates as mdates
 
 # --- Coastline and Land Mask Function --- #
-def set_coastlines(ax, projection, resolution, lon_min, lon_max, lat_min, lat_max):
+def set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min, 
+    lon_max, 
+    lat_min, 
+    lat_max,
+):
 
     """
-    set_subplots(ax, projection, resolution, lon_min, lon_max, lat_min, lat_max)
+    Function for setting the spatial limits of a cartopy figure and plotting the 
+    coastline and land mask. 
 
-        Function for setting the spatial limits of a cartopy figure and plotting the 
-        coastline and land mask. 
+    Parameters
+    ----------
+    ax         : Geospatial axes for the subplot (cartopy object).
+    projection : Cartopy map projection. 
+    resolution : Specifies the resolution of the coastline map. 
+                    Options include: '110m', '50m', '10m'
+    lon_min    : Minimum extent for longitude on the scale from -180 to 179
+    lon_max    : Maximum extent for longitude on the scale from -180 to 179
+    lat_min    : Minimum extent for latitude on the scale from -90 to 89
+    lat_max    : Maximum extent for latitude on the scale from -90 to 89
 
-        Parameters
-        ----------
-        ax         : Geospatial axes for the subplot (cartopy object).
-        projection : Cartopy map projection. 
-        resolution : Specifies the resolution of the coastline map. 
-                     Options include: '110m', '50m', '10m'
-        lon_min    : Minimum extent for longitude on the scale from -180 to 179
-        lon_max    : Maximum extent for longitude on the scale from -180 to 179
-        lat_min    : Minimum extent for latitude on the scale from -90 to 89
-        lat_max    : Maximum extent for latitude on the scale from -90 to 89
-
-        Returns
-        -------
-        No objects returned. A geospatial map with desired longitude and latitude
-        extent with coastlines and land.
-
-        Libraries necessary to run function
-        -----------------------------------
-        import cartopy.feature as cfeature
+    Returns
+    -------
+    No objects returned. A geospatial map with desired longitude and latitude
+    extent with coastlines and land.
     """
 
     # Set extents of map
@@ -214,8 +217,12 @@ def set_cbar(
     return cbar
 
 # --- Figure corner labeling --- #
-def add_corner_label(ax, pos, label, fontsize=12):
-
+def add_corner_label(
+    ax, 
+    pos, 
+    label, 
+    fontsize=12,
+):
     """
     Add a labeled text box to a specified corner of an axes.
 
@@ -254,3 +261,35 @@ def add_corner_label(ax, pos, label, fontsize=12):
     )
 
     return
+
+# --- Figure corner labeling --- #
+def month_fmt(
+    x,
+):
+    """
+    Custom formatter function for labeling months on a Matplotlib time axis.
+
+    Parameters
+    ----------
+    x : float
+        The x-axis value representing time in Matplotlib's internal date format 
+        (i.e., days since 0001-01-01 UTC, plus fractions of a day).
+
+    Returns
+    -------
+    label : str
+        A formatted string for the x-axis tick label — either the first letter of 
+        the month or, for January, the letter 'J' followed by the year on a new line.
+    """
+
+    # Convert the numeric x-axis value into a datetime object
+    dt = mdates.num2date(x)
+
+    # If the month is January, return 'J' with the year printed below (newline)
+    if dt.month == 1:
+        return f"J\n{dt.year}"  
+    
+    # For all other months, return only the first letter of the abbreviated month name
+    else:
+        return dt.strftime('%b')[0]
+    
