@@ -265,6 +265,7 @@ def add_corner_label(
 # --- Figure corner labeling --- #
 def month_fmt(
     x,
+    pos,
 ):
     """
     Custom formatter function for labeling months on a Matplotlib time axis.
@@ -274,6 +275,10 @@ def month_fmt(
     x : float
         The x-axis value representing time in Matplotlib's internal date format 
         (i.e., days since 0001-01-01 UTC, plus fractions of a day).
+
+    pos : int
+        The tick position index (required by Matplotlib's formatter interface, 
+        but not used in this function).
 
     Returns
     -------

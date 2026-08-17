@@ -20,15 +20,12 @@
 # Import libraries 
 import sys
 import os
-import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset, num2date
 from datetime import datetime
 import matplotlib.dates as mdates
 from matplotlib.ticker import FuncFormatter
-from scipy.stats import chi2
-import matplotlib.colors as mcolors
 
 # Set path to access additional python functions
 sys.path.append('/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/' \
@@ -72,10 +69,9 @@ T_annual         = 365.25*(24)*(60)*(60)
 segment_overlap  = 0.5                                        
 segment_duration = 1                                           
 
-
 # Set paths to figures directories
 ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH_data = ROOT + 'data/mitgcm/intermediate_proc/' 
+PATH_data = ROOT + 'data/mitgcm/mooring/intermediate_proc/' 
 PATH_figs = ROOT + 'figs/'
 
 # Set font and fontsize

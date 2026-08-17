@@ -295,7 +295,7 @@ plt.tight_layout()
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs + 'fig02.png',
+    PATH_figs + 'fig03.png',
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
