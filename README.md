@@ -1,6 +1,6 @@
 # Source Code for: 
 
-Luke Colosi, Matthew Mazloff, and Sarah T. Gille. Decorrelation Time Scales Variations Across the Coastal-Open Ocean Transition Zone. Journal of Geophysical Research: Oceans, in preparation. 
+Luke Colosi, Matthew Mazloff, Matthias Lankhorst, Jeffrey Sevadjian, Uwe Send, and Sarah T. Gille. Decorrelation Time Scales Variations Across the Coastal-Open Ocean Transition Zone. Journal of Geophysical Research: Oceans, in preparation. 
 
 # Abstract 
 
@@ -13,6 +13,9 @@ The shallow coastal seas and the deep open ocean continuously exchange energy, h
 # Authors 
 * [Luke V. Colosi](https://lcolosi.github.io/) <<lcolosi@ucsd.edu>>
 * [Matthew R. Mazloff](https://mmazloff.scrippsprofiles.ucsd.edu/) <<mmazloff@ucsd.edu>>
+* [Matthias Lankhorst](https://pordlabs.ucsd.edu/mlankhorst/mlankhorst_main.html) <<mlankhorst@ucsd.edu>>
+* [Jeffrey Sevadjian](https://scripps.ucsd.edu/profiles/jsevadjian) <<jsevadjian@ucsd.edu>>
+* [Uwe Send](https://usend.scrippsprofiles.ucsd.edu/) <<usend@ucsd.edu>>
 * [Sarah T. Gille](https://sgille.scrippsprofiles.ucsd.edu/) <<sgille@ucsd.edu>>
 
 # Data
