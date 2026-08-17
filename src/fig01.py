@@ -34,7 +34,7 @@ sys.path.append('/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/
 from plotting import set_coastlines, set_grid_ticks, set_cbar
 
 # -----------------------------------------------------------------------------
-# Set data analysis parameters
+# Set plotting parameters
 # -----------------------------------------------------------------------------
 
 # Set paths to data and figures directories
@@ -43,9 +43,10 @@ PATH_data  = ROOT + 'data/'
 PATH_figs   = ROOT + 'figs/'
 
 # Set font and fontsize using LaTeX 
+fontsize=18
 os.environ["PATH"] = "/usr/local/texlive/2022/bin/universal-darwin:" + os.environ["PATH"]
 plt.rcParams.update({
-    "font.size": 18,         
+    "font.size": fontsize,         
     "text.usetex": True,           
     "font.family": "serif",       
     "text.latex.preamble": r"\usepackage{amsmath}" 
@@ -104,7 +105,6 @@ calCOFI_lon   = calCOFI_line80[:, 2]
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-fontsize=18
 projection = ccrs.PlateCarree(central_longitude=0.0)
 xticks = [-123, -122, -121, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
@@ -262,7 +262,7 @@ ax.legend(
 # Adjust figure layout
 plt.tight_layout()
 
-# Save with high quality
+# Save figure in high resolution 
 fig.savefig(
     PATH_figs + 'fig01.png',
     dpi=300,
