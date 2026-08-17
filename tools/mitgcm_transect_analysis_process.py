@@ -1,13 +1,15 @@
 # =============================================================================
-# Processing MITgcm data for the Transect Analysis
+# Intermediate Processing MITgcm data for the Transect Analysis
 # =============================================================================
 #
 # Description:
-#   Slice the MITgcm data to extract the temperature, salinity, and 
-#   velocity variables for the cross-shelf transect Analysis. The script will read in 
-#   the MITgcm output files, extract the necessary variables along the calCOFI 
-#   line 80.0 cross-shelf transect, and save them in netcdf format for further 
-#   analysis.
+#   Computes intermediate derived variables from the model diagnostics for the cross-
+#   shelf transect decorrelation time scale analysis. These include: 
+# 
+#       (1) Conservative Temperature
+#       (2) Absolute Salinity
+#       (3) Potential Density (referenced to the surface)
+#       (4) Interpolated and rotatedhorizontal velocity components
 #
 # Author:
 #   Luke Colosi
@@ -16,266 +18,518 @@
 #   2026-08-11
 # =============================================================================
 
-# Import python libraries
+# Import python libraries 
 import sys
-import numpy as np
+import os
 import xarray as xr
-from xmitgcm import open_mdsdataset
-from geopy.distance import geodesic
-import xgcm
+import numpy as np
+from netCDF4 import Dataset, num2date
+from datetime import datetime
+import gsw
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
 # -----------------------------------------------------------------------------
 
-# ------------# 
-# --- Note ---# 
-# ------------#
+# ------------ # 
+# --- Note --- # 
+# ------------ #
 #
-# - delta_t: Model time step in seconds (time increments of the diagnostics can differ).
-# - lat_bnds: Latitude bounds setting the region of interest.
-# - lon_bnds: Longitude bounds setting the region of interest.
-# - encoding: Start time of the model run.
-# - PATH_GRID: Directory containing the model grid.
-# - PATH_OUTPUT: Directory containing model diagnostics.
-# - PATH_nc: Directory where netCDF files are saved.
-# - file_dim: Diagnostic file dimension (3D for T, S, drhodr, and velocity; 2D for etan).
+# - option_proc: Specifies which data set will be processed. 
+#                Options include: 'vel' or 'density'
+# - option_depth_mask: Specifies whether there is a depth mask applied to the data for 
+#                      computing the depth average velocity. 
+# - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
+#                     option_mask is true. Units: meters. 
+# - sig_depth_thresh: Specify the lower depth limit of density depth average. 
+#                     Units: meters. 
+# - R_earth: Specify the radius of the Earth. Units: kilometers.
+# - g: Specify the acceleration due to gravity. Units: m/s^2.
 #
-# ------------# 
+# ------------ # 
 
-# Model parameters 
-delta_t = 150  
+# Set processing parameters
+option_proc          = 'vel'        
+option_depth_mask    = 1      
 
-# Set time and space parameters  
-lat_bnds  = [33.0, 35.0]                                          
-lon_bnds  = [237.0, 240.0]                                        
-encoding  = {'time': {'units': 'seconds since 2015-12-01 2:00'}}  
+# Set physical parameters 
+vel_depth_thresh = 400   
+sig_depth_thresh = -500 
+R_earth      = 6371 
+g            = 9.81 
 
 # Set path to project directory
-PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                                     
-PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'                     
-PATH_nc     = '/data/SO3/lcolosi/mitgcm/SWOT_MARA_RUN4_LY/spatial/transect/' 
-file_dim    = '3D'   
+ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
+PATH = ROOT + 'data/mitgcm/transect/'
 
 # -----------------------------------------------------------------------------
-# Load the grid and diagnostics data into a python structure
+# Load mitgcm data netcdf files 
 # -----------------------------------------------------------------------------
 
-#------------#  
-#--- Note ---#
-#------------# 
-#
-# - PATH_OUTPUT: Directory containing model output (.data and .meta files).
-# - PATH_GRID: Directory containing the model grid.
-# - iters: Load all available model iterations.
-# - delta_t: Model time step in seconds.
-# - ignore_unknown_vars: Do not ignore unrecognized variables.
-# - prefix: Load diagnostics corresponding to the specified file dimension.
-# - ref_date: Start time of the simulation, including model spin-up.
-# - geometry: Model grid uses spherical-polar coordinates.
-#
-# ------------# 
+# --- Velocity --- # 
+if option_proc == 'vel':
 
-# Create dataset 
-ds = open_mdsdataset(
-    PATH_OUTPUT,                    
-    PATH_GRID,                      
-    iters='all',                    
-    delta_t=delta_t, 
-    ignore_unknown_vars=False,      
-    prefix=['diags_' + file_dim],   
-    ref_date="2015-01-01 02:00:00", 
-    geometry='sphericalpolar'       
-)
+    # Obtain filename paths
+    filename_u = PATH + "UVEL_CCS_hrly_trans.nc"
+    filename_v = PATH + "VVEL_CCS_hrly_trans.nc"
 
-# Convert all variables and coordinates in the dataset to little-endian 
+    # Generate the nc data structure
+    nc_u = Dataset(filename_u, 'r')
+    nc_v = Dataset(filename_v, 'r')
 
-# --- Variables --- #
-for var in ds.data_vars:
-    if ds[var].dtype.byteorder == '>' or (ds[var].dtype.byteorder == '=' and sys.byteorder == "big"):  
-        ds[var] = ds[var].astype(ds[var].dtype.newbyteorder('<'))
+    # Extract data variables
+    depth  = nc_u.variables['Z'][:]
+    lon    = nc_v.variables['XC'][:]
+    lat    = nc_u.variables['YC'][:]
+    dist   = nc_u.variables['distance'][:]
+    time   =  num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
-# --- Coordinates --- # 
-for coord in ds.coords:
-    if ds[coord].dtype.byteorder == '>'or (ds[coord].dtype.byteorder == '=' and sys.byteorder == "big"):  
-        ds[coord] = ds[coord].astype(ds[coord].dtype.newbyteorder('<'))
+    u_raw  = nc_u.variables['U_center'][:]
+    v_raw  = nc_v.variables['V_center'][:]
 
-# -----------------------------------------------------------------------------
-# Interpolate the velocity grids on the (XC, YC) grid
-# -----------------------------------------------------------------------------
+    # Mask data at fill values (zero for the MITgcm output)
+    u_m = np.ma.masked_where(u_raw == 0, u_raw)
+    v_m = np.ma.masked_where(v_raw == 0, v_raw)
 
-# Define the grid object (says which dimensions are 'center' and which are 'left')
-grid = xgcm.Grid(ds, coords={'X': {'center': 'XC', 'left': 'XG'}, 
-                             'Y': {'center': 'YC', 'left': 'YG'}, 
-                             'Z': {'center': 'Z',  'left': 'Zl'}}, 
-                 periodic=False, boundary='extend') 
+    # Rearrange dimensions of data to (distance, time, depth)
+    u_m = np.transpose(u_m, (2, 0, 1))
+    v_m = np.transpose(v_m, (2, 0, 1))
 
-# Interpolate to the centers
-ds['U_center'] = grid.interp(ds.UVEL, axis='X') # Interpolate from X-face to center
-ds['V_center'] = grid.interp(ds.VVEL, axis='Y') # Interpolate from Y-face to center
-ds['W_center'] = grid.interp(ds.WVEL, axis='Z') # Interpolate from Z-face (Zl) to center
+# --- Density --- # 
+elif option_proc == 'density':
 
-# -----------------------------------------------------------------------------
-# Set CalCOFI station locations
-# -----------------------------------------------------------------------------
+    # Obtain filename paths
+    filename_temp = PATH + "THETA_CCS_hrly_trans.nc"
+    filename_salt = PATH + "SALT_CCS_hrly_trans.nc"
 
-# Manually read in station locations
-calcofi_lat = np.array([34.46667, 34.45, 34.31667, 34.15, 33.81667, 
-                        33.48333, 33.15, 32.81667])
-calcofi_lon = np.array([-120.48906, -120.5239, -120.80245, -121.15, -121.84304, 
-                        -122.53335, -123.22099, -123.90599])
+    # Generate the nc data structure
+    nc_temp = Dataset(filename_temp, 'r')
+    nc_salt = Dataset(filename_salt, 'r')
 
-# Sort stations from shore outward
-idx = np.argsort(calcofi_lon)
-calcofi_lon = calcofi_lon[idx]
-calcofi_lat = calcofi_lat[idx] 
+    # Extract data variables
+    depth = nc_temp['Z'][:]
+    lon   = nc_temp.variables['XC'][:]
+    lat   = nc_temp.variables['YC'][:]
+    dist   = nc_temp.variables['distance'][:]
+    time  =  num2date(nc_temp.variables['time'][:], nc_temp.variables['time'].units)
+
+    T = nc_temp.variables['THETA'][:]
+    S = nc_salt.variables['SALT'][:]
+
+    # Mask data at fill values (zero for the MITgcm output)
+    T_m = np.ma.masked_where(T == 0, T)
+    S_m = np.ma.masked_where(S == 0, S)
+
+    # Rearrange dimensions of data to (distance, time, depth)
+    T_m = np.transpose(T_m, (2, 0, 1))
+    S_m = np.transpose(S_m, (2, 0, 1))
+
+# Convert cftime.DatetimeGregorian to Python datetime objects
+time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second) for d in time])
 
 # -----------------------------------------------------------------------------
-# Compute cumulative diastance along line 80.0 
+# Process horizontal velocity components (u,v)
 # -----------------------------------------------------------------------------
 
-# Initialize array 
-dist = np.zeros(len(calcofi_lon))
+if option_proc == 'vel':
 
-# Loop through stations 
-for i in range(1,len(calcofi_lon)): 
+    #------------------------------------------# 
+    # Compute depth average horizontal velocity 
+    #------------------------------------------# 
 
-    # Define i and i + 1 points along transect
-    pt1 = (calcofi_lat[i-1], calcofi_lon[i-1])
-    pt2 = (calcofi_lat[i],   calcofi_lon[i])
+    # Take absolute value of depth
+    depth_pos = np.abs(depth)
 
-    # Compute distance in kilometers along transect
-    dist[i] = dist[i-1] + geodesic(pt1, pt2).km
+    # Ensure increasing order
+    if not np.all(np.diff(depth_pos) > 0):
+        depth_pos = depth_pos[::-1]
+        u_m = u_m[:, :, ::-1]
+        v_m = v_m[:, :, ::-1]
 
-# -----------------------------------------------------------------------------
-# Create a denser distance axis (near the resolution of the model grid) 
-# -----------------------------------------------------------------------------
+    # Mask depth levels below threshold if requested
+    if option_depth_mask == 1:
 
-# Set spacing (units: kilometer)
-dr = 2 
+        # Mask depth levels deeper than vel_depth_thresh
+        mask_depth = depth_pos <= vel_depth_thresh
 
-# Generate a denser array 
-dist_dense = np.arange(0, dist[-1], dr)
+        # Select shallower depths
+        depth_sel = depth_pos[mask_depth]
+        u_sel = u_m[:, :, mask_depth]
+        v_sel = v_m[:, :, mask_depth]
 
-# Interpolate lat and longitude along this denser line
-calcofi_lat_dense = np.interp(dist_dense, dist, calcofi_lat)
-calcofi_lon_dense = np.interp(dist_dense, dist, calcofi_lon)
+        # Depth range
+        H = depth_sel[-1] - depth_sel[0]
 
-# Convert the calcofi longitude to span from 0 to 360 
-calcofi_lon_dense = (calcofi_lon_dense + 360) % 360
+        # Compute weighted average
+        u_bar_tmp = np.trapezoid(u_sel.filled(np.nan), depth_sel, axis=2) / H
+        v_bar_tmp = np.trapezoid(v_sel.filled(np.nan), depth_sel, axis=2) / H
 
-# -----------------------------------------------------------------------------
-# Interpolate model onto transect 
-# -----------------------------------------------------------------------------
+    else:
 
-# Apply land mask using hFacC (wet-dry mask) to avoid blending of zeros (fill value) near the ocean bottom
-theta_masked = ds['THETA'].where(ds['hFacC'] > 0)
-salt_masked  = ds['SALT'].where(ds['hFacC'] > 0)
-uvel_masked  = ds['U_center'].where(ds['hFacC'] > 0)
-vvel_masked  = ds['V_center'].where(ds['hFacC'] > 0)
+        # Depth range
+        H = depth_pos[-1] - depth_pos[0]
 
-# Define your transect DataArrays
-lat_da = xr.DataArray(calcofi_lat_dense, dims="distance")
-lon_da = xr.DataArray(calcofi_lon_dense, dims="distance")
+        # Compute weighted average
+        u_bar_tmp = np.trapezoid(u_m.filled(np.nan), depth_pos, axis=2) / H
+        v_bar_tmp = np.trapezoid(v_m.filled(np.nan), depth_pos, axis=2) / H
 
-# Interpolate on transect
-theta = theta_masked.interp(YC=lat_da, XC=lon_da)
-salt = salt_masked.interp(YC=lat_da, XC=lon_da)
-uvel = uvel_masked.interp(YC=lat_da, XC=lon_da)
-vvel = vvel_masked.interp(YC=lat_da, XC=lon_da)
+    # Convert back to masked arrays
+    u_bar = np.ma.masked_invalid(u_bar_tmp)
+    v_bar = np.ma.masked_invalid(v_bar_tmp)
 
-# -----------------------------------------------------------------------------
-# Assign distance coordinate
-# -----------------------------------------------------------------------------
+    #------------------------------------------# 
+    # Rotate velocity vectors into the coordinate system of the transect 
+    #------------------------------------------# 
 
-theta = theta.assign_coords(
-    distance=("distance", dist_dense)
-)
+    # ------------ # 
+    # --- Note --- # 
+    # ------------ #
+    #
+    # Along transect (cross-shelf direction) 
+    # - The along-transect component of velocity is defined such that onshore is 
+    #   positive and offshore is negative.
+    # Cross transect (along-shelf direction) 
+    # - The cross-transect component of velocity is defined such that upcoast is 
+    #   positive and downcoast is negative.
+    #
+    # ------------ # 
 
-salt = salt.assign_coords(
-    distance=("distance", dist_dense)
-)
+    # Convert to radians
+    lon_r = np.deg2rad(lon)
+    lat_r = np.deg2rad(lat)
 
-uvel = uvel.assign_coords(
-    distance=("distance", dist_dense)
-)
+    # Compute local cartesian displacements in the easting and northing directions (km)
+    dx = R_earth * np.cos(lat_r[:-1]) * np.diff(lon_r)
+    dy = R_earth * np.diff(lat_r)
 
-vvel = vvel.assign_coords(
-    distance=("distance", dist_dense)
-)
+    # Compute angle of transect relative to east
+    theta = np.arctan2(np.mean(dy), np.mean(dx))
 
-# -----------------------------------------------------------------------------
-# Create dataset for land mask 
-# -----------------------------------------------------------------------------
-
-# Define wet-dry array for the transect (e.g., 1 for ocean, 0 for land) and depth array for the transect
-hfac = theta['hFacC']
-depth = theta['Z']
-
-# Set boolean wet mask
-wet = hfac > 0.99 
-
-# Count number of wet cells per column
-bottom_index = wet.sum(dim='Z') - 1
-
-# Prevent negative indices (in case of full land columns)
-bottom_index = bottom_index.clip(min=0)
-
-# Set bottom depth using the bottom index
-bottom_depth = depth.isel(Z=bottom_index)
-
-# Create a new dataset to store the ocean depth data
-bottom_ds = xr.Dataset(
-    data_vars=dict(
-        bottom_depth=('distance', bottom_depth.values)
-    ),
-    coords=dict(
-        distance=theta.coords['distance'].values
-    ),
-    attrs=dict(
-        description="Ocean bottom depth derived from hFacC",
-        units="meters"
-    )
-)
-
-# -----------------------------------------------------------------------------
-# Save data in netcdf files
-# -----------------------------------------------------------------------------
-
-# --- Ocean Bottom --- #
-bottom_ds.to_netcdf(
-    f"{PATH_nc}DEPTH_CCS_trans.nc",
-    engine='netcdf4',                
-    format='NETCDF4'           
-)
-
-# --- Sea State Variables --- #
-
-# Set the dictionary of variables to save
-vars_to_save = {
-    'THETA': theta,
-    'SALT': salt,
-    'UVEL': uvel,
-    'VVEL': vvel
-}
-
-# Loop through each variable and save efficiently
-for var_name, da in vars_to_save.items():
-
-    # Print status
-    print(f"Saving {var_name}...")
+    # Construct rotation matrix (Counter-clockwise rotation)
+    R = np.array([[np.cos(theta), np.sin(theta)],
+                  [-np.sin(theta), np.cos(theta)]])
     
-    # Chunk along time for faster write
-    if 'time' in da.dims:
-        da = da.chunk({'time': 1000})
-    
-    # Load into memory before saving 
-    da = da.load()
+    # Rotate velocity components counterclockwiseto along and cross-transect directions
 
-    # Save to NetCDF file
-    da.to_netcdf(
-        f"{PATH_nc}{var_name}_CCS_hrly_trans.nc",
-        engine='netcdf4',                
-        format='NETCDF4',        
-        encoding=encoding            
+    # --- Depth-dependent velocities --- #
+    u_along_tmp = R[0, 0] * u_m + R[0, 1] * v_m
+    v_cross_tmp = R[1, 0] * u_m + R[1, 1] * v_m
+
+    # Mask zeros
+    u_along = np.ma.masked_where(u_along_tmp == 0, u_along_tmp)
+    v_cross = np.ma.masked_where(v_cross_tmp == 0, v_cross_tmp)
+
+    # --- Depth-averaged velocities --- #
+    u_along_tmp = R[0, 0] * u_bar + R[0, 1] * v_bar
+    v_cross_tmp = R[1, 0] * u_bar + R[1, 1] * v_bar
+
+    # Mask zeros
+    u_along_bar = np.ma.masked_where(u_along_tmp == 0, u_along_tmp)
+    v_cross_bar = np.ma.masked_where(v_cross_tmp == 0, v_cross_tmp)
+
+# -----------------------------------------------------------------------------
+# Process Density Variables (T, S, rho, sigma0)
+# -----------------------------------------------------------------------------
+
+if option_proc == 'density': 
+
+    #------------------------------------------# 
+    # Compute Potential Density  
+    #------------------------------------------# 
+
+    # Set the dimensions of the array
+    ndist, ntime, ndepth = T_m.shape
+
+    # Compute pressure once for each distance and depth
+    pressure_dist_depth = np.array([gsw.p_from_z(depth, lat[i]) for i in range(ndist)]) 
+
+    # Broadcast pressure, lon, and lat to shape of full array
+    pressure = np.broadcast_to(pressure_dist_depth[:, None, :], (ndist, ntime, ndepth))
+    lon3d = np.broadcast_to(lon[:, None, None], (ndist, ntime, ndepth))
+    lat3d = np.broadcast_to(lat[:, None, None], (ndist, ntime, ndepth))
+
+    # Compute Absolute Salinity
+    SA = gsw.SA_from_SP(S_m, pressure, lon3d, lat3d)
+
+    # Compute Conservative Temperature
+    CT = gsw.CT_from_pt(SA, T_m)
+
+    # Compute in-situ density
+    density = gsw.rho(SA, CT, pressure)
+
+    # Compute potential density anomaly (sigma0)
+    sigma0 = gsw.sigma0(SA, CT)
+
+    # Mask ocean bottom depths
+    SA = np.ma.masked_where(SA == 0, SA)
+    CT = np.ma.masked_where(CT == 0, CT)
+    density = np.ma.masked_where(density == 0, density)
+    sigma0 = np.ma.masked_where(sigma0 == 0, sigma0)
+
+    #------------------------------------------# 
+    # Compute Buoyancy Frequency using the Neutral Density Gradient Method method 
+    #------------------------------------------# 
+    
+    # Compute the potential density anomaly
+    rho_theta = sigma0 + 1000
+
+    # Set the dimensions of the array
+    ndist, ntime, ndepth = np.shape(sigma0)
+
+    # Compute the mean density in the upper 500 m for reference density
+    rho0 = np.ma.mean(rho_theta[:,:,(depth <= depth[0]) & (depth >= sig_depth_thresh)]) 
+
+    # Compute the time-mean fields 
+    SA_mean = np.mean(SA, axis=1)        
+    T_mean  = np.mean(T_m, axis=1)
+    p_mean  = np.mean(pressure, axis=1)
+
+    # Initalize arrays 
+    depth_mid = np.zeros((ndepth-1))
+    Nsquare = np.zeros((ndist,ndepth-1))
+
+    # Loop through distance along the transect 
+    for idist in range(0,ndist):
+
+        # Set progress bar
+        progress = (idist + 1) / (ndist)
+        sys.stdout.write(f"\rProgress: {progress:.1%}")
+        sys.stdout.flush()
+
+        # Loop through depth pairs 
+        for k in range(0,len(depth)-1):
+
+            # Compute the midpoint standard depth 
+            z_half = (depth[k] + depth[k+1]) / 2
+
+            # Convert standard depth to a reference pressure 
+            p_half = gsw.conversions.z_from_p(z_half,lat[idist])
+
+            # Compute the potential density referenced to p_half pressure
+            sigma_ref_top  = gsw.pot_rho_t_exact(SA_mean[idist,k], T_mean[idist,k], p_mean[idist,k], p_half)
+            sigma_ref_bottom  = gsw.pot_rho_t_exact(SA_mean[idist,k+1], T_mean[idist,k+1], p_mean[idist,k+1], p_half)
+
+            # Compute N^2(z) profile 
+            Nsquare[idist,k] = (-g/rho0) * ((sigma_ref_top - sigma_ref_bottom)/(depth[k] - depth[k+1]))
+
+            # Save the midpoints of the depth bins 
+            if idist == 0:
+                depth_mid[k] = z_half
+
+    # Compute instaneous buoyancy frequency in units of cycles/hour
+    Nz = np.sqrt(Nsquare) * (60/1) * (60/1) 
+
+# -----------------------------------------------------------------------------
+# Save data in a netcdf file
+# -----------------------------------------------------------------------------
+
+# --- Velocity --- # 
+if option_proc == 'vel': 
+
+    # --- Coordinates --- # 
+    LON = xr.DataArray(data=lon, 
+                        dims=['dist'],
+                        coords=dict(dist=dist),
+                        attrs=dict(
+                            description='Longitude along the CalCOFI line 80 transect.',
+                            units='degrees'
+                            )
     )
+
+    LAT = xr.DataArray(data=lat, 
+                        dims=['dist'],
+                        coords=dict(dist=dist),
+                        attrs=dict(
+                            description='Latitude along the CalCOFI line 80 transect.',
+                            units='degrees'
+                            )
+    )
+
+    DIST = xr.DataArray(data=dist, 
+                    dims=['dist'],
+                    coords=dict(dist=dist),
+                    attrs=dict(
+                        description='Distance offshore along CalCOFI line 80 transect.',
+                        units='kilometers'
+                        )
+    )
+
+    # --- Depth-dependent Velocity Components --- #
+    u = xr.DataArray(data=u_m,
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='The x-component (zonal) of velocity.',
+                            units='m/s'
+                        )
+    )
+
+    v = xr.DataArray(data=v_m,
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='The y-component (meridional) of velocity.',
+                            units='m/s'
+                        )
+    )
+
+    u_along = xr.DataArray(data=u_along,
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='The along-transect component of velocity with onshore being in the postive direction and offshore being in the negative direction.',
+                            units='m/s'
+                        )
+    )
+
+    v_cross = xr.DataArray(data=v_cross,
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='The cross-transect component of velocity with upcoast in the positive direction and downcoast in the negative direction.',
+                            units='m/s'
+                        )
+    )
+    
+
+    # --- Depth-averaged Velocity Components --- #
+    u_bar = xr.DataArray(data=u_bar,
+                        dims=['dist','time'],
+                        coords=dict(dist=dist,time=time_dt),
+                        attrs=dict(
+                            description='The depth averaged x-component (zonal) of velocity  to ' + str(depth_thresh) + ' meters.',
+                            units='m/s'
+                        )
+    )
+
+    v_bar = xr.DataArray(data=v_bar,
+                        dims=['dist','time'],
+                        coords=dict(dist=dist,time=time_dt),
+                        attrs=dict(
+                            description='The depth averaged y-component (meridional) of velocity  to ' + str(depth_thresh) + ' meters.',
+                            units='m/s'
+                    )
+    )
+
+    u_along_bar = xr.DataArray(data=u_along_bar,
+                        dims=['dist','time'],
+                        coords=dict(dist=dist,time=time_dt),
+                        attrs=dict(
+                            description='The depth averaged (integrated to ' + str(depth_thresh) + ' meters) along-transect component of velocity with onshore being in the postive direction and offshore being in the negative direction.',
+                            units='m/s'
+                        )
+    )
+
+    v_cross_bar = xr.DataArray(data=v_cross_bar,
+                        dims=['dist','time'],
+                        coords=dict(dist=dist,time=time_dt),
+                        attrs=dict(
+                            description='The depth averaged (integrated to ' + str(depth_thresh) + ' meters) cross-transect component of velocity with upcoast in the positive direction and downcoast in the negative direction.',
+                            units='m/s'
+                    )
+    )
+
+    # Create data set from data arrays 
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'u':u,'v':v,'u_along':u_along,'v_cross':v_cross,'u_bar':u_bar,'v_bar':v_bar,'u_along_bar':u_along_bar,'v_cross_bar':v_cross_bar})
+
+    # Set file path for saving the netcdf file
+    file_path = PATH + "/intermediate_proc/mitgcm_proc_vel_hrly_trans.nc"
+
+# --- Density --- # 
+elif option_proc == 'density': 
+
+    # --- Coordinates --- # 
+    LON = xr.DataArray(data=lon, 
+                        dims=['dist'],
+                        coords=dict(dist=dist),
+                        attrs=dict(
+                            description='Longitude along CalCOFI line 80 transect.',
+                            units='degrees'
+                            )
+    )
+
+    LAT = xr.DataArray(data=lat, 
+                        dims=['dist'],
+                        coords=dict(dist=dist),
+                        attrs=dict(
+                            description='Latitude along CalCOFI line 80 transect.',
+                            units='degrees'
+                            )
+    )
+
+    DIST = xr.DataArray(data=dist, 
+                    dims=['dist'],
+                    coords=dict(dist=dist),
+                    attrs=dict(
+                        description='Distance offshore along CalCOFI line 80 transect.',
+                        units='kilometers'
+                        )
+    )
+
+    # --- Sea State Varibles --- # 
+    Pressure = xr.DataArray(data=pressure, 
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='Pressure profile time series along the CalCOFI line 80 transect.',
+                            units='dbar'
+                            )
+    )
+
+    Density = xr.DataArray(data=density, 
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='In-situ Density profile time series along the CalCOFI line 80 transect.',
+                            units='kg/m^3'
+                            )
+    ) 
+
+    SIG = xr.DataArray(data=sigma0, 
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='Potential Density anomaly profile time series along the CalCOFI line 80 transect referenced to the pressure at the sea surface.',
+                            units='kg/m^3'
+                            )
+    ) 
+
+    CTemp = xr.DataArray(data=CT, 
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='Conservative temperature profile time series along the CalCOFI line 80 transect.',
+                            units='degrees Celcius'
+                            )
+    ) 
+
+    ASal = xr.DataArray(data=SA, 
+                        dims=['dist','time','depth'],
+                        coords=dict(dist=dist,time=time_dt,depth=depth),
+                        attrs=dict(
+                            description='Absolute Salinity profile time series along the CalCOFI line 80 transect.',
+                            units='g/kg'
+                            )
+    ) 
+
+    NZ = xr.DataArray(data=Nz, 
+                    dims=['dist','depth_mid'],
+                    coords=dict(dist=dist,depth_mid=depth_mid),
+                    attrs=dict(
+                            description='Background buoyancy frequency profile time series along the CalCOFI line 80 transect.',
+                            units='cycles/hour'
+                            )
+    )
+
+    # Create data set from data arrays
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'Pressure':Pressure,'Density':Density,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'NZ':NZ})
+
+    # Set file path for saving the netcdf file
+    file_path = PATH + "/intermediate_proc/mitgcm_proc_density_hrly_trans.nc"
+
+# Check if file exists, then delete it
+if os.path.exists(file_path):
+    os.remove(file_path)
+
+# Create netcdf file
+data.to_netcdf(file_path,mode='w')

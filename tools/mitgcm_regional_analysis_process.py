@@ -1,25 +1,32 @@
 # =============================================================================
-# Processing MITgcm data for the Regional Analysis
+# Intermediate Processing MITgcm data for the Regional Analysis
 # =============================================================================
 #
 # Description:
-#   Slice the MITgcm data to extract the temperature, salinity, and 
-#   velocity variables for the Regional Analysis. The script will read in the MITgcm 
-#   output files, extract the necessary variables, and save them in netcdf format for 
-#   further analysis.
+#   Computes intermediate derived variables from the model diagnostics for the regional 
+#   decorrelation time scale analysis. These include: 
+# 
+#       (1) Conservative Temperature
+#       (2) Absolute Salinity
+#       (3) Potential Density (referenced to the surface)
+#       (4) Interpolated horizontal velocity components (u, v)
 #
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-08-10
+#   2026-08-11
 # =============================================================================
 
 # Import python libraries 
 import sys
-import numpy as np
 import xarray as xr
-from xmitgcm import open_mdsdataset
+import numpy as np
+from netCDF4 import Dataset, num2date
+from datetime import datetime
+import os
+from scipy.interpolate import interp1d
+import gsw
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -29,152 +36,312 @@ from xmitgcm import open_mdsdataset
 # --- Note ---# 
 # ------------#
 #
-# - delta_t: Model time step in seconds (time increments of the diagnostics can differ).
-# - depth: Depth level extracted for regional analysis(units: meters).
-# - lat_bnds: Latitude bounds setting the region of interest.
-# - lon_bnds: Longitude bounds setting the region of interest.
-# - encoding: Start time of the model run.
-# - PATH_GRID: Directory containing the model grid.
-# - PATH_OUTPUT: Directory containing model diagnostics.
-# - PATH_nc: Directory where netCDF files are saved.
-# - file_dim: Diagnostic file dimension (3D for T, S, drhodr, and velocity; 2D for etan).
+# - option_proc: Specifies which data set will be processed. 
+#                Options include: 'vel', 'density', or 'ssh'
+# - option_depth: Specifies the depth (in meters) at which to extract data.
 #
 # ------------# 
 
-# Model parameters 
-delta_t = 150  
-
-# Set time and space parameters  
-depth = 9                                                         
-lat_bnds  = [33.0, 35.0]                                          
-lon_bnds  = [237.0, 240.0]                                         
-encoding  = {'time': {'units': 'seconds since 2015-12-01 2:00'}}  
+# Set processing parameters
+option_proc  = 'density' 
+option_depth = 0.5   
 
 # Set path to project directory
-PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                    
-PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'     
-PATH_nc     = '/data/SO3/lcolosi/mitgcm/SWOT_MARA_RUN4_LY/'  
-file_dim    = '2D'                                         
+ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
+PATH = ROOT + 'data/mitgcm/regional/'
 
 # -----------------------------------------------------------------------------
-# Load the grid and diagnostics data into a python structure
+# Load mitgcm data netcdf files 
 # -----------------------------------------------------------------------------
 
-#------------#  
-#--- Note ---#
-#------------# 
-#
-# - PATH_OUTPUT: Directory containing model output (.data and .meta files).
-# - PATH_GRID: Directory containing the model grid.
-# - iters: Load all available model iterations.
-# - delta_t: Model time step in seconds.
-# - ignore_unknown_vars: Do not ignore unrecognized variables.
-# - prefix: Load diagnostics corresponding to the specified file dimension.
-# - ref_date: Start time of the simulation, including model spin-up.
-# - geometry: Model grid uses spherical-polar coordinates.
-#
-# ------------# 
+# --- Velocity Processing --- # 
+if option_proc == 'vel':
 
-# Create dataset 
-ds = open_mdsdataset(
-    PATH_OUTPUT,                    
-    PATH_GRID,                      
-    iters='all',                    
-    delta_t=delta_t, 
-    ignore_unknown_vars=False,     
-    prefix=['diags_' + file_dim],   
-    ref_date="2015-01-01 02:00:00", 
-    geometry='sphericalpolar'       
-)
+    # Obtain filename paths
+    filename_u = PATH + "UVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_v = PATH + "VVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
 
-# Convert all variables and coordinates in the dataset to little-endian
+    # Generate the nc data structure
+    nc_u = Dataset(filename_u, 'r')
+    nc_v = Dataset(filename_v, 'r')
 
-# --- Variables --- #
-for var in ds.data_vars:
-    if ds[var].dtype.byteorder == '>' or (ds[var].dtype.byteorder == '=' and sys.byteorder == "big"):  
-        ds[var] = ds[var].astype(ds[var].dtype.newbyteorder('<'))
+    # Extract data variables
+    depth  = nc_u.variables['Z'][:]
+    lon_XG    = nc_u.variables['XG'][:]
+    lat_YC    = nc_u.variables['YC'][:]
+    lon_XC    = nc_v.variables['XC'][:]
+    lat_YG    = nc_v.variables['YG'][:]
+    time   =  num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
-# --- Coordinates --- # 
-for coord in ds.coords:
-    if ds[coord].dtype.byteorder == '>'or (ds[coord].dtype.byteorder == '=' and sys.byteorder == "big"):  
-        ds[coord] = ds[coord].astype(ds[coord].dtype.newbyteorder('<'))
+    u_raw  = nc_u.variables['UVEL'][:]
+    v_raw  = nc_v.variables['VVEL'][:]
+
+    # Mask data at fill values (zero for the MITgcm output)
+    u_m = np.ma.masked_where(u_raw == 0, u_raw)
+    v_m = np.ma.masked_where(v_raw == 0, v_raw)
+
+# --- Density Processing --- # 
+elif option_proc == 'density':
+
+    # Obtain filename paths
+    filename_temp = PATH + "THETA_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_salt = PATH + "SALT_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+
+    # Generate the nc data structure
+    nc_temp = Dataset(filename_temp, 'r')
+    nc_salt = Dataset(filename_salt, 'r')
+
+    # Extract data variables
+    depth = nc_temp['Z'][:]
+    lon = nc_temp.variables['XC'][:]
+    lat = nc_temp.variables['YC'][:]
+    time =  num2date(nc_temp.variables['time'][:], nc_temp.variables['time'].units)
+
+    T = nc_temp.variables['THETA'][:]
+    S = nc_salt.variables['SALT'][:]
+
+    # Mask data at fill values (zero for the MITgcm output)
+    T_m = np.ma.masked_where(T == 0, T)
+    S_m = np.ma.masked_where(S == 0, S)
+
+# --- SSH Processing --- # 
+elif option_proc == 'ssh':
+
+    # Obtain filename paths
+    filename_ssh = PATH + "ETAN_CCS_hrly_reg.nc"
+
+    # Generate the nc data structure
+    nc_ssh = Dataset(filename_ssh, 'r')
+
+    # Extract data variables
+    lon = nc_ssh.variables['XC'][:]
+    lat = nc_ssh.variables['YC'][:]
+    time =  num2date(nc_ssh.variables['time'][:], nc_ssh.variables['time'].units)
+
+    ssh = nc_ssh.variables['ETAN'][:]
+
+    # Mask data at fill values (zero for the MITgcm output)
+    ssh_m = np.ma.masked_where(ssh == 0, ssh)
+
+# Convert cftime.DatetimeGregorian to Python datetime objects
+time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second) for d in time])
 
 # -----------------------------------------------------------------------------
-# Slice array based on longitude and latitude bounds of the region
+# Process Horizontal Velocity Components (u, v)
 # -----------------------------------------------------------------------------
 
-if file_dim == '3D':
-    print(f"Extracting 3D fields...")
+if option_proc == 'vel':
 
-    # Obtain the depth coordinate 
-    depth_levels = abs(ds['Z'].values)
+    # Convert to a ndarray
+    u_m = np.asarray(u_m)
+    v_m = np.asarray(v_m)
+    lon_XG = np.asarray(lon_XG)
+    lat_YC = np.asarray(lat_YC)
+    lon_XC = np.asarray(lon_XC)
+    lat_YG = np.asarray(lat_YG)
 
-    # Find the index of the depth level closest to depth
-    depth_idx = np.argmin(np.abs(depth_levels - depth))
+    # Slice lon_XG and lat_YG to match lon_XC and lat_YC bounds respectively 
+    lon_min, lon_max = np.min(lon_XC), np.max(lon_XC)
+    lat_min, lat_max = np.min(lat_YC), np.max(lat_YC)
+    idx_lon = (lon_XG >= lon_min) & (lon_XG <= lon_max)
+    idx_lat = (lat_YG >= lat_min) & (lat_YG <= lat_max)
+    lon_XG_c = lon_XG[idx_lon]
+    lat_YG_c = lat_YG[idx_lat]
 
-    # Check the actual depth value you're selecting
-    actual_depth = depth_levels[depth_idx]
-    print(f"Selected depth: {actual_depth} m at index {depth_idx}")
+    # Apply the same slicing operation to u_raw and v_raw (recall: dim(u_raw) =  (time,lat_YC,lon_XG) and dim(v_raw) =  (time,lat_YG,lon_XC))
+    u_raw_c = u_m[:,:,idx_lon]
+    v_raw_c = v_m[:,idx_lat,:]
 
-    # Extract scalar fields 
-    theta = ds['THETA'].isel(Z=depth_idx).sel(YC=slice(*lat_bnds), 
-                                              XC=slice(*lon_bnds))
-    salt  = ds['SALT'].isel(Z=depth_idx).sel(YC=slice(*lat_bnds), 
-                                             XC=slice(*lon_bnds))
-    uvel  = ds['UVEL'].isel(Z=depth_idx).sel(YC=slice(*lat_bnds), 
-                                             XG=slice(*lon_bnds))
-    vvel  = ds['VVEL'].isel(Z=depth_idx).sel(YG=slice(*lat_bnds), 
-                                             XC=slice(*lon_bnds))
+    # Set processing parameters
+    ntime,_,_ = np.shape(u_raw_c)
+    nlat,nlon = np.size(lat_YC),np.size(lon_XC)
+    lon       = lon_XC
+    lat       = lat_YC 
 
-elif file_dim == '2D':
-    print(f"Extracting 2D fields...")
+    # Initalize arrays
+    u_int  = np.zeros((ntime,nlat,nlon)) 
+    v_int  = np.zeros((ntime,nlat,nlon))
 
-    # Extract scalar fields 
-    etan = ds['ETAN'].sel(YC=slice(*lat_bnds), 
-                          XC=slice(*lon_bnds))
+    # Loop through time
+    for itime in range(0,ntime): 
+
+        # Set progress bar
+        progress = (itime + 1) / (len(time))
+        sys.stdout.write(f"\rProgress: {progress:.1%}")
+        sys.stdout.flush()
+
+        # Grab the ith time frame 
+        u_i = np.squeeze(u_raw_c[itime,:,:])
+        v_i = np.squeeze(v_raw_c[itime,:,:])
+
+        # Interpolate u_z from YC,XG grid onto the YC,XC grid 
+        # Interpolate each row along columns (axis=1)
+        u_int[itime,:,:] = np.array([
+                            interp1d(lon_XG_c, row, kind='linear', bounds_error=False)(lon)
+                            for row in u_i
+        ])
+
+        # Interpolate v_z from YG,XC grid onto the YC,XC grid 
+        v_int[itime,:,:] = np.array([
+                            interp1d(lat_YG_c, col, kind='linear', bounds_error=False)(lat)
+                            for col in v_i.T
+        ]).T 
+
 
 # -----------------------------------------------------------------------------
-# Save data in netcdf files
+# Process Density Variables (T, S, rho, sigma0)
 # -----------------------------------------------------------------------------
 
-# Set the dictionary of variables to save
-if file_dim == '3D':
-    vars_to_save = {
-        'THETA': theta,
-        'SALT': salt,
-        'UVEL': uvel,
-        'VVEL': vvel
-    }
-elif file_dim == '2D':
-    vars_to_save = {
-        'ETAN': etan
-    }
+if option_proc == 'density': 
 
-# Loop through each variable and save efficiently
-for var_name, da in vars_to_save.items():
+    # Set the dimensions of the array
+    ntime, nlat, nlon = T_m.shape
 
-    # Print status
-    print(f"Saving {var_name}...")
-    
-    # Chunk along time for faster write 
-    if 'time' in da.dims:
-        da = da.chunk({'time': 1000})
-    
-    # Load into memory before saving 
-    da = da.load()
+    # Compute pressure once for each latitude
+    pressure_lat = np.array([gsw.p_from_z(depth, lat[i]) for i in range(nlat)])  
 
-    # Save to NetCDF file
-    if file_dim == '3D':
-        da.to_netcdf(
-            f"{PATH_nc}{var_name}_CCS_hrly_reg_depth_{abs(int(actual_depth))}m.nc",
-            engine='netcdf4',                
-            format='NETCDF4',         
-            encoding=encoding            
-        )
-    elif file_dim == '2D':
-        da.to_netcdf(
-            f"{PATH_nc}{var_name}_CCS_hrly_reg.nc",
-            engine='netcdf4',                
-            format='NETCDF4',         
-            encoding=encoding            
-        )
+    # Broadcast pressure, lon, and lat to shape of full array
+    pressure = np.broadcast_to(pressure_lat[None, :, None], (ntime, nlat, nlon))
+    lon3d = np.broadcast_to(lon[None, None, :], (ntime, nlat, nlon))
+    lat3d = np.broadcast_to(lat[None, :, None], (ntime, nlat, nlon))
+
+    # Compute Absolute Salinity
+    SA = gsw.SA_from_SP(S_m, pressure, lon3d, lat3d)
+
+    # Compute Conservative Temperature
+    CT = gsw.CT_from_pt(SA, T_m)
+
+    # Compute potential density anomaly (sigma0)
+    sigma0 = gsw.sigma0(SA, CT)
+
+# -----------------------------------------------------------------------------
+# Process sea surface height (ssh)
+# -----------------------------------------------------------------------------
+
+if option_proc == 'ssh':
+
+    # Set the dimensions of the array
+    ntime, nlat, nlon = ssh_m.shape 
+
+# -----------------------------------------------------------------------------
+# Save data in a netcdf file
+# -----------------------------------------------------------------------------
+
+# --- Velocity --- # 
+if option_proc == 'vel': 
+
+    # --- Coordinates --- # 
+    Depth = xr.DataArray(data=depth, 
+                        dims=(),
+                        attrs=dict(
+                            description='Depth level of sea-state variables.',
+                            units='m'
+                            )
+    )
+
+    # --- Velocity Components --- #
+    u = xr.DataArray(data=u_int,
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='The x-component (zonal) of velocity interpolated onto (XC,YC) grid.',
+                            units='m/s'
+                        )
+    )
+
+    v = xr.DataArray(data=v_int,
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='The y-component (meridional) of velocity interpolated onto (XC,YC) grid.',
+                            units='m/s'
+                        )
+    )
+
+    # Create data set from data arrays 
+    data = xr.Dataset({'Depth':Depth,'u':u,'v':v,})
+
+    # Set file path for saving the netcdf file
+    file_path = PATH + "/intermediate_proc/mitgcm_proc_vel_hrly_reg_depth_" + str(option_depth) + "m.nc"
+
+
+# --- Density --- # 
+if option_proc == 'density': 
+
+    # --- Coordinates --- # 
+    Depth = xr.DataArray(data=depth, 
+                        dims=(),
+                        attrs=dict(
+                            description='Depth level of sea-state variables.',
+                            units='m'
+                            )
+    )
+
+    # --- Sea State Varibles --- # 
+    Pressure = xr.DataArray(data=pressure, 
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='Pressure regional map off point conception, CA.',
+                            units='dbar'
+                            )
+    )
+
+    SIG = xr.DataArray(data=sigma0, 
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='Potential Density anomaly regional map off point conception, CA referenced to the pressure at the sea surface.',
+                            units='kg/m^3'
+                            )
+    ) 
+
+    CTemp = xr.DataArray(data=CT, 
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='Conservative temperature regional map off point conception, CA.',
+                            units='degrees Celcius'
+                            )
+    ) 
+
+    ASal = xr.DataArray(data=SA, 
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='Absolute Salinity regional map off point conception, CA.',
+                            units='g/kg'
+                            )
+    )
+
+    # Create data set from data arrays 
+    data = xr.Dataset({'Depth':Depth,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal})
+
+    # Set file path for saving the netcdf file
+    file_path = PATH + "/intermediate_proc/mitgcm_proc_density_hrly_reg_depth_" + str(option_depth) + "m.nc"
+
+# --- Sea Surface Height --- # 
+if option_proc == 'ssh':
+
+    # --- Sea Surface Height --- #
+    ssh = xr.DataArray(data=ssh_m,
+                        dims=['time','lat','lon'],
+                        coords=dict(time=time_dt,lat=lat,lon=lon),
+                        attrs=dict(
+                            description='Sea surface height regional map off point conception, CA.',
+                            units='m'
+                        )
+     )
+
+    # Create data set from data arrays 
+    data = xr.Dataset({'ssh':ssh})
+
+    # Set file path for saving the netcdf file
+    file_path = PATH + "/intermediate_proc/mitgcm_proc_ssh_hrly_reg.nc"
+
+# Check if file exists, then delete it
+if os.path.exists(file_path):
+    os.remove(file_path)
+
+# Create netcdf file
+data.to_netcdf(file_path,mode='w')
