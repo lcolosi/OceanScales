@@ -16,6 +16,7 @@
 # Import python libraries 
 import os
 import xarray as xr
+import numpy as np
 
 # Set paths to data directory
 ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
@@ -37,11 +38,15 @@ lon_n = lon_b % 360
 lat_bnds   = [33, 35]                     
 lon_bnds   = [-123 % 360, -120 % 360]
 
-# Set max and min values 
-lon_min = lon_bnds[0]
-lon_max = lon_bnds[1]
-lat_min = lat_bnds[0]
-lat_max = lat_bnds[1]
+# Grid spacing
+dlon = float(np.abs(lon_n[1] - lon_n[0]))
+dlat = float(np.abs(lat_b[1] - lat_b[0]))
+
+# Add one grid cell around plotting domain
+lon_min = lon_bnds[0] - dlon
+lon_max = lon_bnds[1] + dlon
+lat_min = lat_bnds[0] - dlat
+lat_max = lat_bnds[1] + dlat
 
 # Extract data from bathymetry 
 lon_grid = lon_n[(lon_n >= lon_min) & (lon_n <= lon_max)]

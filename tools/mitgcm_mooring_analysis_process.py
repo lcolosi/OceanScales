@@ -20,12 +20,13 @@
 
 # Import python libraries 
 import os
+from pathlib import Path
 import xarray as xr
 import numpy as np
 from netCDF4 import Dataset, num2date
 from datetime import datetime
-from scipy.interpolate import interp1d
 import gsw
+from scipy.interpolate import interp1d
 from scipy.interpolate import PchipInterpolator, interp1d
 
 # -----------------------------------------------------------------------------
@@ -62,9 +63,11 @@ g                = 9.81
 rmsd_thresh      = 1e-3
 threshold_frac   = 0.75
 
-# Set path to project directory
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH = ROOT + 'data/mitgcm/mooring/'
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set path to project data directory
+PATH_data = ROOT / "data" / "mitgcm" / "moorings"
 
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
@@ -74,8 +77,8 @@ PATH = ROOT + 'data/mitgcm/mooring/'
 if option_proc == 'vel':
 
     # Obtain filename paths
-    filename_u = PATH + "UVEL_CCS_hrly_mooring.nc"
-    filename_v = PATH + "VVEL_CCS_hrly_mooring.nc"
+    filename_u = PATH_data / "UVEL_CCS_hrly_mooring.nc"
+    filename_v = PATH_data / "VVEL_CCS_hrly_mooring.nc"
 
     # Generate the nc data structure
     nc_u = Dataset(filename_u, 'r')
@@ -99,8 +102,8 @@ if option_proc == 'vel':
 elif option_proc == 'density':
 
     # Obtain filename paths
-    filename_temp = PATH + "THETA_CCS_hrly_mooring.nc"
-    filename_salt = PATH + "SALT_CCS_hrly_mooring.nc"
+    filename_temp = PATH_data / "THETA_CCS_hrly_mooring.nc"
+    filename_salt = PATH_data / "SALT_CCS_hrly_mooring.nc"
 
     # Generate the nc data structure
     nc_temp = Dataset(filename_temp, 'r')
@@ -391,7 +394,7 @@ if option_proc == 'vel':
     data = xr.Dataset({'LON':LON,'LAT':LAT,'u':u,'v':v})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/intermediate_proc/mitgcm_proc_vel_hrly_mooring.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_vel_hrly_mooring.nc"
 
 # --- Density --- # 
 if option_proc == 'density': 
@@ -555,7 +558,7 @@ if option_proc == 'density':
     data = xr.Dataset({'LON':LON,'LAT':LAT,'Pressure':Pressure,'Density':Density,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/mitgcm_proc_density_hrly_mooring.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_mooring.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

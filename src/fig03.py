@@ -24,17 +24,21 @@
 # =============================================================================
 
 # Import libraries 
+import sys
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import mpmath as mp
-import sys
-import os
-import cmocean.cm as cmo
-import warnings
+
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_figs = ROOT / "figs"
+PATH_tools = ROOT / "tools"
 
 # Set path to access additional python functions
-sys.path.append('/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/' \
-                'OceanScales/tools/')
+sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
 from plotting import add_corner_label
@@ -44,13 +48,8 @@ from autocorr import autocorrelation_analytic, decorrelation_scale_analytic
 # Set plotting parameters 
 # -----------------------------------------------------------------------------
 
-# Set paths to figures directories
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH_figs   = ROOT + 'figs/'
-
 # Set font and fontsize using LaTeX 
 fontsize=16
-os.environ["PATH"] = "/usr/local/texlive/2022/bin/universal-darwin:" + os.environ["PATH"]
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -295,7 +294,7 @@ plt.tight_layout()
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs + 'fig03.png',
+    PATH_figs / 'fig03.png',
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

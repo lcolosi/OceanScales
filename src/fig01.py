@@ -17,18 +17,23 @@
 
 # Import python libraries
 import sys
-import os
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
 import cartopy.crs as ccrs
 import cmocean.cm as cmo
-import matplotlib.colors as mcolors
 
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_data = ROOT / "data"
+PATH_figs = ROOT / "figs"
+PATH_tools = ROOT / "tools"
 
 # Set path to access additional python functions
-sys.path.append('/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/' \
-                'OceanScales/tools/')
+sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox for cartopy figures
 from plotting import set_coastlines, set_grid_ticks, set_cbar
@@ -37,14 +42,8 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar
 # Set plotting parameters
 # -----------------------------------------------------------------------------
 
-# Set paths to data and figures directories
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH_data  = ROOT + 'data/'
-PATH_figs   = ROOT + 'figs/'
-
 # Set font and fontsize using LaTeX 
 fontsize=18
-os.environ["PATH"] = "/usr/local/texlive/2022/bin/universal-darwin:" + os.environ["PATH"]
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -67,7 +66,7 @@ lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784
 #------------------------------------------# 
 
 # Obtain filename path
-filename_bathy = PATH_data + "bathymetry/etopo1_point_conception.nc"
+filename_bathy = PATH_data / "bathymetry" / "etopo1_point_conception.nc"
 
 # Generate the nc data structure
 nc_bathy = Dataset(filename_bathy, 'r')
@@ -78,11 +77,11 @@ lat    = nc_bathy.variables['lat'][:]
 bathy  = nc_bathy.variables['BATHY'][:]
 
 #------------------------------------------# 
-# Bathymetry  
+# CalCOFI Line 80.0 Positions  
 #------------------------------------------# 
 
 # Obtain filename path
-filename = PATH_data + "calcofi/CalCOFIStationOrder.csv"
+filename = PATH_data / "calcofi" / "CalCOFIStationOrder.csv"
 
 # Load csv file 
 calCOFI_data = np.genfromtxt(
@@ -115,8 +114,7 @@ lat_min, lat_max = 33, 35
 levels = np.arange(0, 4500, 100) 
 level_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
-fontsize_m = 25
-fontsize_g = 35
+fontsize_g = 25
 
 # Create figure
 fig, ax = plt.subplots(figsize=(18, 20), subplot_kw={"projection": projection})
@@ -133,73 +131,34 @@ ct = ax.contourf(
     extend = 'max'
 )
 
-# --- CCE1 --- # 
-
-# Plot the mooring point
+# Plot the CCE1 mooring point
 ax.scatter(
     lon1, lat1, 
     color='w',
     edgecolor='black', marker='^', s=180, 
     transform=ccrs.PlateCarree(),
-    zorder=10
+    zorder=10, 
+    label='CCE1'
 )
 
-# Add a label next to the mooring marker
-ax.text(
-    lon1 - 0.085, lat1 + 0.08,           
-    f"CCE1",               
-    transform=ccrs.PlateCarree(),
-    fontsize=fontsize_m,
-    fontweight='bold',
-    color='black',
-    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=1.5, alpha=0.75),
-    zorder=11
-)
-
-# --- CCE2 --- # 
-
-# Plot the mooring point
+# Plot the CCE2 mooring point
 ax.scatter(
     lon2, lat2, 
     color='w',  
     edgecolor='black', marker='s', s=180,  
     transform=ccrs.PlateCarree(),
-    zorder=10
+    zorder=10, 
+    label='CCE2'
 )
 
-# Add a label next to the mooring marker
-ax.text(
-    lon2 - 0.085, lat2 + 0.08,         
-    f"CCE2",                
-    transform=ccrs.PlateCarree(),
-    fontsize=fontsize_m,
-    fontweight='bold',
-    color='black',
-    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=1.5, alpha=0.75),
-    zorder=11
-)
-
-# --- CCE3 --- # 
-
-# Plot the mooring point
+# Plot the CCE3 mooring point
 ax.scatter(
     lon3, lat3, 
     color= 'w',  
     edgecolor='black', marker='o', s=180,  
     transform=ccrs.PlateCarree(),
-    zorder=10
-)
-
-# Add a label next to the mooring marker
-ax.text(
-    lon3 - 0.06, lat3 + 0.08,          
-    f"CCE3",            
-    transform=ccrs.PlateCarree(),
-    fontsize=fontsize_m,
-    fontweight='bold',
-    color='black',
-    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=1.5, alpha=0.75),
-    zorder=11
+    zorder=10, 
+    label='CCE3'
 )
 
 # Plot depth contour lines
@@ -219,7 +178,7 @@ ax.plot(
     linestyle=(0, (5, 3)),  
     linewidth=3,
     transform=ccrs.PlateCarree(),
-    label='CalCOFI Line 80.0'
+    label='CalCOFI \n Line 80.0'
 )
 
 # Set grid ticks 
@@ -238,7 +197,7 @@ set_grid_ticks(
 )
 
 # Create colormap
-cax = plt.axes([0.97, 0.33, 0.02, 0.35])
+cax = plt.axes([0.91, 0.315, 0.02, 0.35])
 set_cbar(
     ct,
     cax,
@@ -253,18 +212,15 @@ set_cbar(
 
 # Set legend
 ax.legend(
-    loc='upper left',
-    fontsize=fontsize_m,
+    loc='upper right',
+    fontsize=fontsize,
     framealpha=0.9,
     edgecolor='black'
 )
 
-# Adjust figure layout
-plt.tight_layout()
-
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs + 'fig01.png',
+    PATH_figs / "fig01.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

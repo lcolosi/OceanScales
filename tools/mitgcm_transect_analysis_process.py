@@ -21,6 +21,7 @@
 # Import python libraries 
 import sys
 import os
+from pathlib import Path
 import xarray as xr
 import numpy as np
 from netCDF4 import Dataset, num2date
@@ -58,9 +59,11 @@ sig_depth_thresh = -500
 R_earth      = 6371 
 g            = 9.81 
 
-# Set path to project directory
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH = ROOT + 'data/mitgcm/transect/'
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set path to project data directory
+PATH_data = ROOT / "data" / "mitgcm" / "transect"
 
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
@@ -70,8 +73,8 @@ PATH = ROOT + 'data/mitgcm/transect/'
 if option_proc == 'vel':
 
     # Obtain filename paths
-    filename_u = PATH + "UVEL_CCS_hrly_trans.nc"
-    filename_v = PATH + "VVEL_CCS_hrly_trans.nc"
+    filename_u = PATH_data / "UVEL_CCS_hrly_trans.nc"
+    filename_v = PATH_data / "VVEL_CCS_hrly_trans.nc"
 
     # Generate the nc data structure
     nc_u = Dataset(filename_u, 'r')
@@ -99,8 +102,8 @@ if option_proc == 'vel':
 elif option_proc == 'density':
 
     # Obtain filename paths
-    filename_temp = PATH + "THETA_CCS_hrly_trans.nc"
-    filename_salt = PATH + "SALT_CCS_hrly_trans.nc"
+    filename_temp = PATH_data / "THETA_CCS_hrly_trans.nc"
+    filename_salt = PATH_data / "SALT_CCS_hrly_trans.nc"
 
     # Generate the nc data structure
     nc_temp = Dataset(filename_temp, 'r')
@@ -110,11 +113,11 @@ elif option_proc == 'density':
     depth = nc_temp['Z'][:]
     lon   = nc_temp.variables['XC'][:]
     lat   = nc_temp.variables['YC'][:]
-    dist   = nc_temp.variables['distance'][:]
+    dist  = nc_temp.variables['distance'][:]
     time  =  num2date(nc_temp.variables['time'][:], nc_temp.variables['time'].units)
 
-    T = nc_temp.variables['THETA'][:]
-    S = nc_salt.variables['SALT'][:]
+    T     = nc_temp.variables['THETA'][:]
+    S     = nc_salt.variables['SALT'][:]
 
     # Mask data at fill values (zero for the MITgcm output)
     T_m = np.ma.masked_where(T == 0, T)
@@ -433,7 +436,7 @@ if option_proc == 'vel':
     data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'u':u,'v':v,'u_along':u_along,'v_cross':v_cross,'u_bar':u_bar,'v_bar':v_bar,'u_along_bar':u_along_bar,'v_cross_bar':v_cross_bar})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/intermediate_proc/mitgcm_proc_vel_hrly_trans.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_vel_hrly_trans.nc"
 
 # --- Density --- # 
 elif option_proc == 'density': 
@@ -525,7 +528,7 @@ elif option_proc == 'density':
     data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'Pressure':Pressure,'Density':Density,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'NZ':NZ})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/intermediate_proc/mitgcm_proc_density_hrly_trans.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_trans.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

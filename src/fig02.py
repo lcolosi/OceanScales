@@ -19,7 +19,7 @@
 
 # Import libraries 
 import sys
-import os
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset, num2date
@@ -27,9 +27,16 @@ from datetime import datetime
 import matplotlib.dates as mdates
 from matplotlib.ticker import FuncFormatter
 
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_data = ROOT / "data"
+PATH_figs = ROOT / "figs"
+PATH_tools = ROOT / "tools"
+
 # Set path to access additional python functions
-sys.path.append('/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/' \
-                'OceanScales/tools/')
+sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
 from plotting import month_fmt, add_corner_label
@@ -69,14 +76,8 @@ T_annual         = 365.25*(24)*(60)*(60)
 segment_overlap  = 0.5                                        
 segment_duration = 1                                           
 
-# Set paths to figures directories
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH_data = ROOT + 'data/mitgcm/mooring/intermediate_proc/' 
-PATH_figs = ROOT + 'figs/'
-
 # Set font and fontsize
 fontsize=16
-os.environ["PATH"] = "/usr/local/texlive/2022/bin/universal-darwin:" + os.environ["PATH"]
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -89,7 +90,7 @@ plt.rcParams.update({
 # -----------------------------------------------------------------------------
 
 # Obtain filename paths
-filename = PATH_data + "mitgcm_proc_density_hrly_mooring.nc"
+filename = PATH_data / "mitgcm" / "mooring" / "processed" / "mitgcm_proc_density_hrly_mooring.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename, 'r')
@@ -464,7 +465,7 @@ plt.subplots_adjust(hspace=0.21, wspace=0.1)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs + 'fig02.png',
+    PATH_figs / 'fig02.png',
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

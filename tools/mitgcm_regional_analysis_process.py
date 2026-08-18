@@ -20,13 +20,14 @@
 
 # Import python libraries 
 import sys
+import os
+from pathlib import Path
 import xarray as xr
 import numpy as np
 from netCDF4 import Dataset, num2date
 from datetime import datetime
-import os
-from scipy.interpolate import interp1d
 import gsw
+from scipy.interpolate import interp1d
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -46,9 +47,11 @@ import gsw
 option_proc  = 'density' 
 option_depth = 0.5   
 
-# Set path to project directory
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH = ROOT + 'data/mitgcm/regional/'
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set path to project data directory
+PATH_data = ROOT / "data" / "mitgcm" / "regional"
 
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
@@ -58,8 +61,8 @@ PATH = ROOT + 'data/mitgcm/regional/'
 if option_proc == 'vel':
 
     # Obtain filename paths
-    filename_u = PATH + "UVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
-    filename_v = PATH + "VVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_u = PATH_data / "UVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_v = PATH_data / "VVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
 
     # Generate the nc data structure
     nc_u = Dataset(filename_u, 'r')
@@ -67,11 +70,11 @@ if option_proc == 'vel':
 
     # Extract data variables
     depth  = nc_u.variables['Z'][:]
-    lon_XG    = nc_u.variables['XG'][:]
-    lat_YC    = nc_u.variables['YC'][:]
-    lon_XC    = nc_v.variables['XC'][:]
-    lat_YG    = nc_v.variables['YG'][:]
-    time   =  num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
+    lon_XG = nc_u.variables['XG'][:]
+    lat_YC = nc_u.variables['YC'][:]
+    lon_XC = nc_v.variables['XC'][:]
+    lat_YG = nc_v.variables['YG'][:]
+    time   = num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
     u_raw  = nc_u.variables['UVEL'][:]
     v_raw  = nc_v.variables['VVEL'][:]
@@ -84,8 +87,8 @@ if option_proc == 'vel':
 elif option_proc == 'density':
 
     # Obtain filename paths
-    filename_temp = PATH + "THETA_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
-    filename_salt = PATH + "SALT_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_temp = PATH_data / "THETA_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_salt = PATH_data / "SALT_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
 
     # Generate the nc data structure
     nc_temp = Dataset(filename_temp, 'r')
@@ -93,12 +96,12 @@ elif option_proc == 'density':
 
     # Extract data variables
     depth = nc_temp['Z'][:]
-    lon = nc_temp.variables['XC'][:]
-    lat = nc_temp.variables['YC'][:]
-    time =  num2date(nc_temp.variables['time'][:], nc_temp.variables['time'].units)
+    lon   = nc_temp.variables['XC'][:]
+    lat   = nc_temp.variables['YC'][:]
+    time  =  num2date(nc_temp.variables['time'][:], nc_temp.variables['time'].units)
 
-    T = nc_temp.variables['THETA'][:]
-    S = nc_salt.variables['SALT'][:]
+    T     = nc_temp.variables['THETA'][:]
+    S     = nc_salt.variables['SALT'][:]
 
     # Mask data at fill values (zero for the MITgcm output)
     T_m = np.ma.masked_where(T == 0, T)
@@ -108,17 +111,17 @@ elif option_proc == 'density':
 elif option_proc == 'ssh':
 
     # Obtain filename paths
-    filename_ssh = PATH + "ETAN_CCS_hrly_reg.nc"
+    filename_ssh = PATH_data / "ETAN_CCS_hrly_reg.nc"
 
     # Generate the nc data structure
     nc_ssh = Dataset(filename_ssh, 'r')
 
     # Extract data variables
-    lon = nc_ssh.variables['XC'][:]
-    lat = nc_ssh.variables['YC'][:]
+    lon  = nc_ssh.variables['XC'][:]
+    lat  = nc_ssh.variables['YC'][:]
     time =  num2date(nc_ssh.variables['time'][:], nc_ssh.variables['time'].units)
 
-    ssh = nc_ssh.variables['ETAN'][:]
+    ssh  = nc_ssh.variables['ETAN'][:]
 
     # Mask data at fill values (zero for the MITgcm output)
     ssh_m = np.ma.masked_where(ssh == 0, ssh)
@@ -262,7 +265,7 @@ if option_proc == 'vel':
     data = xr.Dataset({'Depth':Depth,'u':u,'v':v,})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/intermediate_proc/mitgcm_proc_vel_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_vel_hrly_reg_depth_" + str(option_depth) + "m.nc"
 
 
 # --- Density --- # 
@@ -318,7 +321,7 @@ if option_proc == 'density':
     data = xr.Dataset({'Depth':Depth,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/intermediate_proc/mitgcm_proc_density_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_reg_depth_" + str(option_depth) + "m.nc"
 
 # --- Sea Surface Height --- # 
 if option_proc == 'ssh':
@@ -337,7 +340,7 @@ if option_proc == 'ssh':
     data = xr.Dataset({'ssh':ssh})
 
     # Set file path for saving the netcdf file
-    file_path = PATH + "/intermediate_proc/mitgcm_proc_ssh_hrly_reg.nc"
+    file_path = PATH_data / "processed" / "mitgcm_proc_ssh_hrly_reg.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):
