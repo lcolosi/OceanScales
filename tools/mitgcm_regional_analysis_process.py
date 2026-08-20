@@ -1,5 +1,5 @@
 # =============================================================================
-# Intermediate Processing MITgcm data for the Regional Analysis
+# Processing MITgcm data for the Regional Analysis
 # =============================================================================
 #
 # Description:

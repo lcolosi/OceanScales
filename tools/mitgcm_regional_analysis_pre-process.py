@@ -1,5 +1,5 @@
 # =============================================================================
-# Processing MITgcm data for the Regional Analysis
+# Pre-Processing MITgcm data for the Regional Analysis
 # =============================================================================
 #
 # Description:
@@ -20,6 +20,7 @@ import sys
 import numpy as np
 import xarray as xr
 from xmitgcm import open_mdsdataset
+import xgcm
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -33,6 +34,9 @@ from xmitgcm import open_mdsdataset
 # - depth: Depth level extracted for regional analysis(units: meters).
 # - lat_bnds: Latitude bounds setting the region of interest.
 # - lon_bnds: Longitude bounds setting the region of interest.
+# - halo_cells : Number of data points to extend the boundaries to ensure data is
+#                present at the boundaries the study doamin when plotting
+#                with contourf.
 # - encoding: Start time of the model run.
 # - PATH_GRID: Directory containing the model grid.
 # - PATH_OUTPUT: Directory containing model diagnostics.
@@ -45,16 +49,17 @@ from xmitgcm import open_mdsdataset
 delta_t = 150  
 
 # Set time and space parameters  
-depth = 9                                                         
-lat_bnds  = [33.0, 35.0]                                          
-lon_bnds  = [237.0, 240.0]                                         
-encoding  = {'time': {'units': 'seconds since 2015-12-01 2:00'}}  
+depth      = 9                                                         
+lat_bnds   = [33.0, 35.0]                                          
+lon_bnds   = [237.0, 240.0]
+halo_cells = 3                                          
+encoding   = {'time': {'units': 'seconds since 2015-12-01 2:00'}}  
 
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                    
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'     
 PATH_nc     = '/data/SO3/lcolosi/mitgcm/SWOT_MARA_RUN4_LY/'  
-file_dim    = '2D'                                         
+file_dim    = '3D'                                         
 
 # -----------------------------------------------------------------------------
 # Load the grid and diagnostics data into a python structure
@@ -100,8 +105,41 @@ for coord in ds.coords:
         ds[coord] = ds[coord].astype(ds[coord].dtype.newbyteorder('<'))
 
 # -----------------------------------------------------------------------------
+# Interpolate the velocity grids on the (XC, YC) grid
+# -----------------------------------------------------------------------------
+
+# Define the grid object (says which dimensions are 'center' and which are 'left')
+grid = xgcm.Grid(ds, 
+                 coords={'X': {'center': 'XC', 'left': 'XG'}, 
+                         'Y': {'center': 'YC', 'left': 'YG'}, 
+                         'Z': {'center': 'Z',  'left': 'Zl'}}, 
+                 periodic=False, 
+                 boundary='extend'
+                 ) 
+
+# Interpolate to the centers
+ds['U_center'] = grid.interp(ds["UVEL"], axis='X') # Interpolate from X-face to center
+ds['V_center'] = grid.interp(ds["VVEL"], axis='Y') # Interpolate from Y-face to center
+ds['W_center'] = grid.interp(ds["WVEL"], axis='Z') # Interpolate from Z-face (Zl) to center
+
+# -----------------------------------------------------------------------------
 # Slice array based on longitude and latitude bounds of the region
 # -----------------------------------------------------------------------------
+
+# Compute the median longitude and latitude spatial resolution
+dlon = float(np.median(np.abs(np.diff(ds["XC"].values))))
+dlat = float(np.median(np.abs(np.diff(ds["YC"].values))))
+
+# Set the longitude and latitude slicing vectors
+lon_slice = slice(
+    lon_bnds[0] - halo_cells * dlon,
+    lon_bnds[1] + halo_cells * dlon,
+)
+
+lat_slice = slice(
+    lat_bnds[0] - halo_cells * dlat,
+    lat_bnds[1] + halo_cells * dlat,
+)
 
 if file_dim == '3D':
     print(f"Extracting 3D fields...")
@@ -117,21 +155,54 @@ if file_dim == '3D':
     print(f"Selected depth: {actual_depth} m at index {depth_idx}")
 
     # Extract scalar fields 
-    theta = ds['THETA'].isel(Z=depth_idx).sel(YC=slice(*lat_bnds), 
-                                              XC=slice(*lon_bnds))
-    salt  = ds['SALT'].isel(Z=depth_idx).sel(YC=slice(*lat_bnds), 
-                                             XC=slice(*lon_bnds))
-    uvel  = ds['UVEL'].isel(Z=depth_idx).sel(YC=slice(*lat_bnds), 
-                                             XG=slice(*lon_bnds))
-    vvel  = ds['VVEL'].isel(Z=depth_idx).sel(YG=slice(*lat_bnds), 
-                                             XC=slice(*lon_bnds))
+    theta = ds['THETA'].isel(Z=depth_idx).sel(YC=lat_slice, 
+                                              XC=lon_slice)
+    salt  = ds['SALT'].isel(Z=depth_idx).sel(YC=lat_slice, 
+                                             XC=lon_slice)
+    uvel  = ds['U_center'].isel(Z=depth_idx).sel(YC=lat_slice, 
+                                                 XC=lon_slice)
+    vvel  = ds['V_center'].isel(Z=depth_idx).sel(YC=lat_slice, 
+                                                 XC=lon_slice)
 
 elif file_dim == '2D':
     print(f"Extracting 2D fields...")
 
     # Extract scalar fields 
-    etan = ds['ETAN'].sel(YC=slice(*lat_bnds), 
-                          XC=slice(*lon_bnds))
+    etan = ds['ETAN'].sel(YC=lat_slice, 
+                          XC=lon_slice)
+
+# -----------------------------------------------------------------------------
+# Apply the center-cell mask (excludes dry cells)
+# -----------------------------------------------------------------------------
+
+if file_dim == '3D':
+    print(f"Masking dry-cells for 3D fields...")
+
+    # Extract center-cell mask 
+    mask_c = ds["hFacC"].isel(Z=depth_idx).sel(YC=lat_slice, 
+                                               XC=lon_slice)
+
+    # Identify wet cells
+    wet_c = mask_c > 0
+
+    # Apply mask to dry cells 
+    theta = theta.where(wet_c)
+    salt  = salt.where(wet_c)
+    uvel  = uvel.where(wet_c)
+    vvel  = vvel.where(wet_c)
+
+elif file_dim == "2D":
+    print(f"Masking dry-cells for 2D fields...")
+
+    # Extract center-cell mask 
+    mask_c = ds["hFacC"].isel(Z=0).sel(YC=lat_slice, 
+                                       XC=lon_slice)
+    
+    # Identify wet cells
+    wet_c = mask_c > 0
+
+    # Apply mask to dry cells 
+    etan = etan.where(wet_c)
 
 # -----------------------------------------------------------------------------
 # Save data in netcdf files

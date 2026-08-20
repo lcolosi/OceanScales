@@ -122,11 +122,21 @@ sig_depth = sig_m[:, :, depth_index]
 # Remove seasonal and interannual variability from time series
 # -----------------------------------------------------------------------------
 
+# ------------ # 
+# --- Note --- # 
+# ------------ #
+# The interannual variability is estimated by applying the Gaussian low-pass filter
+# to the original time series, rather than to the residual after removing the 
+# annual and semi-annual cycles. This prevents year-to-year variations in the 
+# amplitude or phase of the seasonal cycle from being interpreted as interannual 
+# variability. The seasonal and interannual components are therefore estimated 
+# independently from the original time series before both are removed.
+# ------------ # 
+
 # Set the dimensions of the array
 nsite,ntime = np.shape(sig_depth)
 
-# Set the radian frequencies for the annual, semi-annual, and 
-# tri-annual cycles (units: rad/sec)
+# Set the radian frequencies for the seasonal cycle LSF (units: rad/sec)
 w = 2 * np.pi * np.arange(1, option_harmonics + 1) / T_annual
 
 # Set option for linear trend
@@ -162,13 +172,13 @@ if option_interannual == 'gaussian':
 
     # Initialize arrays for the low-pass interannual signal and final residuals
     sig_interannual = np.ma.zeros((nsite, ntime))
-    sig_res_filtered = np.ma.zeros((nsite, ntime))
+    sig_filtered = np.ma.zeros((nsite, ntime))
 
     # Loop through mooring sites
     for isite in range(nsite):
 
         # Residual after removing seasonal cycle
-        data_ts = np.ma.masked_invalid(sig_res[isite, :])
+        data_ts = np.ma.masked_invalid(sig_depth[isite, :])
 
         # Estimate interannual variability using 365-day FWHM Gaussian low-pass
         sig_interannual[isite, :] = gaussian_low_pass_filter(
@@ -180,10 +190,10 @@ if option_interannual == 'gaussian':
         )
 
         # Remove interannual variability
-        sig_res_filtered[isite, :] = data_ts - sig_interannual[isite, :]
+        sig_filtered[isite, :] = data_ts - sig_interannual[isite, :]
 
-    # Replace residual with the filtered residual
-    sig_res = sig_res_filtered
+    # Remove the interannual variability from the seasonal cycle anomaly
+    sig_res = sig_res - sig_filtered
 
 # Set the model for the interannual and seasonal cycles 
 if option_interannual == 'gaussian': 
@@ -251,7 +261,7 @@ for isite in range(nsite):
 
     # Convert from seconds to days
     time_lag_days = time_lag/(24*60*60) 
-    t_days = Lt/(24*60*60) 
+    Lt_days = Lt/(24*60*60) 
     Lt_stdm_days = Lt_stdm/(24*60*60)
 
 # -----------------------------------------------------------------------------

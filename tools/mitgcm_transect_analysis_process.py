@@ -1,5 +1,5 @@
 # =============================================================================
-# Intermediate Processing MITgcm data for the Transect Analysis
+# Processing MITgcm data for the Transect Analysis
 # =============================================================================
 #
 # Description:

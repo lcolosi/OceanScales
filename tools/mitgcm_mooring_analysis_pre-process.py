@@ -1,5 +1,5 @@
 # =============================================================================
-# Processing MITgcm data for the Mooring Analysis
+# Pre-Processing MITgcm data for the Mooring Analysis
 # =============================================================================
 #
 # Description:

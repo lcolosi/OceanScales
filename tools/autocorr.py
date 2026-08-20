@@ -102,6 +102,15 @@ def compute_autocorr_biased(
     if data.ndim != 1:
         raise ValueError("data must be one-dimensional.")
 
+    # Mask data set to identify missing data points
+    data_ma = np.ma.masked_invalid(data)
+
+    # FFT autocorrelation method requires regularly sampled data (no missing data)
+    if np.any(np.ma.getmaskarray(data_ma)):
+        raise ValueError(
+            "FFT autocorrelation requires a complete regularly sampled segment."
+        )
+
     # At least two observations are required for a meaningful time-series
     # covariance calculation
     if n_samples < 2:
@@ -615,4 +624,74 @@ def segment_time_series(
         seg_start += timedelta(days=int(365*step))
 
     return segments
+
+
+
+
+
+
+def compute_decor_scale_weighted(autocorrelation, lag):
+    """
+    Compute a triangularly weighted decorrelation scale.
+
+    This function is intended for comparison with the Version 1 workflow.
+    Because the input ACF is already a biased estimate, this applies an
+    additional triangular taper and should not be treated as the preferred
+    decorrelation-scale estimator.
+    """
+
+    autocorrelation = np.asarray(autocorrelation, dtype=float)
+    lag = np.asarray(lag, dtype=float)
+
+    if autocorrelation.ndim != 1 or lag.ndim != 1:
+        raise ValueError("Inputs must be one-dimensional.")
+
+    if autocorrelation.size != lag.size:
+        raise ValueError("Inputs must have the same length.")
+
+    if not np.all(np.diff(lag) > 0):
+        raise ValueError("lag must be strictly increasing.")
+
+    # Locate zero lag.
+    zero_indices = np.flatnonzero(np.isclose(lag, 0.0))
+
+    if zero_indices.size != 1:
+        raise ValueError("lag must contain exactly one zero-lag value.")
+
+    center = zero_indices[0]
+
+    # Restrict integration to symmetric lags.
+    maximum_radius = min(center, lag.size - center - 1)
+
+    if maximum_radius < 1:
+        raise ValueError("At least one positive lag is required.")
+
+    # Match the Version 1 definition R = N * dt.
+    dt = lag[center + 1] - lag[center]
+    n_positive = maximum_radius + 1
+    record_duration = n_positive * dt
+
+    # Apply the additional triangular finite-record weight.
+    weights = 1.0 - np.abs(lag) / record_duration
+    weights = np.clip(weights, 0.0, 1.0)
+
+    weighted_autocorrelation = weights * autocorrelation
+
+    cumulative_integral = cumulative_trapezoid(
+        weighted_autocorrelation,
+        lag,
+        initial=0.0,
+    )
+
+    radius = np.arange(maximum_radius + 1)
+
+    symmetric_integrals = (
+        cumulative_integral[center + radius]
+        - cumulative_integral[center - radius]
+    )
+
+    M_lag = int(np.nanargmax(symmetric_integrals))
+    decor_scale = float(symmetric_integrals[M_lag])
+
+    return decor_scale, M_lag
 

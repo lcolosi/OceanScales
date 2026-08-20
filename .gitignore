@@ -1,4 +1,5 @@
 #----- Git Ignore File -----# 
+.vscode
 
 # Data directory
 data/bathymetry/
@@ -17,3 +18,8 @@ src/__pycache__/
 # Tools directory
 tools/__pycache__/
 tools/README.md
+
+# Notebooks directory
+notebooks/__pycache__/
+notebooks/trouble_shotting/
+

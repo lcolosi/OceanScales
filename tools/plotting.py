@@ -13,6 +13,7 @@
 # =============================================================================
 
 # Import libraries 
+import numpy as np
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
@@ -297,4 +298,76 @@ def month_fmt(
     # For all other months, return only the first letter of the abbreviated month name
     else:
         return dt.strftime('%b')[0]
+
+
+# --- Length Scale Bar --- #
+def add_scalebar(
+    ax, 
+    length_km=50, 
+    location=(0.15, 0.07),
+    linewidth=2, 
+    text_kwargs=None
+):
+    """
+    Add a horizontal scale bar to a Cartopy GeoAxes.
+
+    Parameters
+    ----------
+    ax : cartopy.mpl.geoaxes.GeoAxes
+        The axes to draw the scale bar on.
+    length_km : float
+        Length of the scale bar in kilometers.
+    location : tuple of float
+        Location of the center of the scale bar in *axes* coordinates
+        (x, y), both between 0 and 1.
+    linewidth : float
+        Line width of the scale bar.
+    text_kwargs : dict, optional
+        Extra kwargs passed to ax.text (fontsize, weight, etc.).
+    """
+
+    # Set key word arguments when none are given 
+    if text_kwargs is None:
+        text_kwargs = dict(fontsize=10)
+
+    # Get current map extent in data (PlateCarree) coordinates
+    lon_min, lon_max, lat_min, lat_max = ax.get_extent(crs=ccrs.PlateCarree())
+
+    # Choose the latitude where the bar will be drawn
+    lat = lat_min + location[1] * (lat_max - lat_min)
+
+    # Convert desired length (km) to degrees of longitude at that latitude
+    km_per_deg_lon = 111.32 * np.cos(np.deg2rad(lat))
+    dlon = (length_km / km_per_deg_lon)
+
+    # Choose center longitude based on axes location
+    lon_center = lon_min + location[0] * (lon_max - lon_min)
+    lon_left   = lon_center - dlon / 2
+    lon_right  = lon_center + dlon / 2
+
+    # Small vertical tick height in degrees
+    dtick = 0.01 * (lat_max - lat_min)
+
+    # Horizontal bar
+    ax.plot([lon_left, lon_right], [lat, lat],
+            transform=ccrs.PlateCarree(),
+            color='k', linewidth=linewidth, solid_capstyle='butt')
+
+    # Vertical ticks at ends (to make |-----|)
+    ax.plot([lon_left, lon_left],
+            [lat - dtick, lat + dtick],
+            transform=ccrs.PlateCarree(),
+            color='k', linewidth=linewidth)
+    ax.plot([lon_right, lon_right],
+            [lat - dtick, lat + dtick],
+            transform=ccrs.PlateCarree(),
+            color='k', linewidth=linewidth)
+
+    # Label above the bar
+    ax.text(lon_center, lat + 1.8 * dtick,
+            f"{int(length_km)} km",
+            ha='center', va='bottom',
+            transform=ccrs.PlateCarree(),
+            **text_kwargs)
+
     
