@@ -17,13 +17,27 @@
 
 # Import python libraries 
 import sys
+from pathlib import Path
 import numpy as np
 import xarray as xr
 from xmitgcm import open_mdsdataset
 import xgcm
 
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import plotting toolbox for cartopy figures
+from plotting import status
+
+status(f"Starting MITgcm pre-processing for the Regional Analysis")
 # -----------------------------------------------------------------------------
-# Set data analysis parameters
+# Set data parameters
 # -----------------------------------------------------------------------------
 
 # ------------# 
@@ -64,6 +78,7 @@ file_dim    = '3D'
 # -----------------------------------------------------------------------------
 # Load the grid and diagnostics data into a python structure
 # -----------------------------------------------------------------------------
+status(f"Loading the grid and diagnostics data...")
 
 #------------#  
 #--- Note ---#
@@ -107,6 +122,7 @@ for coord in ds.coords:
 # -----------------------------------------------------------------------------
 # Interpolate the velocity grids on the (XC, YC) grid
 # -----------------------------------------------------------------------------
+status(f"Interpolating the velocity grid...")
 
 # Define the grid object (says which dimensions are 'center' and which are 'left')
 grid = xgcm.Grid(ds, 
@@ -142,7 +158,7 @@ lat_slice = slice(
 )
 
 if file_dim == '3D':
-    print(f"Extracting 3D fields...")
+    status(f"Selecting 3D fields in study domain...")
 
     # Obtain the depth coordinate 
     depth_levels = abs(ds['Z'].values)
@@ -165,7 +181,7 @@ if file_dim == '3D':
                                                  XC=lon_slice)
 
 elif file_dim == '2D':
-    print(f"Extracting 2D fields...")
+    status(f"Selecting 2D fields in study domain...")
 
     # Extract scalar fields 
     etan = ds['ETAN'].sel(YC=lat_slice, 
@@ -176,7 +192,7 @@ elif file_dim == '2D':
 # -----------------------------------------------------------------------------
 
 if file_dim == '3D':
-    print(f"Masking dry-cells for 3D fields...")
+    status(f"Masking dry-cells for 3D fields...")
 
     # Extract center-cell mask 
     mask_c = ds["hFacC"].isel(Z=depth_idx).sel(YC=lat_slice, 
@@ -192,7 +208,7 @@ if file_dim == '3D':
     vvel  = vvel.where(wet_c)
 
 elif file_dim == "2D":
-    print(f"Masking dry-cells for 2D fields...")
+    status(f"Masking dry-cells for 2D fields...")
 
     # Extract center-cell mask 
     mask_c = ds["hFacC"].isel(Z=0).sel(YC=lat_slice, 
@@ -225,7 +241,10 @@ elif file_dim == '2D':
 for var_name, da in vars_to_save.items():
 
     # Print status
-    print(f"Saving {var_name}...")
+    if file_dim == '3D':
+        status(f"Saving {var_name} to {var_name}_CCS_hrly_reg_depth_{abs(int(actual_depth))}m.nc ...")
+    elif file_dim == '2D':
+        status(f"Saving {var_name} to {var_name}_CCS_hrly_reg.nc ...")
     
     # Chunk along time for faster write 
     if 'time' in da.dims:
@@ -249,3 +268,5 @@ for var_name, da in vars_to_save.items():
             format='NETCDF4',         
             encoding=encoding            
         )
+
+status("MITgcm regional preprocessing complete!")

@@ -18,6 +18,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import matplotlib.dates as mdates
+from datetime import datetime
 
 # --- Coastline and Land Mask Function --- #
 def set_coastlines(
@@ -370,4 +371,20 @@ def add_scalebar(
             transform=ccrs.PlateCarree(),
             **text_kwargs)
 
-    
+
+# --- Status Message --- # 
+def status(message):
+    """
+    Print a timestamped status message to the console.
+
+    Parameters
+    ----------
+    message : str
+        Status message to display.
+
+    Returns
+    -------
+    None
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", flush=True)
