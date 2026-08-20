@@ -58,7 +58,7 @@ encoding   = {'time': {'units': 'seconds since 2015-12-01 2:00'}}
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                    
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'     
-PATH_nc     = '/data/SO3/lcolosi/mitgcm/SWOT_MARA_RUN4_LY/'  
+PATH_nc     = '/data/SO3/lcolosi/OceanScales/mitgcm/regional/'  
 file_dim    = '3D'                                         
 
 # -----------------------------------------------------------------------------
