@@ -18,11 +18,27 @@
 
 # Import python libraries
 import sys
+from pathlib import Path
 import numpy as np
 import xarray as xr
 from xmitgcm import open_mdsdataset
 from geopy.distance import geodesic
 import xgcm
+
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import plotting toolbox for cartopy figures
+from plotting import status
+from process_mitgcm_data import compute_bearing_angle
+
+status(f"Starting MITgcm pre-processing for the Regional Analysis")
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -40,6 +56,7 @@ import xgcm
 # - PATH_OUTPUT: Directory containing model diagnostics.
 # - PATH_nc: Directory where netCDF files are saved.
 # - file_dim: Diagnostic file dimension (3D for T, S, drhodr, and velocity; 2D for etan).
+# - coastal_threshold : Wet-cell threshold for determining the location of the coastline.
 #
 # ------------# 
 
@@ -50,20 +67,22 @@ delta_t = 150
 lat_bnds  = [33.0, 35.0]                                          
 lon_bnds  = [237.0, 240.0]                                        
 encoding  = {'time': {'units': 'seconds since 2015-12-01 2:00'}}  
+coastal_threshold = 0.5
 
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                                     
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'                     
-PATH_nc     = '/data/SO3/lcolosi/mitgcm/SWOT_MARA_RUN4_LY/spatial/transect/' 
+PATH_nc     = '/data/SO3/lcolosi/OceanScales/mitgcm/transect/' 
 file_dim    = '3D'   
 
 # -----------------------------------------------------------------------------
 # Load the grid and diagnostics data into a python structure
 # -----------------------------------------------------------------------------
+status(f"Loading the grid and diagnostics data...")
 
-#------------#  
-#--- Note ---#
-#------------# 
+# ------------ #  
+# --- Note --- #
+# ------------ # 
 #
 # - PATH_OUTPUT: Directory containing model output (.data and .meta files).
 # - PATH_GRID: Directory containing the model grid.
@@ -74,7 +93,7 @@ file_dim    = '3D'
 # - ref_date: Start time of the simulation, including model spin-up.
 # - geometry: Model grid uses spherical-polar coordinates.
 #
-# ------------# 
+# ------------ # 
 
 # Create dataset 
 ds = open_mdsdataset(
@@ -103,167 +122,309 @@ for coord in ds.coords:
 # -----------------------------------------------------------------------------
 # Interpolate the velocity grids on the (XC, YC) grid
 # -----------------------------------------------------------------------------
+status(f"Interpolating the velocity grid...")
 
 # Define the grid object (says which dimensions are 'center' and which are 'left')
-grid = xgcm.Grid(ds, coords={'X': {'center': 'XC', 'left': 'XG'}, 
-                             'Y': {'center': 'YC', 'left': 'YG'}, 
-                             'Z': {'center': 'Z',  'left': 'Zl'}}, 
-                 periodic=False, boundary='extend') 
+grid = xgcm.Grid(ds, 
+                 coords={'X': {'center': 'XC', 'left': 'XG'}, 
+                         'Y': {'center': 'YC', 'left': 'YG'}, 
+                         'Z': {'center': 'Z',  'left': 'Zl'}}, 
+                 periodic=False, 
+                 boundary='extend'
+                 ) 
 
 # Interpolate to the centers
-ds['U_center'] = grid.interp(ds.UVEL, axis='X') # Interpolate from X-face to center
-ds['V_center'] = grid.interp(ds.VVEL, axis='Y') # Interpolate from Y-face to center
-ds['W_center'] = grid.interp(ds.WVEL, axis='Z') # Interpolate from Z-face (Zl) to center
+ds['U_center'] = grid.interp(ds["UVEL"], axis='X') # Interpolate from X-face to center
+ds['V_center'] = grid.interp(ds["VVEL"], axis='Y') # Interpolate from Y-face to center
+ds['W_center'] = grid.interp(ds["WVEL"], axis='Z') # Interpolate from Z-face (Zl) to center
 
 # -----------------------------------------------------------------------------
 # Set CalCOFI station locations
 # -----------------------------------------------------------------------------
+status(f"Interpolating data onto the CalCOFI line 80.0 starting at the shore...")
 
-# Manually read in station locations
-calcofi_lat = np.array([34.46667, 34.45, 34.31667, 34.15, 33.81667, 
-                        33.48333, 33.15, 32.81667])
-calcofi_lon = np.array([-120.48906, -120.5239, -120.80245, -121.15, -121.84304, 
-                        -122.53335, -123.22099, -123.90599])
+# Define station locations
+calcofi_lat = np.array([
+    34.46667,
+    34.45000,
+    34.31667,
+    34.15000,
+    33.81667,
+    33.48333,
+    33.15000,
+    32.81667,
+])
 
-# Sort stations from shore outward
-idx = np.argsort(calcofi_lon)
-calcofi_lon = calcofi_lon[idx]
-calcofi_lat = calcofi_lat[idx] 
+calcofi_lon = np.array([
+    -120.48906,
+    -120.52390,
+    -120.80245,
+    -121.15000,
+    -121.84304,
+    -122.53335,
+    -123.22099,
+    -123.90599,
+])
 
-# -----------------------------------------------------------------------------
-# Compute cumulative diastance along line 80.0 
-# -----------------------------------------------------------------------------
-
-# Initialize array 
-dist = np.zeros(len(calcofi_lon))
-
-# Loop through stations 
-for i in range(1,len(calcofi_lon)): 
-
-    # Define i and i + 1 points along transect
-    pt1 = (calcofi_lat[i-1], calcofi_lon[i-1])
-    pt2 = (calcofi_lat[i],   calcofi_lon[i])
-
-    # Compute distance in kilometers along transect
-    dist[i] = dist[i-1] + geodesic(pt1, pt2).km
-
-# -----------------------------------------------------------------------------
-# Create a denser distance axis (near the resolution of the model grid) 
-# -----------------------------------------------------------------------------
-
-# Set spacing (units: kilometer)
-dr = 2 
-
-# Generate a denser array 
-dist_dense = np.arange(0, dist[-1], dr)
-
-# Interpolate lat and longitude along this denser line
-calcofi_lat_dense = np.interp(dist_dense, dist, calcofi_lat)
-calcofi_lon_dense = np.interp(dist_dense, dist, calcofi_lon)
-
-# Convert the calcofi longitude to span from 0 to 360 
-calcofi_lon_dense = (calcofi_lon_dense + 360) % 360
+# Sort stations from shore outward (here, the largest longitude is closest to shore)
+station_order = np.argsort(calcofi_lon)[::-1]
+calcofi_lon = calcofi_lon[station_order]
+calcofi_lat = calcofi_lat[station_order] 
 
 # -----------------------------------------------------------------------------
-# Interpolate model onto transect 
+# Estimate native MITgcm horizontal grid resolution
 # -----------------------------------------------------------------------------
 
-# Apply land mask using hFacC (wet-dry mask) to avoid blending of zeros (fill value) near the ocean bottom
-theta_masked = ds['THETA'].where(ds['hFacC'] > 0)
-salt_masked  = ds['SALT'].where(ds['hFacC'] > 0)
-uvel_masked  = ds['U_center'].where(ds['hFacC'] > 0)
-vvel_masked  = ds['V_center'].where(ds['hFacC'] > 0)
+lon = ds["XC"].values
+lat = ds["YC"].values
 
-# Define your transect DataArrays
-lat_da = xr.DataArray(calcofi_lat_dense, dims="distance")
-lon_da = xr.DataArray(calcofi_lon_dense, dims="distance")
+# Native grid spacing in degrees
+dlon = np.median(np.diff(lon))
+dlat = np.median(np.diff(lat))
 
-# Interpolate on transect
-theta = theta_masked.interp(YC=lat_da, XC=lon_da)
-salt = salt_masked.interp(YC=lat_da, XC=lon_da)
-uvel = uvel_masked.interp(YC=lat_da, XC=lon_da)
-vvel = vvel_masked.interp(YC=lat_da, XC=lon_da)
+# Representative model latitude
+lat_ref = np.median(lat)
+
+# Convert grid spacing from degrees to kilometers
+dx_native = 111.32 * np.cos(np.deg2rad(lat_ref)) * dlon
+dy_native = 111.32 * dlat
+
+# Set the distance interval for along-transect interpolation (rounded to the nearest integer)
+dr = round(min(dx_native, dy_native))
 
 # -----------------------------------------------------------------------------
-# Assign distance coordinate
+# Extend CalCOFI Line 80 toward the coast
 # -----------------------------------------------------------------------------
 
-theta = theta.assign_coords(
-    distance=("distance", dist_dense)
+# Define the two most nearshore CalCOFI stations
+station_1 = (calcofi_lat[0], calcofi_lon[0])
+station_2 = (calcofi_lat[1], calcofi_lon[1])
+
+# Determine the shoreward direction of Line 80
+shoreward_bearing = compute_bearing_angle(station_2, station_1)
+
+# Create distances for searching along the shoreward extension (units: km)
+search_spacing = 0.25  
+search_distance = 100  
+
+shoreward_distance = np.arange(
+    0,
+    search_distance + search_spacing,
+    search_spacing,
 )
 
-salt = salt.assign_coords(
-    distance=("distance", dist_dense)
-)
-
-uvel = uvel.assign_coords(
-    distance=("distance", dist_dense)
-)
-
-vvel = vvel.assign_coords(
-    distance=("distance", dist_dense)
-)
-
-# -----------------------------------------------------------------------------
-# Create dataset for land mask 
-# -----------------------------------------------------------------------------
-
-# Define wet-dry array for the transect (e.g., 1 for ocean, 0 for land) and depth array for the transect
-hfac = theta['hFacC']
-depth = theta['Z']
-
-# Set boolean wet mask
-wet = hfac > 0.99 
-
-# Count number of wet cells per column
-bottom_index = wet.sum(dim='Z') - 1
-
-# Prevent negative indices (in case of full land columns)
-bottom_index = bottom_index.clip(min=0)
-
-# Set bottom depth using the bottom index
-bottom_depth = depth.isel(Z=bottom_index)
-
-# Create a new dataset to store the ocean depth data
-bottom_ds = xr.Dataset(
-    data_vars=dict(
-        bottom_depth=('distance', bottom_depth.values)
-    ),
-    coords=dict(
-        distance=theta.coords['distance'].values
-    ),
-    attrs=dict(
-        description="Ocean bottom depth derived from hFacC",
-        units="meters"
+# Convert the distances along the shoreward extension to lat and lon positions
+points = [
+    geodesic(kilometers=d).destination(
+        station_1,
+        shoreward_bearing,
     )
+    for d in shoreward_distance
+]
+
+shoreward_lat = np.array([point.latitude for point in points])
+shoreward_lon = np.array([point.longitude for point in points]) % 360
+
+# -----------------------------------------------------------------------------
+# Locate coastline along the shoreward extension
+# -----------------------------------------------------------------------------
+
+# Extract surface wet-cell mask
+surface_hfac = ds["hFacC"].isel(Z=0)
+
+# Interpolate mask onto shoreward search points
+shoreward_hfac = surface_hfac.interp(
+    YC=xr.DataArray(shoreward_lat, dims="coast_search"),
+    XC=xr.DataArray(shoreward_lon, dims="coast_search"),
+).values
+
+# Find first land point
+dry_index = np.where(shoreward_hfac <= coastal_threshold)[0][0]
+
+# Last ocean point before the coast
+wet_index = dry_index - 1
+
+# -----------------------------------------------------------------------------
+# Determine coastline position
+# -----------------------------------------------------------------------------
+
+# Interpolate the distance where hFacC crosses the coastline threshold
+coast_distance = np.interp(
+    coastal_threshold,
+    [shoreward_hfac[dry_index], shoreward_hfac[wet_index]],
+    [shoreward_distance[dry_index], shoreward_distance[wet_index]],
 )
+
+# Convert coastline distance to latitude and longitude
+coast_point = geodesic(
+    kilometers=coast_distance
+).destination(
+    station_1,
+    shoreward_bearing,
+)
+
+coast_lat = coast_point.latitude
+coast_lon = coast_point.longitude
+
+# -----------------------------------------------------------------------------
+# Construct Line 80 path from coastline to offshore and its cumulative distance
+# -----------------------------------------------------------------------------
+
+# Add coastline point to beginning of CalCOFI station coordinates
+transect_lat = np.concatenate(([coast_lat], calcofi_lat))
+transect_lon = np.concatenate(([coast_lon], calcofi_lon))
+
+# Calculate distance between consecutive points
+segment_distance = np.array([
+    geodesic(
+        (transect_lat[i - 1], transect_lon[i - 1]),
+        (transect_lat[i], transect_lon[i]),
+    ).km
+    for i in range(1, len(transect_lat))
+])
+
+# Calculate cumulative distance from coastline
+transect_distance = np.concatenate((
+    [0.0],
+    np.cumsum(segment_distance),
+))
+
+# -----------------------------------------------------------------------------
+# Interpolate Line 80 to the native model resolution
+# -----------------------------------------------------------------------------
+
+# Create regularly spaced distances along the transect
+dist_dense = np.arange(
+    0.0,
+    transect_distance[-1] + dr,
+    dr,
+)
+
+# Do not extend beyond the final station
+dist_dense = dist_dense[dist_dense <= transect_distance[-1]]
+
+# Interpolate latitude and longitude onto the regular distance grid
+lat_dense = np.interp(
+    dist_dense,
+    transect_distance,
+    transect_lat,
+)
+
+lon_dense = np.interp(
+    dist_dense,
+    transect_distance,
+    transect_lon,
+) % 360.0
+
+# Convert transect coordinates to xarray DataArrays
+lat_da = xr.DataArray(
+    lat_dense,
+    dims="distance",
+    coords={"distance": dist_dense},
+)
+
+lon_da = xr.DataArray(
+    lon_dense,
+    dims="distance",
+    coords={"distance": dist_dense},
+)
+
+# -----------------------------------------------------------------------------
+# Interpolate MITgcm data onto Line 80
+# -----------------------------------------------------------------------------
+
+# Mask land points for each variable  
+wet = ds["hFacC"] > 0
+
+ds_transect = xr.Dataset({
+    "THETA": ds["THETA"].where(wet),
+    "SALT": ds["SALT"].where(wet),
+    "U": ds["U_center"].where(wet),
+    "V": ds["V_center"].where(wet),
+})
+
+# Interpolate model data onto the transect
+ds_transect = ds_transect.interp(
+    YC=lat_da,
+    XC=lon_da,
+)
+
+# Add latitude and longitude as functions of distance from shore
+ds_transect = ds_transect.assign_coords(
+    latitude=("distance", lat_dense),
+    longitude=("distance", lon_dense),
+)
+
+# Add coordinate metadata
+ds_transect["distance"].attrs = {
+    "long_name": "distance from shore",
+    "units": "km",
+}
+
+ds_transect["latitude"].attrs = {
+    "long_name": "latitude",
+    "units": "degrees_north",
+}
+
+ds_transect["longitude"].attrs = {
+    "long_name": "longitude",
+    "units": "degrees_east",
+}
+
+# -----------------------------------------------------------------------------
+# Determine water depth along the transect
+# -----------------------------------------------------------------------------
+status(f"Obtain water depth along the transect...")
+
+# Count wet cells in each vertical water column
+wet_count = wet.sum(dim="Z")
+
+# Index of deepest wet cell (handles completely dry columns)
+bottom_index = (wet_count - 1).clip(min=0)
+
+# Water depth on the native grid
+water_depth = np.abs(ds["Z"].isel(Z=bottom_index))
+
+# Mask fully dry columns
+water_depth = water_depth.where(wet_count > 0)
+
+# Interpolate water depth onto Line 80
+water_depth = water_depth.interp(
+    YC=lat_da,
+    XC=lon_da,
+)
+
+# Add water depth to the dataset
+ds_transect["water_depth"] = water_depth
+
+ds_transect["water_depth"].attrs = {
+    "long_name": "ocean water depth derived from hFacC",
+    "units": "m",
+    "positive": "down",
+}
 
 # -----------------------------------------------------------------------------
 # Save data in netcdf files
 # -----------------------------------------------------------------------------
 
-# --- Ocean Bottom --- #
-bottom_ds.to_netcdf(
-    f"{PATH_nc}DEPTH_CCS_trans.nc",
-    engine='netcdf4',                
-    format='NETCDF4'           
+# Save ocean water depth
+ds_transect["water_depth"].to_netcdf(
+    PATH_nc / "DEPTH_CCS_trans.nc",
+    engine="netcdf4",
+    format="NETCDF4",
 )
 
-# --- Sea State Variables --- #
+# Set the list of variables to save
+vars_to_save = ["THETA", "SALT", "UVEL", "VVEL"]
 
-# Set the dictionary of variables to save
-vars_to_save = {
-    'THETA': theta,
-    'SALT': salt,
-    'UVEL': uvel,
-    'VVEL': vvel
-}
-
-# Loop through each variable and save efficiently
-for var_name, da in vars_to_save.items():
+# Loop through each variable 
+for var in vars_to_save:
 
     # Print status
-    print(f"Saving {var_name}...")
+    status(f"Saving {var} to {var}_CCS_hrly_trans.nc ...")
+
+    # Obtain variable data array
+    da = ds_transect[var]
     
     # Chunk along time for faster write
     if 'time' in da.dims:
@@ -274,8 +435,10 @@ for var_name, da in vars_to_save.items():
 
     # Save to NetCDF file
     da.to_netcdf(
-        f"{PATH_nc}{var_name}_CCS_hrly_trans.nc",
-        engine='netcdf4',                
-        format='NETCDF4',        
-        encoding=encoding            
+        PATH_nc / f"{var}_CCS_hrly_trans.nc",
+        engine="netcdf4",
+        format="NETCDF4",
+        encoding=encoding,
     )
+
+status("MITgcm regional preprocessing complete!")

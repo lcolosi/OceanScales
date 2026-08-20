@@ -80,9 +80,9 @@ file_dim    = '3D'
 # -----------------------------------------------------------------------------
 status(f"Loading the grid and diagnostics data...")
 
-#------------#  
-#--- Note ---#
-#------------# 
+# ------------ #  
+# --- Note --- #
+# ------------ # 
 #
 # - PATH_OUTPUT: Directory containing model output (.data and .meta files).
 # - PATH_GRID: Directory containing the model grid.
@@ -93,7 +93,7 @@ status(f"Loading the grid and diagnostics data...")
 # - ref_date: Start time of the simulation, including model spin-up.
 # - geometry: Model grid uses spherical-polar coordinates.
 #
-# ------------# 
+# ------------ # 
 
 # Create dataset 
 ds = open_mdsdataset(
