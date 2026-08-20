@@ -72,7 +72,7 @@ coastal_threshold = 0.5
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                                     
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'                     
-PATH_nc     = '/data/SO3/lcolosi/OceanScales/mitgcm/transect/' 
+PATH_nc     = Path('/data/SO3/lcolosi/OceanScales/mitgcm/transect/')
 file_dim    = '3D'   
 
 # -----------------------------------------------------------------------------
@@ -339,8 +339,8 @@ wet = ds["hFacC"] > 0
 ds_transect = xr.Dataset({
     "THETA": ds["THETA"].where(wet),
     "SALT": ds["SALT"].where(wet),
-    "U": ds["U_center"].where(wet),
-    "V": ds["V_center"].where(wet),
+    "UVEL": ds["U_center"].where(wet),
+    "VVEL": ds["V_center"].where(wet),
 })
 
 # Interpolate model data onto the transect
