@@ -19,7 +19,6 @@
 import sys
 from pathlib import Path
 import numpy as np
-import xarray as xr
 from xmitgcm import open_mdsdataset
 import xgcm
 

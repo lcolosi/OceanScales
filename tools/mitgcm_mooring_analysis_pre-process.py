@@ -18,9 +18,25 @@
 
 # Import python libraries
 import sys
+from pathlib import Path
 import numpy as np
 import xarray as xr
 from xmitgcm import open_mdsdataset
+import xgcm
+
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import plotting toolbox for cartopy figures
+from plotting import status
+
+status(f"Starting MITgcm pre-processing for the Regional Analysis")
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -52,12 +68,13 @@ encoding  = {'time': {'units': 'seconds since 2015-12-01 2:00'}}
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                   
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'     
-PATH_nc     = '/data/SO3/lcolosi/mitgcm/SWOT_MARA_RUN4_LY/' 
+PATH_nc     = '/data/SO3/lcolosi/OceanScales/mitgcm/mooring/' 
 file_dim    = '3D'     
 
 # -----------------------------------------------------------------------------
 # Load the grid and diagnostics data into a python structure
 # -----------------------------------------------------------------------------
+status(f"Loading the grid and diagnostics data...")
 
 # ------------ #  
 # --- Note --- # 
@@ -99,14 +116,31 @@ for coord in ds.coords:
         ds[coord] = ds[coord].astype(ds[coord].dtype.newbyteorder('<'))
 
 # -----------------------------------------------------------------------------
+# Interpolate the velocity grids on the (XC, YC) grid
+# -----------------------------------------------------------------------------
+status(f"Interpolating the velocity grid...")
+
+# Define the grid object (says which dimensions are 'center' and which are 'left')
+grid = xgcm.Grid(ds, 
+                 coords={'X': {'center': 'XC', 'left': 'XG'}, 
+                         'Y': {'center': 'YC', 'left': 'YG'}, 
+                         'Z': {'center': 'Z',  'left': 'Zl'}}, 
+                 periodic=False, 
+                 boundary='extend'
+                 ) 
+
+# Interpolate to the centers
+ds['U_center'] = grid.interp(ds["UVEL"], axis='X') # Interpolate from X-face to center
+ds['V_center'] = grid.interp(ds["VVEL"], axis='Y') # Interpolate from Y-face to center
+ds['W_center'] = grid.interp(ds["WVEL"], axis='Z') # Interpolate from Z-face (Zl) to center
+
+# -----------------------------------------------------------------------------
 # Slice array based on longitude and latitude of CCE moorings
 # -----------------------------------------------------------------------------
 
 # Get 2D coordinate fields
 lat_YC = ds['YC']
 lon_XC = ds['XC']
-lat_YG = ds['YG']
-lon_XG = ds['XG']
 
 # Set dictionary to hold extracted profiles per variable
 all_profiles = {var: [] for var in ds.data_vars}
@@ -152,6 +186,55 @@ for i, (lat_target, lon_target) in enumerate(zip(lat_cce, lon_cce)):
 profiles_ds = xr.Dataset({var: xr.concat(all_profiles[var], dim='site') for var in all_profiles})
 
 # -----------------------------------------------------------------------------
+# Select model data at CCE mooring locations
+# -----------------------------------------------------------------------------
+
+# Variables to extract
+variables = {
+    "THETA": ds["THETA"],
+    "SALT": ds["SALT"],
+    "UVEL": ds["U_center"],
+    "VVEL": ds["V_center"],
+}
+
+# Initialize profiles
+all_profiles = {var: [] for var in variables}
+
+# Loop through CCE moorings
+for i, (lat_target, lon_target) in enumerate(zip(lat_cce, lon_cce)):
+
+    # Find nearest model grid point
+    distance = (
+        (ds["YC"] - lat_target)**2
+        + (ds["XC"] - lon_target)**2
+    )
+
+    j, k = np.unravel_index(
+        np.argmin(distance.values),
+        distance.shape,
+    )
+
+    # Extract each variable at the same grid point
+    for var, da in variables.items():
+
+        profile = da.isel(YC=j, XC=k)
+        profile = profile.expand_dims(site=[f"CCE{i + 1}"])
+
+        all_profiles[var].append(profile)
+
+# Combine profiles into a single dataset
+profiles_ds = xr.Dataset({
+    var: xr.concat(profiles, dim="site")
+    for var, profiles in all_profiles.items()
+})
+
+# -----------------------------------------------------------------------------
+# Apply the center-cell mask (excludes dry cells)
+# -----------------------------------------------------------------------------
+
+
+
+# -----------------------------------------------------------------------------
 # Save data in netcdf files
 # -----------------------------------------------------------------------------
 
@@ -159,7 +242,7 @@ profiles_ds = xr.Dataset({var: xr.concat(all_profiles[var], dim='site') for var 
 for var in profiles_ds.data_vars:
 
     # Print status to monitor progress
-    print(f"Saving {var}...")
+    status(f"Saving {var} to {var}_CCS_hrly_mooring.nc ...")
     
     # Select the data array corresponding to the current variable
     da = profiles_ds[var]

@@ -72,7 +72,7 @@ coastal_threshold = 0.5
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                                     
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'                     
-PATH_nc     = Path('/data/SO3/lcolosi/OceanScales/mitgcm/transect/')
+PATH_nc     = '/data/SO3/lcolosi/OceanScales/mitgcm/transect/'
 file_dim    = '3D'   
 
 # -----------------------------------------------------------------------------
@@ -435,7 +435,7 @@ for var in vars_to_save:
 
     # Save to NetCDF file
     da.to_netcdf(
-        PATH_nc / f"{var}_CCS_hrly_trans.nc",
+        f"{PATH_nc}{var}_CCS_hrly_trans.nc",
         engine="netcdf4",
         format="NETCDF4",
         encoding=encoding,

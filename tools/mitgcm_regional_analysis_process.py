@@ -19,7 +19,6 @@
 # =============================================================================
 
 # Import python libraries 
-import sys
 import os
 from pathlib import Path
 import xarray as xr
@@ -27,7 +26,6 @@ import numpy as np
 from netCDF4 import Dataset, num2date
 from datetime import datetime
 import gsw
-from scipy.interpolate import interp1d
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -45,7 +43,7 @@ from scipy.interpolate import interp1d
 
 # Set processing parameters
 option_proc  = 'density' 
-option_depth = 0.5   
+option_depth = 9   
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,8 +59,8 @@ PATH_data = ROOT / "data" / "mitgcm" / "regional"
 if option_proc == 'vel':
 
     # Obtain filename paths
-    filename_u = PATH_data / "UVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
-    filename_v = PATH_data / "VVEL_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_u = PATH_data / f"UVEL_CCS_hrly_reg_depth_{option_depth}m.nc"
+    filename_v = PATH_data / f"VVEL_CCS_hrly_reg_depth_{option_depth}m.nc"
 
     # Generate the nc data structure
     nc_u = Dataset(filename_u, 'r')
@@ -70,10 +68,8 @@ if option_proc == 'vel':
 
     # Extract data variables
     depth  = nc_u.variables['Z'][:]
-    lon_XG = nc_u.variables['XG'][:]
-    lat_YC = nc_u.variables['YC'][:]
     lon_XC = nc_v.variables['XC'][:]
-    lat_YG = nc_v.variables['YG'][:]
+    lat_YC = nc_u.variables['YC'][:]
     time   = num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
     u_raw  = nc_u.variables['UVEL'][:]
@@ -87,8 +83,8 @@ if option_proc == 'vel':
 elif option_proc == 'density':
 
     # Obtain filename paths
-    filename_temp = PATH_data / "THETA_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
-    filename_salt = PATH_data / "SALT_CCS_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    filename_temp = PATH_data / f"THETA_CCS_hrly_reg_depth_{option_depth}m.nc"
+    filename_salt = PATH_data / f"SALT_CCS_hrly_reg_depth_{option_depth}m.nc"
 
     # Generate the nc data structure
     nc_temp = Dataset(filename_temp, 'r')
@@ -132,63 +128,6 @@ time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second)
 # -----------------------------------------------------------------------------
 # Process Horizontal Velocity Components (u, v)
 # -----------------------------------------------------------------------------
-
-if option_proc == 'vel':
-
-    # Convert to a ndarray
-    u_m = np.asarray(u_m)
-    v_m = np.asarray(v_m)
-    lon_XG = np.asarray(lon_XG)
-    lat_YC = np.asarray(lat_YC)
-    lon_XC = np.asarray(lon_XC)
-    lat_YG = np.asarray(lat_YG)
-
-    # Slice lon_XG and lat_YG to match lon_XC and lat_YC bounds respectively 
-    lon_min, lon_max = np.min(lon_XC), np.max(lon_XC)
-    lat_min, lat_max = np.min(lat_YC), np.max(lat_YC)
-    idx_lon = (lon_XG >= lon_min) & (lon_XG <= lon_max)
-    idx_lat = (lat_YG >= lat_min) & (lat_YG <= lat_max)
-    lon_XG_c = lon_XG[idx_lon]
-    lat_YG_c = lat_YG[idx_lat]
-
-    # Apply the same slicing operation to u_raw and v_raw (recall: dim(u_raw) =  (time,lat_YC,lon_XG) and dim(v_raw) =  (time,lat_YG,lon_XC))
-    u_raw_c = u_m[:,:,idx_lon]
-    v_raw_c = v_m[:,idx_lat,:]
-
-    # Set processing parameters
-    ntime,_,_ = np.shape(u_raw_c)
-    nlat,nlon = np.size(lat_YC),np.size(lon_XC)
-    lon       = lon_XC
-    lat       = lat_YC 
-
-    # Initalize arrays
-    u_int  = np.zeros((ntime,nlat,nlon)) 
-    v_int  = np.zeros((ntime,nlat,nlon))
-
-    # Loop through time
-    for itime in range(0,ntime): 
-
-        # Set progress bar
-        progress = (itime + 1) / (len(time))
-        sys.stdout.write(f"\rProgress: {progress:.1%}")
-        sys.stdout.flush()
-
-        # Grab the ith time frame 
-        u_i = np.squeeze(u_raw_c[itime,:,:])
-        v_i = np.squeeze(v_raw_c[itime,:,:])
-
-        # Interpolate u_z from YC,XG grid onto the YC,XC grid 
-        # Interpolate each row along columns (axis=1)
-        u_int[itime,:,:] = np.array([
-                            interp1d(lon_XG_c, row, kind='linear', bounds_error=False)(lon)
-                            for row in u_i
-        ])
-
-        # Interpolate v_z from YG,XC grid onto the YC,XC grid 
-        v_int[itime,:,:] = np.array([
-                            interp1d(lat_YG_c, col, kind='linear', bounds_error=False)(lat)
-                            for col in v_i.T
-        ]).T 
 
 
 # -----------------------------------------------------------------------------
@@ -243,7 +182,7 @@ if option_proc == 'vel':
     )
 
     # --- Velocity Components --- #
-    u = xr.DataArray(data=u_int,
+    u = xr.DataArray(data=u_m,
                         dims=['time','lat','lon'],
                         coords=dict(time=time_dt,lat=lat,lon=lon),
                         attrs=dict(
@@ -252,7 +191,7 @@ if option_proc == 'vel':
                         )
     )
 
-    v = xr.DataArray(data=v_int,
+    v = xr.DataArray(data=v_m,
                         dims=['time','lat','lon'],
                         coords=dict(time=time_dt,lat=lat,lon=lon),
                         attrs=dict(
@@ -265,7 +204,7 @@ if option_proc == 'vel':
     data = xr.Dataset({'Depth':Depth,'u':u,'v':v,})
 
     # Set file path for saving the netcdf file
-    file_path = PATH_data / "processed" / "mitgcm_proc_vel_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    file_path = PATH_data / "processed" / f"mitgcm_proc_vel_hrly_reg_depth_{option_depth}m.nc"
 
 
 # --- Density --- # 
@@ -321,7 +260,7 @@ if option_proc == 'density':
     data = xr.Dataset({'Depth':Depth,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal})
 
     # Set file path for saving the netcdf file
-    file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_reg_depth_" + str(option_depth) + "m.nc"
+    file_path = PATH_data / "processed" / f"mitgcm_proc_density_hrly_reg_depth_{option_depth}m.nc"
 
 # --- Sea Surface Height --- # 
 if option_proc == 'ssh':
