@@ -38,7 +38,7 @@ sys.path.append(str(PATH_tools))
 from plotting import status
 from process_mitgcm_data import compute_bearing_angle
 
-status(f"Starting MITgcm pre-processing for the Regional Analysis")
+status(f"Starting MITgcm pre-processing for the Transect Analysis")
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -192,6 +192,12 @@ dy_native = 111.32 * dlat
 # Set the distance interval for along-transect interpolation (rounded to the nearest integer)
 dr = round(min(dx_native, dy_native))
 
+# Print native model resolution and transect sampling interval
+status(
+    f"Native horizontal resolution: "
+    f"dx = {dx_native:.2f} km, dy = {dy_native:.2f} km; "
+    f"transect spacing = {dr:.0f} km"
+)
 # -----------------------------------------------------------------------------
 # Extend CalCOFI Line 80 toward the coast
 # -----------------------------------------------------------------------------
@@ -225,6 +231,16 @@ points = [
 shoreward_lat = np.array([point.latitude for point in points])
 shoreward_lon = np.array([point.longitude for point in points]) % 360
 
+# ------------# 
+# --- Note ---# 
+# ------------#
+#
+# It is critical to convert the longitude to the 0-360 degrees convention because 
+# the mitgcm modle output the longitude and latitude grid using that convention. 
+# If this is not done, the incorrect transect will be extracted from the mitgcm model.   
+#
+# ------------# 
+
 # -----------------------------------------------------------------------------
 # Locate coastline along the shoreward extension
 # -----------------------------------------------------------------------------
@@ -238,8 +254,14 @@ shoreward_hfac = surface_hfac.interp(
     XC=xr.DataArray(shoreward_lon, dims="coast_search"),
 ).values
 
-# Find first land point
-dry_index = np.where(shoreward_hfac <= coastal_threshold)[0][0]
+# Find all dry cell indices along transect extension
+dry_indices = np.where(shoreward_hfac <= coastal_threshold)[0]
+
+if dry_indices.size == 0:
+    raise RuntimeError("Coastline not found along shoreward extension.")
+
+# Find the first land cell
+dry_index = dry_indices[0]
 
 # Last ocean point before the coast
 wet_index = dry_index - 1
@@ -372,36 +394,31 @@ ds_transect["longitude"].attrs = {
 }
 
 # -----------------------------------------------------------------------------
-# Determine water depth along the transect
+# Interpolate bathymetry onto Line 80
 # -----------------------------------------------------------------------------
 status(f"Obtain water depth along the transect...")
 
-# Count wet cells in each vertical water column
-wet_count = wet.sum(dim="Z")
+# Extract native model bathymetry
+water_depth = ds["Depth"]
 
-# Index of deepest wet cell (handles completely dry columns)
-bottom_index = (wet_count - 1).clip(min=0)
+# Mask land
+water_depth = water_depth.where(water_depth > 0)
 
-# Water depth on the native grid
-water_depth = np.abs(ds["Z"].isel(Z=bottom_index))
-
-# Mask fully dry columns
-water_depth = water_depth.where(wet_count > 0)
-
-# Interpolate water depth onto Line 80
+# Interpolate bathymetry onto the transect
 water_depth = water_depth.interp(
     YC=lat_da,
     XC=lon_da,
 )
 
-# Add water depth to the dataset
-ds_transect["water_depth"] = water_depth
-
-ds_transect["water_depth"].attrs = {
-    "long_name": "ocean water depth derived from hFacC",
+# Add metadata
+water_depth.attrs = {
+    "long_name": "ocean water depth",
     "units": "m",
     "positive": "down",
 }
+
+# Add to transect dataset
+ds_transect["water_depth"] = water_depth
 
 # -----------------------------------------------------------------------------
 # Save data in netcdf files
@@ -409,7 +426,7 @@ ds_transect["water_depth"].attrs = {
 
 # Save ocean water depth
 ds_transect["water_depth"].to_netcdf(
-    PATH_nc / "DEPTH_CCS_trans.nc",
+    f"{PATH_nc}DEPTH_CCS_trans.nc",
     engine="netcdf4",
     format="NETCDF4",
 )
