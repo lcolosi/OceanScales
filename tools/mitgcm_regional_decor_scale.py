@@ -156,7 +156,7 @@ time_dt = np.array(
 w = 2 * np.pi * np.arange(1, option_harmonics + 1) / T_annual
 
 # Set option for linear trend
-linear_trend = False #option_interannual == "linear"
+linear_trend = option_interannual == "linear"
 
 # Compute the elapsed time from beginning of time series (units: seconds)
 t0 = time[0]
@@ -297,7 +297,7 @@ for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon")
         autocorr_mean = np.ma.mean(autocorr_seg, axis=0)
 
         # Compute the decorrelation scale of the mean autocorrelation 
-        Lt[ilat,ilon], M_lag = compute_decor_scale_weighted(autocorr_mean,time_lag) 
+        Lt[ilat,ilon], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
     
         # Compute the standard error of the decorrelation scale
         Lt_stdm[ilat,ilon], Lt_std[ilat,ilon] = compute_decor_scale_unc(autocorr_mean, 

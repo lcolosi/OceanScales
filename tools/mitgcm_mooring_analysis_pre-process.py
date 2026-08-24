@@ -36,7 +36,7 @@ sys.path.append(str(PATH_tools))
 # Import plotting toolbox for cartopy figures
 from plotting import status
 
-status(f"Starting MITgcm pre-processing for the Regional Analysis")
+status(f"Starting MITgcm pre-processing for the Mooring Analysis")
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -115,6 +115,20 @@ for coord in ds.coords:
     if ds[coord].dtype.byteorder == '>'or (ds[coord].dtype.byteorder == '=' and sys.byteorder == "big"):  
         ds[coord] = ds[coord].astype(ds[coord].dtype.newbyteorder('<'))
 
+# Check model longitude range
+print(
+    f"Model longitude range: "
+    f"{ds['XC'].min().values:.2f} to "
+    f"{ds['XC'].max().values:.2f} degrees"
+)
+
+# Confirm before continuing
+response = input("Continue? [y/n]: ")
+
+if response.lower() != "y":
+    print("Stopping program.")
+    sys.exit()
+
 # -----------------------------------------------------------------------------
 # Interpolate the velocity grids on the (XC, YC) grid
 # -----------------------------------------------------------------------------
@@ -135,66 +149,23 @@ ds['V_center'] = grid.interp(ds["VVEL"], axis='Y') # Interpolate from Y-face to 
 ds['W_center'] = grid.interp(ds["WVEL"], axis='Z') # Interpolate from Z-face (Zl) to center
 
 # -----------------------------------------------------------------------------
-# Slice array based on longitude and latitude of CCE moorings
+# Select model data at CCE mooring locations ()
 # -----------------------------------------------------------------------------
+status(f"Selecting 3D fields and masking dry-cells at mooring locations...")
 
 # Get 2D coordinate fields
 lat_YC = ds['YC']
 lon_XC = ds['XC']
 
-# Set dictionary to hold extracted profiles per variable
-all_profiles = {var: [] for var in ds.data_vars}
+# Define center-cell ocean mask
+wet = ds["hFacC"] > 0
 
-# Loop through CCE sites
-for i, (lat_target, lon_target) in enumerate(zip(lat_cce, lon_cce)):
-
-    # Obtain indicies of the closest grid point to the target latitude and longitude 
-    
-    # --- Center-point variables (XC/YC) --- #
-    dist_sq_center = (lat_YC - lat_target)**2 + (lon_XC - lon_target)**2
-    j_YC, i_XC = np.unravel_index(np.argmin(dist_sq_center.values), dist_sq_center.shape)
-    
-    # --- U-point variables (XG/YC) --- #
-    dist_sq_u = (lat_YC - lat_target)**2 + (lon_XG - lon_target)**2
-    j_YC_u, i_XG = np.unravel_index(np.argmin(dist_sq_u.values), dist_sq_u.shape)
-    
-    # --- V-point variables (XC/YG) --- #
-    dist_sq_v = (lat_YG - lat_target)**2 + (lon_XC - lon_target)**2
-    j_YG, i_XC_v = np.unravel_index(np.argmin(dist_sq_v.values), dist_sq_v.shape)
-    
-    # Loop through all variables 
-    for var in ds.data_vars:
-        da = ds[var]
-
-        # Select appropriate index and extract data 
-        if {'YC', 'XC'}.issubset(da.dims):
-            sel = da.isel(YC=j_YC, XC=i_XC)
-        elif {'YC', 'XG'}.issubset(da.dims):
-            sel = da.isel(YC=j_YC_u, XG=i_XG)
-        elif {'YG', 'XC'}.issubset(da.dims):
-            sel = da.isel(YG=j_YG, XC=i_XC_v)
-        else:
-            # For unexpected variable shapes
-            print(f"Skipping {var}: unknown coordinate configuration.")
-            continue
-        
-        # Add site dimension
-        sel = sel.expand_dims(site=[f"CCE{i+1}"])
-        all_profiles[var].append(sel)
-
-# Combine all variables into datasets per variable
-profiles_ds = xr.Dataset({var: xr.concat(all_profiles[var], dim='site') for var in all_profiles})
-
-# -----------------------------------------------------------------------------
-# Select model data at CCE mooring locations
-# -----------------------------------------------------------------------------
-
-# Variables to extract
+# Variables to extract (mask dry cells)
 variables = {
-    "THETA": ds["THETA"],
-    "SALT": ds["SALT"],
-    "UVEL": ds["U_center"],
-    "VVEL": ds["V_center"],
+    "THETA": ds["THETA"].where(wet),
+    "SALT": ds["SALT"].where(wet),
+    "UVEL": ds["U_center"].where(wet),
+    "VVEL": ds["V_center"].where(wet),
 }
 
 # Initialize profiles
@@ -203,23 +174,26 @@ all_profiles = {var: [] for var in variables}
 # Loop through CCE moorings
 for i, (lat_target, lon_target) in enumerate(zip(lat_cce, lon_cce)):
 
-    # Find nearest model grid point
+    # Compute the distance from the ith CCE mooring 
     distance = (
-        (ds["YC"] - lat_target)**2
-        + (ds["XC"] - lon_target)**2
+        (lat_YC - lat_target)**2
+        + (lon_XC - lon_target)**2
     )
 
+    # Find nearest model grid point
     j, k = np.unravel_index(
         np.argmin(distance.values),
         distance.shape,
     )
 
-    # Extract each variable at the same grid point
+    # Loop through data variables 
     for var, da in variables.items():
 
+        # Extract data at the mooring site 
         profile = da.isel(YC=j, XC=k)
-        profile = profile.expand_dims(site=[f"CCE{i + 1}"])
 
+        # Add site dimension 
+        profile = profile.expand_dims(site=[f"CCE{i + 1}"])
         all_profiles[var].append(profile)
 
 # Combine profiles into a single dataset
@@ -229,35 +203,26 @@ profiles_ds = xr.Dataset({
 })
 
 # -----------------------------------------------------------------------------
-# Apply the center-cell mask (excludes dry cells)
-# -----------------------------------------------------------------------------
-
-
-
-# -----------------------------------------------------------------------------
-# Save data in netcdf files
+# Save data in NetCDF files
 # -----------------------------------------------------------------------------
 
 # Loop through each variable in the profiles dataset
-for var in profiles_ds.data_vars:
+for var_name, da in profiles_ds.data_vars.items():
 
     # Print status to monitor progress
-    status(f"Saving {var} to {var}_CCS_hrly_mooring.nc ...")
-    
-    # Select the data array corresponding to the current variable
-    da = profiles_ds[var]
-    
-    # Chunk along time for faster write
-    if 'time' in da.dims:
-        da = da.chunk({'time': 1000})
+    status(f"Saving {var_name} to {var_name}_CCS_hrly_mooring.nc ...")
 
-    # Load into memory before saving 
+    # Chunk along time
+    if "time" in da.dims:
+        da = da.chunk({"time": 1000})
+
+    # Load into memory
     da = da.load()
-    
-    # Save to NetCDF file
+
+    # Save to NetCDF
     da.to_netcdf(
-        f"{PATH_nc}{var}_CCS_hrly_mooring.nc",  
-        engine='netcdf4',                
-        format='NETCDF4',                      
-        encoding=encoding
+        f"{PATH_nc}{var_name}_CCS_hrly_mooring.nc",
+        engine="netcdf4",
+        format="NETCDF4",
+        encoding=encoding,
     )

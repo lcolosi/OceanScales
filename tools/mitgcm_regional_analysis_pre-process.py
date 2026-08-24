@@ -236,7 +236,7 @@ elif file_dim == '2D':
         'ETAN': etan
     }
 
-# Loop through each variable and save efficiently
+# Loop through each variable
 for var_name, da in vars_to_save.items():
 
     # Print status
