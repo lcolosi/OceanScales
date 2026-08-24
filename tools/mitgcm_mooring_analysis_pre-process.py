@@ -62,7 +62,7 @@ delta_t = 150
 
 # Set time and space parameters  
 lat_cce  = [33.457, 34.3075, 34.44825228022894]                  
-lon_cce  = [-122.52233, -120.8042, -120.53825701527784]          
+lon_cce = np.array([-122.52233,-120.8042,-120.53825701527784]) % 360         
 encoding  = {'time': {'units': 'seconds since 2015-12-01 2:00'}} 
 
 # Set path to project directory
@@ -114,20 +114,6 @@ for var in ds.data_vars:
 for coord in ds.coords:
     if ds[coord].dtype.byteorder == '>'or (ds[coord].dtype.byteorder == '=' and sys.byteorder == "big"):  
         ds[coord] = ds[coord].astype(ds[coord].dtype.newbyteorder('<'))
-
-# Check model longitude range
-print(
-    f"Model longitude range: "
-    f"{ds['XC'].min().values:.2f} to "
-    f"{ds['XC'].max().values:.2f} degrees"
-)
-
-# Confirm before continuing
-response = input("Continue? [y/n]: ")
-
-if response.lower() != "y":
-    print("Stopping program.")
-    sys.exit()
 
 # -----------------------------------------------------------------------------
 # Interpolate the velocity grids on the (XC, YC) grid
@@ -185,6 +171,14 @@ for i, (lat_target, lon_target) in enumerate(zip(lat_cce, lon_cce)):
         np.argmin(distance.values),
         distance.shape,
     )
+
+    # Verify the model grid cell location extracted
+    status(
+    f"CCE{i + 1}: "
+    f"target=({lat_target:.3f}, {lon_target:.3f}), "
+    f"model=({ds['YC'].values[j]:.3f}, "
+    f"{ds['XC'].values[k]:.3f})"
+)
 
     # Loop through data variables 
     for var, da in variables.items():
