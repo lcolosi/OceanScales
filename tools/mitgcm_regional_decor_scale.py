@@ -248,7 +248,7 @@ else:
     model = fit 
 
 # Initialize arrays 
-fve = np.ma.masked_all((ntime,nlat,nlon))
+fve = np.ma.masked_all((nlat,nlon))
 
 # Loop through longitude
 for ilon in tqdm(range(nlon), desc="Computing Fraction of Variance Explained", unit="lon"):
