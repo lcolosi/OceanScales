@@ -153,7 +153,9 @@ def unweighted_lsf(data, x, parameters, freqs=None, sigma=None, linear_trend=Fal
 
     A_full = np.vstack(A_full_cols).T
 
+    # -------------------------------------
     # Evaluate fit on full x grid
+    # -------------------------------------
     hfit = A_full @ x_data
     hfit = hfit.reshape(np.shape(x))
 
@@ -213,10 +215,53 @@ def detrend(data, x, mean=False):
 
     return data_detrend
 
+# --- Fraction of Variance Explained (FVE) --- #
+def compute_fve(data, model):
+    """
+    Compute the fraction of variance explained by a model.
 
+    Parameters
+    ----------
+    data : array_like
+        1D data array. May contain NaNs or masked values.
+    model : array_like
+        Model fit to the data. Must have the same shape as `data`.
 
+    Returns
+    -------
+    fve : float
+        Fraction of variance explained by the model.
+    """
 
+    # Convert inputs to masked arrays and mask invalid values
+    data = np.ma.masked_invalid(data)
+    model = np.ma.masked_invalid(model)
 
+    # Mask locations that are invalid in either data or model
+    mask = np.ma.getmaskarray(data) | np.ma.getmaskarray(model)
 
+    # Extract valid values
+    data_n = np.asarray(data)[~mask]
+    model_n = np.asarray(model)[~mask]
 
+    # Check that valid data remain
+    if data_n.size == 0:
+        return np.nan
 
+    # Compute residual
+    res = data_n - model_n
+
+    # Compute total sum of squares
+    ss_tot = np.sum((data_n - np.mean(data_n))**2)
+
+    # Avoid division by zero for constant time series
+    if ss_tot == 0:
+        return np.nan
+
+    # Compute residual sum of squares
+    ss_res = np.sum(res**2)
+
+    # Compute fraction of variance explained
+    fve = 1 - ss_res / ss_tot
+
+    return fve

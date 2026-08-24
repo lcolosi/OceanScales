@@ -62,6 +62,10 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 option_data        = 'density'    
 option_depth       = 9   
 option_interannual = 'linear' 
+option_detrend_seg = True
+
+# Label segment processing 
+seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # Set uncertainty estimate parameters
 ns = 1
@@ -85,7 +89,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')

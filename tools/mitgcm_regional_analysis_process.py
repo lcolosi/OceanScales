@@ -9,7 +9,6 @@
 #       (1) Conservative Temperature
 #       (2) Absolute Salinity
 #       (3) Potential Density (referenced to the surface)
-#       (4) Interpolated horizontal velocity components (u, v)
 #
 # Author:
 #   Luke Colosi
@@ -67,17 +66,17 @@ if option_proc == 'vel':
     nc_v = Dataset(filename_v, 'r')
 
     # Extract data variables
-    depth  = nc_u.variables['Z'][:]
-    lon_XC = nc_v.variables['XC'][:]
-    lat_YC = nc_u.variables['YC'][:]
-    time   = num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
+    depth = nc_u.variables['Z'][:].item()
+    lon   = nc_u.variables['XC'][:]
+    lat   = nc_u.variables['YC'][:]
+    time  = num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
-    u_raw  = nc_u.variables['UVEL'][:]
-    v_raw  = nc_v.variables['VVEL'][:]
+    u  = nc_u.variables['UVEL'][:]
+    v  = nc_v.variables['VVEL'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    u_m = np.ma.masked_where(u_raw == 0, u_raw)
-    v_m = np.ma.masked_where(v_raw == 0, v_raw)
+    # Mask dry cells previously set to NaN during preprocessing
+    u_m = np.ma.masked_invalid(u)
+    v_m = np.ma.masked_invalid(v)
 
 # --- Density Processing --- # 
 elif option_proc == 'density':
@@ -91,7 +90,7 @@ elif option_proc == 'density':
     nc_salt = Dataset(filename_salt, 'r')
 
     # Extract data variables
-    depth = nc_temp['Z'][:]
+    depth = nc_temp['Z'][:].item()
     lon   = nc_temp.variables['XC'][:]
     lat   = nc_temp.variables['YC'][:]
     time  =  num2date(nc_temp.variables['time'][:], nc_temp.variables['time'].units)
@@ -99,9 +98,9 @@ elif option_proc == 'density':
     T     = nc_temp.variables['THETA'][:]
     S     = nc_salt.variables['SALT'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    T_m = np.ma.masked_where(T == 0, T)
-    S_m = np.ma.masked_where(S == 0, S)
+    # Mask dry cells previously set to NaN during preprocessing
+    T_m = np.ma.masked_invalid(T)
+    S_m = np.ma.masked_invalid(S)
 
 # --- SSH Processing --- # 
 elif option_proc == 'ssh':
@@ -119,8 +118,8 @@ elif option_proc == 'ssh':
 
     ssh  = nc_ssh.variables['ETAN'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    ssh_m = np.ma.masked_where(ssh == 0, ssh)
+    # Mask dry cells previously set to NaN during preprocessing
+    ssh_m = np.ma.masked_invalid(ssh)
 
 # Convert cftime.DatetimeGregorian to Python datetime objects
 time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second) for d in time])
@@ -131,7 +130,7 @@ time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second)
 
 
 # -----------------------------------------------------------------------------
-# Process Density Variables (T, S, rho, sigma0)
+# Process Density Variables (T, S, sigma0)
 # -----------------------------------------------------------------------------
 
 if option_proc == 'density': 
@@ -140,7 +139,7 @@ if option_proc == 'density':
     ntime, nlat, nlon = T_m.shape
 
     # Compute pressure once for each latitude
-    pressure_lat = np.array([gsw.p_from_z(depth, lat[i]) for i in range(nlat)])  
+    pressure_lat = gsw.p_from_z(depth, lat) 
 
     # Broadcast pressure, lon, and lat to shape of full array
     pressure = np.broadcast_to(pressure_lat[None, :, None], (ntime, nlat, nlon))
@@ -160,10 +159,6 @@ if option_proc == 'density':
 # Process sea surface height (ssh)
 # -----------------------------------------------------------------------------
 
-if option_proc == 'ssh':
-
-    # Set the dimensions of the array
-    ntime, nlat, nlon = ssh_m.shape 
 
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
@@ -208,7 +203,7 @@ if option_proc == 'vel':
 
 
 # --- Density --- # 
-if option_proc == 'density': 
+elif option_proc == 'density': 
 
     # --- Coordinates --- # 
     Depth = xr.DataArray(data=depth, 
@@ -233,7 +228,7 @@ if option_proc == 'density':
                         dims=['time','lat','lon'],
                         coords=dict(time=time_dt,lat=lat,lon=lon),
                         attrs=dict(
-                            description='Potential Density anomaly regional map off point conception, CA referenced to the pressure at the sea surface.',
+                            description='Potential density anomaly, referenced to 0 dbar, regional map off point conception, CA.',
                             units='kg/m^3'
                             )
     ) 
@@ -243,7 +238,7 @@ if option_proc == 'density':
                         coords=dict(time=time_dt,lat=lat,lon=lon),
                         attrs=dict(
                             description='Conservative temperature regional map off point conception, CA.',
-                            units='degrees Celcius'
+                            units='degrees Celsius'
                             )
     ) 
 
@@ -263,7 +258,7 @@ if option_proc == 'density':
     file_path = PATH_data / "processed" / f"mitgcm_proc_density_hrly_reg_depth_{option_depth}m.nc"
 
 # --- Sea Surface Height --- # 
-if option_proc == 'ssh':
+elif option_proc == 'ssh':
 
     # --- Sea Surface Height --- #
     ssh = xr.DataArray(data=ssh_m,
@@ -280,6 +275,12 @@ if option_proc == 'ssh':
 
     # Set file path for saving the netcdf file
     file_path = PATH_data / "processed" / "mitgcm_proc_ssh_hrly_reg.nc"
+
+else:
+    raise ValueError(
+        f"Invalid option_proc: {option_proc}. "
+        "Choose 'vel', 'density', or 'ssh'."
+    )
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

@@ -573,12 +573,12 @@ def segment_time_series(
 
     Parameters
     ----------
-    time : ndarray of datetime64
-        Time vector (1D array of datetime objects).
+    time : array-like of datetime.datetime
+        One-dimensional time coordinate containing Python datetime objects.
     data : ndarray
         Data vector (1D array aligned with `time`).
     duration : float, optional
-        Length of each segment in years (default is 1).
+        Length of each segment in units of 365-day years (default is 1).
         Can be fractional (e.g., 0.5 = 6 months).
     overlap : float, optional
         Fraction of overlap between consecutive segments (0–1).
@@ -591,6 +591,26 @@ def segment_time_series(
         - time_segment : ndarray of datetimes for that segment
         - data_segment : ndarray of data values for that segment
     """
+
+    # Convert inputs to arrays
+    time = np.asarray(time)
+    data = np.asanyarray(data)
+
+    # Validate inputs
+    if time.ndim != 1 or data.ndim != 1:
+        raise ValueError("time and data must be one-dimensional.")
+
+    if time.size != data.size:
+        raise ValueError("time and data must have the same length.")
+
+    if time.size == 0:
+        raise ValueError("time and data must not be empty.")
+
+    if duration <= 0:
+        raise ValueError("duration must be greater than zero.")
+
+    if not 0 <= overlap < 1:
+        raise ValueError("overlap must satisfy 0 <= overlap < 1.")
 
     # Set start and end times of the full time series
     start_time = time[0]
@@ -608,7 +628,7 @@ def segment_time_series(
     while True:
 
         # Define the end time for this segment
-        seg_end = seg_start + timedelta(days=int(365*duration))
+        seg_end = seg_start + timedelta(days=365*duration)
 
         # If the segment would extend beyond the available record, stop
         if seg_end > end_time:
@@ -621,77 +641,7 @@ def segment_time_series(
         segments.append((time[mask], data[mask]))
 
         # Move the start time forward by the step (handles overlap)
-        seg_start += timedelta(days=int(365*step))
+        seg_start += timedelta(days=365*step)
 
     return segments
-
-
-
-
-
-
-def compute_decor_scale_weighted(autocorrelation, lag):
-    """
-    Compute a triangularly weighted decorrelation scale.
-
-    This function is intended for comparison with the Version 1 workflow.
-    Because the input ACF is already a biased estimate, this applies an
-    additional triangular taper and should not be treated as the preferred
-    decorrelation-scale estimator.
-    """
-
-    autocorrelation = np.asarray(autocorrelation, dtype=float)
-    lag = np.asarray(lag, dtype=float)
-
-    if autocorrelation.ndim != 1 or lag.ndim != 1:
-        raise ValueError("Inputs must be one-dimensional.")
-
-    if autocorrelation.size != lag.size:
-        raise ValueError("Inputs must have the same length.")
-
-    if not np.all(np.diff(lag) > 0):
-        raise ValueError("lag must be strictly increasing.")
-
-    # Locate zero lag.
-    zero_indices = np.flatnonzero(np.isclose(lag, 0.0))
-
-    if zero_indices.size != 1:
-        raise ValueError("lag must contain exactly one zero-lag value.")
-
-    center = zero_indices[0]
-
-    # Restrict integration to symmetric lags.
-    maximum_radius = min(center, lag.size - center - 1)
-
-    if maximum_radius < 1:
-        raise ValueError("At least one positive lag is required.")
-
-    # Match the Version 1 definition R = N * dt.
-    dt = lag[center + 1] - lag[center]
-    n_positive = maximum_radius + 1
-    record_duration = n_positive * dt
-
-    # Apply the additional triangular finite-record weight.
-    weights = 1.0 - np.abs(lag) / record_duration
-    weights = np.clip(weights, 0.0, 1.0)
-
-    weighted_autocorrelation = weights * autocorrelation
-
-    cumulative_integral = cumulative_trapezoid(
-        weighted_autocorrelation,
-        lag,
-        initial=0.0,
-    )
-
-    radius = np.arange(maximum_radius + 1)
-
-    symmetric_integrals = (
-        cumulative_integral[center + radius]
-        - cumulative_integral[center - radius]
-    )
-
-    M_lag = int(np.nanargmax(symmetric_integrals))
-    decor_scale = float(symmetric_integrals[M_lag])
-
-    return decor_scale, M_lag
 
