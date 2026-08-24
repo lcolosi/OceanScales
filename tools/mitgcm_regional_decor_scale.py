@@ -68,7 +68,7 @@ option_data        = 'density'
 option_depth       = 9   
 option_interannual = 'linear' 
 option_harmonics   = 2      
-option_detrend_seg = True
+option_detrend_seg = False
 
 # Set time and space parameters
 dt               = 3600    

@@ -35,7 +35,7 @@ sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
 from autocorr import compute_autocorr_biased, compute_decor_scale, compute_decor_scale_unc, segment_time_series
-from lsf import unweighted_lsf, detrend
+from lsf import unweighted_lsf, detrend, compute_fve
 from filter import gaussian_low_pass_filter  
 
 # -----------------------------------------------------------------------------
@@ -47,11 +47,12 @@ from filter import gaussian_low_pass_filter
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
-#
+#                Options: "temp", "sal", "density", "uvel", or "vvel".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
+# - option_detrend_Sseg: Specifies whether each segment is detrended or not. 
+#                        Options: True or False
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
@@ -65,6 +66,7 @@ from filter import gaussian_low_pass_filter
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_harmonics   = 2      
+option_detrend_seg = False
 
 # Set time and space parameters
 dt               = 3600    
@@ -72,6 +74,21 @@ T_annual         = 365.25*(24)*(60)*(60)
 segment_overlap  = 0.5                                        
 segment_duration = 1   
 depth_lim        = -220 
+
+# Parameter verification
+if option_data not in ("temp", "salt", "density", "uvel", "vvel"):
+    raise ValueError(
+        f"Invalid option_data: {option_data}. "
+        "Choose 'temp', 'salt', 'density', 'uvel', or 'vvel'."
+    )
+if option_interannual not in ("linear", "gaussian"):
+    raise ValueError(
+        f"Invalid option_interannual: {option_interannual}. "
+        "Choose 'linear' or 'gaussian'."
+    )
+
+# Label segment processing 
+seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # -----------------------------------------------------------------------------
 # Load MITgcm data
@@ -173,7 +190,7 @@ data_res = np.ma.masked_all((nsite,ntime,ndepth))
 for isite in tqdm(range(nsite), desc="Computing Least-Squares Fit", unit="mooring site"):
 
     # Loop over each depth
-    for idepth in range(0,ndepth):
+    for idepth in range(ndepth):
 
         # Set the time series 
         data_ts = data[isite,:,idepth]
@@ -201,10 +218,10 @@ if option_interannual == 'gaussian':
     data_interannual = np.ma.masked_all((nsite,ntime,ndepth))
 
     # Loop over each site
-    for isite in tqdm(range(nsite), desc="Low-pass Filtering Time Series", unit="lon"):
+    for isite in tqdm(range(nsite), desc="Low-pass Filtering Time Series", unit="mooring site"):
 
         # Loop over each depth
-        for idepth in range(0,ndepth):
+        for idepth in range(ndepth):
 
             # Set the time series 
             data_ts = np.ma.masked_invalid(data[isite,:,idepth])
@@ -230,15 +247,32 @@ if option_interannual == 'gaussian':
 else: 
     model = fit 
 
-# Compute the fraction of variance explained by the interannual and season model
+# Initialize arrays 
+fve = np.ma.masked_all((nsite,ndepth))
 
+# Loop through longitude
+for isite in tqdm(range(nsite), desc="Computing Fraction of Variance Explained", unit="mooring site"):
+
+    # Loop over each depth
+    for idepth in range(ndepth):
+
+        # Set the data and model time series 
+        data_ts  = data[isite,:,idepth]
+        model_ts = model[isite,:,idepth]
+
+        # Skip grid points containing only masked data
+        if np.ma.getmaskarray(data_ts).all():
+            continue
+
+        # Compute the fraction of variance explained by the interannual and season model
+        fve[isite,idepth] = compute_fve(data_ts, model_ts)
 
 # -----------------------------------------------------------------------------
 # Compute decorrelation time scales and their uncertainty
 # -----------------------------------------------------------------------------
 
 # Segment a single time series 
-segments = segment_time_series(time, 
+segments = segment_time_series(time_dt, 
                                data_res[0,:,0], 
                                duration=segment_duration, 
                                overlap=segment_overlap,
@@ -257,7 +291,7 @@ Lt_std  = np.ma.masked_all((nsite,ndepth))
 for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="mooring site"):
 
     # Loop over each depth
-    for idepth in range(0,ndepth):
+    for idepth in range(ndepth):
 
         # Set the time series 
         data_ts = data_res[isite,:,idepth]
@@ -265,6 +299,13 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
         # Skip grid points containing only masked data
         if np.ma.getmaskarray(data_ts).all():
             continue
+
+        # Error program if a partially masked time series is present. 
+        if np.ma.getmaskarray(data_ts).any():
+            raise ValueError(
+                f"Partially masked time series at depth index {idepth}, "
+                f"site index {isite}."
+            )
 
         # Segment the time series 
         segments = segment_time_series(time_dt, 
@@ -283,8 +324,11 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
             t0 = tseg[0]
             time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
             
-            # Detrend data record 
-            data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
+            # Remove segment-wise mean or linear trend
+            if option_detrend_seg: 
+                data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
+            else: 
+                data_dt = dseg - np.ma.mean(dseg)
 
             # Compute autocorrelation function
             autocorr_seg[iseg,:], time_lag = compute_autocorr_biased(data_dt, time_elapsed_seg)
@@ -349,11 +393,22 @@ decor_scale_std = xr.DataArray(data=Lt_std_days,
                            )
 )
 
+# --- Model Diagnostics --- # 
+FVE = xr.DataArray(data=fve,
+                   dims=['site','depth'],
+                   coords=dict(site=site,depth=depth),
+                   attrs=dict(
+                       description=('Fraction of variance explained by the ' +
+                                    'interannual and seasonal variability.'),
+                       units='fractional'
+                    )
+)
+
 # Create data set from data arrays 
-data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std})
+data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'FVE':FVE})
 
 # Set file path for saving the netcdf file
-file_path = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}.nc"
+file_path = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

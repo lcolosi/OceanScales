@@ -62,7 +62,7 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 option_data        = 'density'    
 option_depth       = 9   
 option_interannual = 'linear' 
-option_detrend_seg = True
+option_detrend_seg = False
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -71,7 +71,7 @@ seg_proc = "detrend" if option_detrend_seg else "demean"
 ns = 1
 
 # Set font and fontsize using LaTeX 
-fontsize=16
+fontsize=18
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -176,7 +176,7 @@ lat_min, lat_max = 33, 35
 levels = np.arange(15,40+1,1) 
 level_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
-fontsize_g = 16
+fontsize_g = 18
 fontsize_c = 10
 
 # Create figure

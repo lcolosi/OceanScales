@@ -9,7 +9,7 @@
 #       (1) Conservative Temperature
 #       (2) Absolute Salinity
 #       (3) Potential Density (referenced to the surface)
-#       (4) Interpolated and rotatedhorizontal velocity components
+#       (4) Rotated horizontal velocity components
 #
 # Author:
 #   Luke Colosi
@@ -26,7 +26,6 @@ import numpy as np
 from netCDF4 import Dataset, num2date
 from datetime import datetime
 import gsw
-from scipy.interpolate import interp1d
 from scipy.interpolate import PchipInterpolator, interp1d
 
 # -----------------------------------------------------------------------------
@@ -40,7 +39,7 @@ from scipy.interpolate import PchipInterpolator, interp1d
 # - option_proc: Specifies which data set will be processed. 
 #                Options include: 'vel' or 'density'
 # - option_interp: Specifies the interpolation method for transforming to isopycnal 
-#                  surfaces. Options include: 0 = linear, 1 = Pchip
+#                  surfaces. Options include: 'linear' or 'Pchip'
 # - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
 #                     option_mask is true. Units: meters. 
 # - sig_depth_thresh: Specify the lower depth limit of density depth average. 
@@ -53,13 +52,10 @@ from scipy.interpolate import PchipInterpolator, interp1d
 # ------------ # 
 
 # Set processing parameters
-option_proc          = 'vel'
-option_interp        = 1
+option_proc          = 'density'
+option_interp        = 'Pchip'
 
 # Set physical parameters 
-vel_depth_thresh = 400  
-sig_depth_thresh = -500 
-g                = 9.81 
 rmsd_thresh      = 1e-3
 threshold_frac   = 0.75
 
@@ -67,7 +63,18 @@ threshold_frac   = 0.75
 ROOT = Path(__file__).resolve().parents[1]
 
 # Set path to project data directory
-PATH_data = ROOT / "data" / "mitgcm" / "moorings"
+PATH_data = ROOT / "data" / "mitgcm" / "mooring"
+
+# Parameter verification
+if option_proc not in ('vel', 'density'):
+    raise ValueError(
+        f"Invalid option_proc: {option_proc}"
+    )
+
+if option_interp not in ('Pchip', 'linear'):
+    raise ValueError(
+        f"Invalid option_interp: {option_interp}"
+    )
 
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
@@ -91,12 +98,12 @@ if option_proc == 'vel':
     lat    = nc_u.variables['YC'][:]
     time   =  num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
-    u_raw  = nc_u.variables['UVEL'][:]
-    v_raw  = nc_v.variables['VVEL'][:]
+    u  = nc_u.variables['UVEL'][:]
+    v  = nc_v.variables['VVEL'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    u_m = np.ma.masked_where(u_raw == 0, u_raw)
-    v_m = np.ma.masked_where(v_raw == 0, v_raw)
+    # Mask dry cells previously set to NaN during preprocessing
+    u_m = np.ma.masked_invalid(u)
+    v_m = np.ma.masked_invalid(v)
 
 # --- Density --- # 
 elif option_proc == 'density':
@@ -119,9 +126,9 @@ elif option_proc == 'density':
     T = nc_temp.variables['THETA'][:]
     S = nc_salt.variables['SALT'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    T_m = np.ma.masked_where(T == 0, T)
-    S_m = np.ma.masked_where(S == 0, S)
+    # Mask dry cells previously set to NaN during preprocessing
+    T_m = np.ma.masked_invalid(T)
+    S_m = np.ma.masked_invalid(S)
 
 # Convert cftime.DatetimeGregorian to Python datetime objects
 time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second) for d in time])
@@ -132,7 +139,7 @@ time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second)
 
 
 # -----------------------------------------------------------------------------
-# Process Density Variables (T, S, rho, sigma0)
+# Process Density Variables (T, S, sigma0)
 # -----------------------------------------------------------------------------
 
 if option_proc == 'density': 
@@ -158,59 +165,37 @@ if option_proc == 'density':
     # Compute Conservative Temperature
     CT = gsw.CT_from_pt(SA, T_m)
 
-    # Compute in-situ density
-    density = gsw.rho(SA, CT, pressure)
-
     # Compute potential density anomaly (sigma0)
     sigma0 = gsw.sigma0(SA, CT)
 
     #------------------------------------------# 
-    # Compute Buoyancy Frequency using the Neutral Density Gradient Method method 
+    # Compute Buoyancy Frequency using TEOS-10 GSW
     #------------------------------------------# 
 
-    # Compute the potential density anomaly
-    rho_theta = sigma0 + 1000
+    # Compute time-mean hydrographic profiles
+    SA_mean = np.ma.mean(SA, axis=1)
+    CT_mean = np.ma.mean(CT, axis=1)
 
-    # Set the dimensions of the array
-    nsite, ntime, ndepth = np.shape(sigma0)
+    # Initialize arrays
+    Nsquare   = np.ma.masked_all((nsite, ndepth - 1))
+    depth_mid = np.ma.masked_all((nsite, ndepth - 1))
 
-    # Compute the mean density in the upper 500 m for reference density
-    rho0 = np.ma.mean(rho_theta[:,:,(depth <= depth[0]) & (depth >= sig_depth_thresh)])
+    # Loop through mooring sites
+    for isite in range(nsite):
 
-    # Compute the time-mean fields 
-    SA_mean = np.mean(SA, axis=1)        
-    T_mean  = np.mean(T_m, axis=1)
-    p_mean  = np.mean(pressure, axis=1)
+        # Compute buoyancy frequency
+        Nsquare[isite, :], p_mid = gsw.Nsquared(
+            SA_mean[isite, :],
+            CT_mean[isite, :],
+            pressure_site_depth[isite, :],
+            lat[isite],
+        )
 
-    # Initalize arrays 
-    depth_mid = np.zeros((ndepth-1))
-    Nsquare = np.zeros((nsite,ndepth-1))
-
-    # Loop through CCE sites 
-    for isite in range(0,nsite):
-
-        # Loop through depth pairs 
-        for k in range(0,len(depth)-1):
-
-            # Compute the midpoint standard depth 
-            z_half = (depth[k] + depth[k+1]) / 2
-
-            # Convert standard depth to a reference pressure 
-            p_half = gsw.conversions.z_from_p(z_half,lat[isite])
-
-            # Compute the potential density referenced to p_half pressure
-            sigma_ref_top  = gsw.pot_rho_t_exact(SA_mean[isite,k], T_mean[isite,k], p_mean[isite,k], p_half)
-            sigma_ref_bottom  = gsw.pot_rho_t_exact(SA_mean[isite,k+1], T_mean[isite,k+1], p_mean[isite,k+1], p_half)
-
-            # Compute N^2(z) profile 
-            Nsquare[isite,k] = (-g/rho0) * ((sigma_ref_top - sigma_ref_bottom)/(depth[k] - depth[k+1]))
-
-            # Save the midpoints of the depth bins 
-            if (isite == 0):
-                depth_mid[k] = z_half
+        # Compute the mid-depth 
+        depth_mid[isite, :] = gsw.z_from_p(p_mid,lat[isite])
 
     # Compute bouyancy frequency in units of cycles/hour
-    Nz = np.sqrt(Nsquare) * (60/1) * (60/1) 
+    N = np.sqrt(Nsquare) / (2 * np.pi) * 3600 
 
     #------------------------------------------# 
     # Transform to Isopycnal Surfaces
@@ -243,9 +228,9 @@ if option_proc == 'density':
     ncce, ntime, nsigma = CT_upper.shape[0], CT_upper.shape[1], len(sigma_levels)
 
     # Initalize arrays
-    z_on_sigma = np.full((ncce, ntime, nsigma), np.nan)
-    T_on_sigma = np.full((ncce, ntime, nsigma), np.nan)
-    S_on_sigma = np.full((ncce, ntime, nsigma), np.nan)
+    z_on_sigma = np.ma.masked_all((ncce, ntime, nsigma))
+    T_on_sigma = np.ma.masked_all((ncce, ntime, nsigma))
+    S_on_sigma = np.ma.masked_all((ncce, ntime, nsigma))
 
     # Quality control flag (1 = overturn detected, 0 = stable)
     overturn_flag = np.zeros((ncce, ntime), dtype=int)
@@ -263,7 +248,11 @@ if option_proc == 'density':
             depth_prof = depth_upper
 
             # Build a valid mask (common to all variables)
-            valid_mask = ~(sigma_prof.mask | temp_prof.mask | sal_prof.mask)
+            valid_mask = ~(
+                np.ma.getmaskarray(sigma_prof)
+                | np.ma.getmaskarray(temp_prof)
+                | np.ma.getmaskarray(sal_prof)
+            )
 
             if valid_mask.sum() < 3:
                 # Not enough valid points to interpolate
@@ -289,7 +278,7 @@ if option_proc == 'density':
                 overturn_flag[isite,it] = 1 
 
             # --- Pchip interpolation --- # 
-            if option_interp == 1: 
+            if option_interp == 'Pchip': 
                 z_interp = PchipInterpolator(sigma_sorted, depth_sorted, extrapolate=False)
                 T_interp = PchipInterpolator(sigma_sorted, temp_sorted, extrapolate=False)
                 S_interp = PchipInterpolator(sigma_sorted, sal_sorted, extrapolate=False)
@@ -328,18 +317,20 @@ if option_proc == 'density':
         if valid_levels_idx.size > 0:
             sigma_min = sigma_levels[valid_levels_idx[0]]
             sigma_max = sigma_levels[valid_levels_idx[-1]]
-            print("Continuous sigma range:", sigma_min, "-", sigma_max)
+            print(f"Continuous sigma range at site {im}: "
+                  f"{sigma_min:.1f} - {sigma_max:.1f}")
         else:
-            print("No sigma level meets continuity threshold")
+            raise ValueError(f"No sigma level at site {im} meets "
+                             f"the continuity threshold of {threshold_frac:.2f}.")
 
         # Find the indices of sigma_levels within the continuous range
         sigma_idx = np.where((sigma_levels >= sigma_min) & (sigma_levels <= sigma_max))[0]
 
         # Extract data from T_on_sigma, z_on_sigma and S_on_sigma to keep only the 
         # continuous sigma-levels meeting the threshold criteria
-        T_on_sigma_cont.append(T_on_sigma[im,:,sigma_idx])
-        z_on_sigma_cont.append(z_on_sigma[im,:,sigma_idx])
-        S_on_sigma_cont.append(S_on_sigma[im,:,sigma_idx])
+        T_on_sigma_cont.append(T_on_sigma[im][:, sigma_idx])
+        S_on_sigma_cont.append(S_on_sigma[im][:, sigma_idx])
+        z_on_sigma_cont.append(z_on_sigma[im][:, sigma_idx])
 
         # Set the isopycnals levels 
         isopycnal.append(sigma_levels[sigma_idx])
@@ -371,7 +362,7 @@ if option_proc == 'vel':
                             )
     )
 
-    #--- Depth-dependent Velocity Components ---#
+    #--- Velocity Components ---#
     u = xr.DataArray(data=u_m,
                         dims=['site','time','depth'],
                         coords=dict(site=site,time=time_dt,depth=depth),
@@ -428,15 +419,6 @@ if option_proc == 'density':
                             )
     )
 
-    Density = xr.DataArray(data=density, 
-                        dims=['site','time','depth'],
-                        coords=dict(site=site,time=time_dt,depth=depth),
-                        attrs=dict(
-                            description='In-situ Density profile time series for the three CCE mooring sites.',
-                            units='kg/m^3'
-                            )
-    ) 
-
     SIG = xr.DataArray(data=sigma0, 
                         dims=['site','time','depth'],
                         coords=dict(site=site,time=time_dt,depth=depth),
@@ -464,18 +446,36 @@ if option_proc == 'density':
                             )
     )
 
-    Nz = xr.DataArray(data=Nz, 
-                      dims=['site','time','depth_mid'],
-                      coords=dict(site=site,time=time_dt,depth_mid=depth_mid),
+    N1 = xr.DataArray(data=N[0,:], 
+                      dims=['depth_mid_cce1'],
+                      coords=dict(depth_mid_cce1=depth_mid[0,:]),
                       attrs=dict(
-                            description='Background Buoyancy Frequency profile time series for the three CCE mooring sites.',
+                            description='Background Buoyancy Frequency profile at the CCE1 mooring sites.',
+                            units='cycles/hour'
+                            )
+    )
+
+    N2 = xr.DataArray(data=N[1,:], 
+                      dims=['depth_mid_cce2'],
+                      coords=dict(depth_mid_cce2=depth_mid[1,:]),
+                      attrs=dict(
+                            description='Background Buoyancy Frequency profile at the CCE2 mooring sites.',
+                            units='cycles/hour'
+                            )
+    )
+
+    N3 = xr.DataArray(data=N[2,:], 
+                      dims=['depth_mid_cce3'],
+                      coords=dict(depth_mid_cce3=depth_mid[2,:]),
+                      attrs=dict(
+                            description='Background Buoyancy Frequency profile at the CCE3 mooring sites.',
                             units='cycles/hour'
                             )
     )
 
     CTemp1_sig = xr.DataArray(data=T_on_sigma_cont[0], 
-                        dims=['isopycnal1','time',],
-                        coords=dict(isopycnal1=isopycnal[0],time=time_dt),
+                        dims=['time','isopycnal1'],
+                        coords=dict(time=time_dt,isopycnal1=isopycnal[0]),
                         attrs=dict(
                             description='Conservative Temperature profiles time series in isopycnal coordinates for CCE 1 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='deg C'
@@ -483,8 +483,8 @@ if option_proc == 'density':
     ) 
 
     CTemp2_sig = xr.DataArray(data=T_on_sigma_cont[1], 
-                        dims=['isopycnal2','time',],
-                        coords=dict(isopycnal2=isopycnal[1],time=time_dt),
+                        dims=['time','isopycnal2'],
+                        coords=dict(time=time_dt,isopycnal2=isopycnal[1]),
                         attrs=dict(
                             description='Conservative Temperature profiles time series in isopycnal coordinates for CCE 2 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='deg C'
@@ -492,8 +492,8 @@ if option_proc == 'density':
     ) 
 
     CTemp3_sig = xr.DataArray(data=T_on_sigma_cont[2], 
-                        dims=['isopycnal3','time',],
-                        coords=dict(isopycnal3=isopycnal[2],time=time_dt),
+                        dims=['time','isopycnal3'],
+                        coords=dict(time=time_dt,isopycnal3=isopycnal[2]),
                         attrs=dict(
                             description='Conservative Temperature profiles time series in isopycnal coordinates for CCE 3 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='deg C'
@@ -501,8 +501,8 @@ if option_proc == 'density':
     ) 
 
     ASal1_sig = xr.DataArray(data=S_on_sigma_cont[0], 
-                        dims=['isopycnal1','time',],
-                        coords=dict(isopycnal1=isopycnal[0],time=time_dt),
+                        dims=['time','isopycnal1'],
+                        coords=dict(time=time_dt,isopycnal1=isopycnal[0]),
                         attrs=dict(
                             description='Absolute Salinity profiles time series in isopycnal coordinates for CCE 1 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='g/kg'
@@ -510,8 +510,8 @@ if option_proc == 'density':
     ) 
 
     ASal2_sig = xr.DataArray(data=S_on_sigma_cont[1], 
-                        dims=['isopycnal2','time',],
-                        coords=dict(isopycnal2=isopycnal[1],time=time_dt),
+                        dims=['time','isopycnal2'],
+                        coords=dict(time=time_dt,isopycnal2=isopycnal[1]),
                         attrs=dict(
                             description='Absolute Salinity profiles time series in isopycnal coordinates for CCE 2 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='g/kg'
@@ -519,8 +519,8 @@ if option_proc == 'density':
     )
 
     ASal3_sig = xr.DataArray(data=S_on_sigma_cont[2], 
-                        dims=['isopycnal3','time',],
-                        coords=dict(isopycnal3=isopycnal[2],time=time_dt),
+                        dims=['time','isopycnal3'],
+                        coords=dict(time=time_dt,isopycnal3=isopycnal[2]),
                         attrs=dict(
                             description='Absolute Salinity profiles time series in isopycnal coordinates for CCE 3 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='g/kg'
@@ -528,8 +528,8 @@ if option_proc == 'density':
     )
 
     Z1_sig = xr.DataArray(data=z_on_sigma_cont[0], 
-                        dims=['isopycnal1','time',],
-                        coords=dict(isopycnal1=isopycnal[0],time=time_dt),
+                        dims=['time','isopycnal1'],
+                        coords=dict(time=time_dt,isopycnal1=isopycnal[0]),
                         attrs=dict(
                             description='Isopycnal depth profiles time series in isopycnal coordinates for CCE 1 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                             units='m'
@@ -537,8 +537,8 @@ if option_proc == 'density':
     ) 
 
     Z2_sig = xr.DataArray(data=z_on_sigma_cont[1], 
-                            dims=['isopycnal2','time',],
-                            coords=dict(isopycnal2=isopycnal[1],time=time_dt),
+                            dims=['time','isopycnal2'],
+                            coords=dict(time=time_dt,isopycnal2=isopycnal[1]),
                             attrs=dict(
                                 description='Isopycnal depth profiles time series in isopycnal coordinates for CCE 2 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                                 units='m'
@@ -546,8 +546,8 @@ if option_proc == 'density':
         )
     
     Z3_sig = xr.DataArray(data=z_on_sigma_cont[2], 
-                            dims=['isopycnal3','time',],
-                            coords=dict(isopycnal3=isopycnal[2],time=time_dt),
+                            dims=['time','isopycnal3'],
+                            coords=dict(time=time_dt,isopycnal3=isopycnal[2]),
                             attrs=dict(
                                 description='Isopycnal depth profiles time series in isopycnal coordinates for CCE 3 with ' + str(threshold_frac*100) + ' percent of the time series containing data.',
                                 units='m'
@@ -555,7 +555,7 @@ if option_proc == 'density':
         )
 
     # Create data set from data arrays
-    data = xr.Dataset({'LON':LON,'LAT':LAT,'Pressure':Pressure,'Density':Density,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal,'N1':N1,'N2':N2,'N3':N3,'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
 
     # Set file path for saving the netcdf file
     file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_mooring.nc"
