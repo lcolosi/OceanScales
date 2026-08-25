@@ -9,7 +9,7 @@
 #       (1) Conservative Temperature
 #       (2) Absolute Salinity
 #       (3) Potential Density (referenced to the surface)
-#       (4) Interpolated and rotatedhorizontal velocity components
+#       (4) Rotated horizontal velocity components
 #
 # Author:
 #   Luke Colosi
