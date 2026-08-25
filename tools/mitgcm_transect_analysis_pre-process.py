@@ -458,4 +458,4 @@ for var in vars_to_save:
         encoding=encoding,
     )
 
-status("MITgcm transect preprocessing complete!")
+status("MITgcm transect pre-processing complete!")

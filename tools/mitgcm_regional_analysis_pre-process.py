@@ -62,7 +62,7 @@ status(f"Starting MITgcm pre-processing for the Regional Analysis")
 delta_t = 150  
 
 # Set time and space parameters  
-depth      = 9                                                         
+depth      = 0.5                                                         
 lat_bnds   = [33.0, 35.0]                                          
 lon_bnds   = [237.0, 240.0]
 halo_cells = 3                                          
@@ -268,4 +268,4 @@ for var_name, da in vars_to_save.items():
             encoding=encoding            
         )
 
-status("MITgcm regional preprocessing complete!")
+status("MITgcm regional pre-processing complete!")

@@ -220,3 +220,5 @@ for var_name, da in profiles_ds.data_vars.items():
         format="NETCDF4",
         encoding=encoding,
     )
+
+status("MITgcm mooring pre-processing complete!")

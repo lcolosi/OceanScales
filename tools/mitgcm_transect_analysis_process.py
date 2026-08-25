@@ -29,6 +29,7 @@ import numpy as np
 from netCDF4 import Dataset, num2date
 from datetime import datetime
 import gsw
+from tqdm import tqdm
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -370,7 +371,7 @@ if option_proc == 'density':
     depth_mid = np.ma.masked_all((ndist, ndepth-1))
 
     # Loop through mooring sites
-    for idist in range(ndist):
+    for idist in tqdm(range(ndist), desc="Computing Buoyancy Frequency", unit="distance"):
 
         # Compute buoyancy frequency and midpoint pressure
         Nsquare[idist, :], p_mid = gsw.Nsquared(
@@ -445,7 +446,7 @@ if option_proc == 'density':
     mld = np.ma.masked_all((ndist, ntime))
 
     # Loop through distance off shore 
-    for idist in range(ndist):
+    for idist in tqdm(range(ndist), desc="Computing Mixed Layer Depth", unit="distance"):
 
         # Loop through time 
         for itime in range(ntime):
