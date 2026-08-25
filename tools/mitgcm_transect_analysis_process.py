@@ -9,7 +9,9 @@
 #       (1) Conservative Temperature
 #       (2) Absolute Salinity
 #       (3) Potential Density (referenced to the surface)
-#       (4) Rotated horizontal velocity components
+#       (4) Buoyancy Frequency 
+#       (5) Mixed Layer Depth 
+#       (6) Rotated horizontal velocity components 
 #
 # Author:
 #   Luke Colosi
@@ -40,30 +42,32 @@ import gsw
 #                Options include: 'vel' or 'density'
 # - option_depth_mask: Specifies whether there is a depth mask applied to the data for 
 #                      computing the depth average velocity. 
+#                      Options: True or False 
 # - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
 #                     option_mask is true. Units: meters. 
-# - sig_depth_thresh: Specify the lower depth limit of density depth average. 
-#                     Units: meters. 
 # - R_earth: Specify the radius of the Earth. Units: kilometers.
-# - g: Specify the acceleration due to gravity. Units: m/s^2.
 #
 # ------------ # 
 
 # Set processing parameters
-option_proc          = 'vel'        
-option_depth_mask    = 1      
+option_proc          = 'density'        
+option_depth_mask    = True      
 
 # Set physical parameters 
 vel_depth_thresh = 400   
-sig_depth_thresh = -500 
 R_earth      = 6371 
-g            = 9.81 
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
 
 # Set path to project data directory
 PATH_data = ROOT / "data" / "mitgcm" / "transect"
+
+# Parameter verification
+if option_proc not in ('vel', 'density'):
+    raise ValueError(
+        f"Invalid option_proc: {option_proc}"
+    )
 
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
@@ -87,12 +91,12 @@ if option_proc == 'vel':
     dist   = nc_u.variables['distance'][:]
     time   =  num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
-    u_raw  = nc_u.variables['U_center'][:]
-    v_raw  = nc_v.variables['V_center'][:]
+    u = nc_u.variables['U_center'][:]
+    v  = nc_v.variables['V_center'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    u_m = np.ma.masked_where(u_raw == 0, u_raw)
-    v_m = np.ma.masked_where(v_raw == 0, v_raw)
+    # Mask dry cells previously set to NaN during preprocessing
+    u_m = np.ma.masked_invalid(u)
+    v_m = np.ma.masked_invalid(v)
 
     # Rearrange dimensions of data to (distance, time, depth)
     u_m = np.transpose(u_m, (2, 0, 1))
@@ -119,9 +123,9 @@ elif option_proc == 'density':
     T     = nc_temp.variables['THETA'][:]
     S     = nc_salt.variables['SALT'][:]
 
-    # Mask data at fill values (zero for the MITgcm output)
-    T_m = np.ma.masked_where(T == 0, T)
-    S_m = np.ma.masked_where(S == 0, S)
+    # Mask dry cells previously set to NaN during preprocessing
+    T_m = np.ma.masked_invalid(T)
+    S_m = np.ma.masked_invalid(S)
 
     # Rearrange dimensions of data to (distance, time, depth)
     T_m = np.transpose(T_m, (2, 0, 1))
@@ -136,21 +140,21 @@ time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second)
 
 if option_proc == 'vel':
 
-    #------------------------------------------# 
-    # Compute depth average horizontal velocity 
-    #------------------------------------------# 
+    #------------------------------------------#
+    # Compute depth-average horizontal velocity
+    #------------------------------------------#
 
     # Take absolute value of depth
     depth_pos = np.abs(depth)
 
-    # Ensure increasing order
+    # Ensure depth increases downward
     if not np.all(np.diff(depth_pos) > 0):
         depth_pos = depth_pos[::-1]
         u_m = u_m[:, :, ::-1]
         v_m = v_m[:, :, ::-1]
 
     # Mask depth levels below threshold if requested
-    if option_depth_mask == 1:
+    if option_depth_mask:
 
         # Mask depth levels deeper than vel_depth_thresh
         mask_depth = depth_pos <= vel_depth_thresh
@@ -160,78 +164,156 @@ if option_proc == 'vel':
         u_sel = u_m[:, :, mask_depth]
         v_sel = v_m[:, :, mask_depth]
 
-        # Depth range
-        H = depth_sel[-1] - depth_sel[0]
-
-        # Compute weighted average
-        u_bar_tmp = np.trapezoid(u_sel.filled(np.nan), depth_sel, axis=2) / H
-        v_bar_tmp = np.trapezoid(v_sel.filled(np.nan), depth_sel, axis=2) / H
-
     else:
 
-        # Depth range
-        H = depth_pos[-1] - depth_pos[0]
+        # Set depth and velocity components for calculation
+        depth_sel = depth_pos
+        u_sel = u_m
+        v_sel = v_m
 
-        # Compute weighted average
-        u_bar_tmp = np.trapezoid(u_m.filled(np.nan), depth_pos, axis=2) / H
-        v_bar_tmp = np.trapezoid(v_m.filled(np.nan), depth_pos, axis=2) / H
+    # Set space and time dimensions
+    ndist, ntime, ndepth = u_sel.shape
 
-    # Convert back to masked arrays
-    u_bar = np.ma.masked_invalid(u_bar_tmp)
-    v_bar = np.ma.masked_invalid(v_bar_tmp)
+    # Initialize depth-averaged velocities as masked arrays
+    u_bar = np.ma.masked_all((ndist, ntime))
+    v_bar = np.ma.masked_all((ndist, ntime))
 
-    #------------------------------------------# 
-    # Rotate velocity vectors into the coordinate system of the transect 
-    #------------------------------------------# 
+    # Loop through distance from shore
+    for idist in range(ndist):
 
-    # ------------ # 
-    # --- Note --- # 
+        # Loop through time 
+        for itime in range(ntime):
+
+            # Extract vertical profiles
+            u_prof = u_sel[idist, itime, :]
+            v_prof = v_sel[idist, itime, :]
+
+            # Identify valid depth levels
+            valid_u = ~np.ma.getmaskarray(u_prof)
+            valid_v = ~np.ma.getmaskarray(v_prof)
+
+            # Verify if the profile has two or more data points  
+            if np.sum(valid_u) >= 2:
+
+                # Obtain velocity and depths at depth levels not masked  
+                z_u = depth_sel[valid_u]
+                u_valid = u_prof[valid_u]
+
+                # Compute the depth range
+                H_u = z_u[-1] - z_u[0]
+
+                # Compute depth-averaged u velocity
+                if H_u > 0:
+                    u_bar[idist, itime] = (
+                        np.trapezoid(u_valid, z_u) / H_u
+                    )
+
+            # Verify if the profile has two or more data points 
+            if np.sum(valid_v) >= 2:
+
+                # Obtain velocity and depths at depth levels not masked  
+                z_v = depth_sel[valid_v]
+                v_valid = v_prof[valid_v]
+
+                # Compute the depth range 
+                H_v = z_v[-1] - z_v[0]
+
+                # Compute depth-averaged v velocity
+                if H_v > 0:
+                    v_bar[idist, itime] = (
+                        np.trapezoid(v_valid, z_v) / H_v
+                    )
+
+    #------------------------------------------#
+    # Rotate velocity vectors into the transect coordinates
+    #------------------------------------------#
+
+    # ------------ #
+    # --- Note --- #
     # ------------ #
     #
-    # Along transect (cross-shelf direction) 
-    # - The along-transect component of velocity is defined such that onshore is 
-    #   positive and offshore is negative.
-    # Cross transect (along-shelf direction) 
-    # - The cross-transect component of velocity is defined such that upcoast is 
-    #   positive and downcoast is negative.
+    # Along-transect (cross-shelf direction)
+    # - Positive: onshore
+    # - Negative: offshore
     #
-    # ------------ # 
+    # Cross-transect (along-shelf direction)
+    # - Positive: upcoast
+    # - Negative: downcoast
+    #
+    # The transect coordinates are ordered offshore -> onshore.
+    #
+    # ------------ #
 
-    # Convert to radians
+    # Convert longitude and latitude to radians
     lon_r = np.deg2rad(lon)
     lat_r = np.deg2rad(lat)
 
-    # Compute local cartesian displacements in the easting and northing directions (km)
-    dx = R_earth * np.cos(lat_r[:-1]) * np.diff(lon_r)
+    # Compute latitude at midpoint between adjacent transect points
+    lat_mid = 0.5 * (lat_r[:-1] + lat_r[1:])
+
+    # Compute local Cartesian displacements
+    # x: positive eastward
+    # y: positive northward
+    dx = R_earth * np.cos(lat_mid) * np.diff(lon_r)
     dy = R_earth * np.diff(lat_r)
 
-    # Compute angle of transect relative to east
-    theta = np.arctan2(np.mean(dy), np.mean(dx))
+    # Compute total displacement from offshore to onshore
+    dx_total = np.sum(dx)
+    dy_total = np.sum(dy)
 
-    # Construct rotation matrix (Counter-clockwise rotation)
-    R = np.array([[np.cos(theta), np.sin(theta)],
-                  [-np.sin(theta), np.cos(theta)]])
-    
-    # Rotate velocity components counterclockwiseto along and cross-transect directions
+    # Compute overall transect angle relative to east.
+    # Because the transect is ordered offshore -> onshore,
+    # theta points in the positive onshore direction.
+    theta = np.arctan2(
+        dy_total,
+        dx_total
+    )
+
+    # Define unit vector pointing onshore
+    e_onshore = np.array([
+        np.cos(theta),
+        np.sin(theta)
+    ])
+
+    # Define unit vector pointing upcoast.
+    # This is 90 degrees counterclockwise from the onshore direction.
+    e_upcoast = np.array([
+        -np.sin(theta),
+        np.cos(theta)
+    ])
+
+    # Project velocities onto transect directions
 
     # --- Depth-dependent velocities --- #
-    u_along_tmp = R[0, 0] * u_m + R[0, 1] * v_m
-    v_cross_tmp = R[1, 0] * u_m + R[1, 1] * v_m
 
-    # Mask zeros
-    u_along = np.ma.masked_where(u_along_tmp == 0, u_along_tmp)
-    v_cross = np.ma.masked_where(v_cross_tmp == 0, v_cross_tmp)
+    # Along-transect velocity: positive onshore
+    u_along = (
+        e_onshore[0] * u_m + 
+        e_onshore[1] * v_m
+    )
+
+    # Cross-transect velocity: positive upcoast
+    v_cross = (
+        e_upcoast[0] * u_m + 
+        e_upcoast[1] * v_m
+    )
 
     # --- Depth-averaged velocities --- #
-    u_along_tmp = R[0, 0] * u_bar + R[0, 1] * v_bar
-    v_cross_tmp = R[1, 0] * u_bar + R[1, 1] * v_bar
 
-    # Mask zeros
-    u_along_bar = np.ma.masked_where(u_along_tmp == 0, u_along_tmp)
-    v_cross_bar = np.ma.masked_where(v_cross_tmp == 0, v_cross_tmp)
+    # Along-transect velocity: positive onshore
+    u_along_bar = (
+        e_onshore[0] * u_bar +
+        e_onshore[1] * v_bar
+    )
+
+    # Cross-transect velocity: positive upcoast
+    v_cross_bar = (
+        e_upcoast[0] * u_bar +
+        e_upcoast[1] * v_bar
+    )
 
 # -----------------------------------------------------------------------------
-# Process Density Variables (T, S, rho, sigma0)
+# Process Density Variables (T, S, sigma0)
 # -----------------------------------------------------------------------------
 
 if option_proc == 'density': 
@@ -257,74 +339,104 @@ if option_proc == 'density':
     # Compute Conservative Temperature
     CT = gsw.CT_from_pt(SA, T_m)
 
-    # Compute in-situ density
-    density = gsw.rho(SA, CT, pressure)
-
     # Compute potential density anomaly (sigma0)
     sigma0 = gsw.sigma0(SA, CT)
 
     # Mask ocean bottom depths
-    SA = np.ma.masked_where(SA == 0, SA)
-    CT = np.ma.masked_where(CT == 0, CT)
-    density = np.ma.masked_where(density == 0, density)
-    sigma0 = np.ma.masked_where(sigma0 == 0, sigma0)
+    SA = np.ma.masked_invalid(SA)
+    CT = np.ma.masked_invalid(CT)
+    sigma0 = np.ma.masked_invalid(sigma0)
 
     #------------------------------------------# 
-    # Compute Buoyancy Frequency using the Neutral Density Gradient Method method 
+    # Compute Buoyancy Frequency using TEOS-10 GSW
     #------------------------------------------# 
-    
-    # Compute the potential density anomaly
-    rho_theta = sigma0 + 1000
-
-    # Set the dimensions of the array
-    ndist, ntime, ndepth = np.shape(sigma0)
-
-    # Compute the mean density in the upper 500 m for reference density
-    rho0 = np.ma.mean(rho_theta[:,:,(depth <= depth[0]) & (depth >= sig_depth_thresh)]) 
 
     # Compute the time-mean fields 
-    SA_mean = np.mean(SA, axis=1)        
-    T_mean  = np.mean(T_m, axis=1)
-    p_mean  = np.mean(pressure, axis=1)
+    SA_mean = np.ma.mean(SA, axis=1)        
+    CT_mean  = np.ma.mean(CT, axis=1)
 
     # Initalize arrays 
-    depth_mid = np.zeros((ndepth-1))
-    Nsquare = np.zeros((ndist,ndepth-1))
+    Nsquare   = np.ma.masked_all((ndist,ndepth-1))
+    depth_mid = np.ma.masked_all((ndist, ndepth-1))
 
-    # Loop through distance along the transect 
-    for idist in range(0,ndist):
+    # Loop through mooring sites
+    for idist in range(ndist):
 
-        # Set progress bar
-        progress = (idist + 1) / (ndist)
-        sys.stdout.write(f"\rProgress: {progress:.1%}")
-        sys.stdout.flush()
+        # Compute buoyancy frequency and midpoint pressure
+        Nsquare[idist, :], p_mid = gsw.Nsquared(
+            SA_mean[idist, :],
+            CT_mean[idist, :],
+            pressure_dist_depth[idist, :],
+            lat[idist],
+        )
 
-        # Loop through depth pairs 
-        for k in range(0,len(depth)-1):
+        # Convert midpoint pressure to vertical position 
+        depth_mid[idist,:] = gsw.z_from_p(p_mid,lat[idist])
 
-            # Compute the midpoint standard depth 
-            z_half = (depth[k] + depth[k+1]) / 2
+    # --- Interpolate N^2 onto common depth grid --- # 
 
-            # Convert standard depth to a reference pressure 
-            p_half = gsw.conversions.z_from_p(z_half,lat[idist])
+    # Define common midpoint-depth coordinate
+    depth_mid_reg = 0.5 * (depth[:-1] + depth[1:])
 
-            # Compute the potential density referenced to p_half pressure
-            sigma_ref_top  = gsw.pot_rho_t_exact(SA_mean[idist,k], T_mean[idist,k], p_mean[idist,k], p_half)
-            sigma_ref_bottom  = gsw.pot_rho_t_exact(SA_mean[idist,k+1], T_mean[idist,k+1], p_mean[idist,k+1], p_half)
+    # Initialize regularly gridded N^2
+    Nsquare_reg = np.ma.masked_all((ndist, depth_mid_reg.size))
 
-            # Compute N^2(z) profile 
-            Nsquare[idist,k] = (-g/rho0) * ((sigma_ref_top - sigma_ref_bottom)/(depth[k] - depth[k+1]))
+    # Interpolate each transect profile
+    for idist in range(ndist):
 
-            # Save the midpoints of the depth bins 
-            if idist == 0:
-                depth_mid[k] = z_half
+        # Extract local profile
+        z_prof = depth_mid[idist, :]
+        N2_prof = Nsquare[idist, :]
 
-    # Compute instaneous buoyancy frequency in units of cycles/hour
-    Nz = np.sqrt(Nsquare) * (60/1) * (60/1) 
+        # Identify valid values (wet-cells)
+        valid = ~(np.ma.getmaskarray(z_prof) | np.ma.getmaskarray(N2_prof))
+
+        # Check if there are two or more data points 
+        if np.sum(valid) < 2:
+            continue
+
+        # Extract non-masked data points
+        z_valid = z_prof[valid]
+        N2_valid = N2_prof[valid]
+
+        # Ensure vertical coordinate is increasing
+        sort_idx = np.argsort(z_valid)
+
+        z_valid = z_valid[sort_idx]
+        N2_valid = N2_valid[sort_idx]
+
+        # Find common depths contained within this profile
+        inside = (
+            (depth_mid_reg >= z_valid[0])
+            & (depth_mid_reg <= z_valid[-1])
+        )
+
+        # Interpolate N^2
+        Nsquare_reg[idist, inside] = np.interp(
+            depth_mid_reg[inside],
+            z_valid,
+            N2_valid
+        )
+
+    # Mask unstable values before taking square root
+    Nsquare_reg = np.ma.masked_less_equal(Nsquare_reg,0)
+
+    # Compute bouyancy frequency in units of cycles/hour
+    N = np.sqrt(Nsquare_reg) / (2 * np.pi) * 3600 
+
+    #------------------------------------------# 
+    # Compute Mixed Layer Depth
+    #------------------------------------------# 
 
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
 # -----------------------------------------------------------------------------
+
+# Set velocity depth threshold documentation
+if option_depth_mask:
+    depth_avg_desc = f"upper {vel_depth_thresh} meters"
+else:
+    depth_avg_desc = "full water column"
 
 # --- Velocity --- # 
 if option_proc == 'vel': 
@@ -400,7 +512,7 @@ if option_proc == 'vel':
                         dims=['dist','time'],
                         coords=dict(dist=dist,time=time_dt),
                         attrs=dict(
-                            description='The depth averaged x-component (zonal) of velocity  to ' + str(depth_thresh) + ' meters.',
+                            description=f'The depth averaged x-component (zonal) of velocity over the {depth_avg_desc}',
                             units='m/s'
                         )
     )
@@ -409,7 +521,7 @@ if option_proc == 'vel':
                         dims=['dist','time'],
                         coords=dict(dist=dist,time=time_dt),
                         attrs=dict(
-                            description='The depth averaged y-component (meridional) of velocity  to ' + str(depth_thresh) + ' meters.',
+                            description=f'The depth averaged y-component (meridional) of velocity  over the {depth_avg_desc}',
                             units='m/s'
                     )
     )
@@ -418,7 +530,7 @@ if option_proc == 'vel':
                         dims=['dist','time'],
                         coords=dict(dist=dist,time=time_dt),
                         attrs=dict(
-                            description='The depth averaged (integrated to ' + str(depth_thresh) + ' meters) along-transect component of velocity with onshore being in the postive direction and offshore being in the negative direction.',
+                            description=f'The depth averaged (over the {depth_avg_desc}) along-transect component of velocity with onshore being in the postive direction and offshore being in the negative direction.',
                             units='m/s'
                         )
     )
@@ -427,7 +539,7 @@ if option_proc == 'vel':
                         dims=['dist','time'],
                         coords=dict(dist=dist,time=time_dt),
                         attrs=dict(
-                            description='The depth averaged (integrated to ' + str(depth_thresh) + ' meters) cross-transect component of velocity with upcoast in the positive direction and downcoast in the negative direction.',
+                            description=f'The depth averaged (over the {depth_avg_desc}) cross-transect component of velocity with upcoast in the positive direction and downcoast in the negative direction.',
                             units='m/s'
                     )
     )
@@ -479,20 +591,11 @@ elif option_proc == 'density':
                             )
     )
 
-    Density = xr.DataArray(data=density, 
-                        dims=['dist','time','depth'],
-                        coords=dict(dist=dist,time=time_dt,depth=depth),
-                        attrs=dict(
-                            description='In-situ Density profile time series along the CalCOFI line 80 transect.',
-                            units='kg/m^3'
-                            )
-    ) 
-
     SIG = xr.DataArray(data=sigma0, 
                         dims=['dist','time','depth'],
                         coords=dict(dist=dist,time=time_dt,depth=depth),
                         attrs=dict(
-                            description='Potential Density anomaly profile time series along the CalCOFI line 80 transect referenced to the pressure at the sea surface.',
+                            description='Potential Density anomaly profile time series along the CalCOFI line 80 transect referenced to 0 dbar.',
                             units='kg/m^3'
                             )
     ) 
@@ -502,7 +605,7 @@ elif option_proc == 'density':
                         coords=dict(dist=dist,time=time_dt,depth=depth),
                         attrs=dict(
                             description='Conservative temperature profile time series along the CalCOFI line 80 transect.',
-                            units='degrees Celcius'
+                            units='degrees Celsius'
                             )
     ) 
 
@@ -515,9 +618,9 @@ elif option_proc == 'density':
                             )
     ) 
 
-    NZ = xr.DataArray(data=Nz, 
+    N = xr.DataArray(data=N, 
                     dims=['dist','depth_mid'],
-                    coords=dict(dist=dist,depth_mid=depth_mid),
+                    coords=dict(dist=dist,depth_mid=depth_mid_reg),
                     attrs=dict(
                             description='Background buoyancy frequency profile time series along the CalCOFI line 80 transect.',
                             units='cycles/hour'
@@ -525,7 +628,7 @@ elif option_proc == 'density':
     )
 
     # Create data set from data arrays
-    data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'Pressure':Pressure,'Density':Density,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'NZ':NZ})
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'N':N})
 
     # Set file path for saving the netcdf file
     file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_trans.nc"

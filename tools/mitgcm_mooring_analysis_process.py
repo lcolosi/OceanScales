@@ -42,9 +42,6 @@ from scipy.interpolate import PchipInterpolator, interp1d
 #                  surfaces. Options include: 'linear' or 'Pchip'
 # - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
 #                     option_mask is true. Units: meters. 
-# - sig_depth_thresh: Specify the lower depth limit of density depth average. 
-#                     Units: meters.
-# - g: Specify the acceleration due to gravity. Units: m/s^2.
 # - rmsd_thresh: Threshold for significant overturn. Units: kg/m^3. 
 # - threshold_frac: Threshold for continuity of isopycnal surfaces. 
 #                   Units: fraction of time series.
@@ -183,7 +180,7 @@ if option_proc == 'density':
     # Loop through mooring sites
     for isite in range(nsite):
 
-        # Compute buoyancy frequency
+        # Compute buoyancy frequency and midpoint pressure
         Nsquare[isite, :], p_mid = gsw.Nsquared(
             SA_mean[isite, :],
             CT_mean[isite, :],
@@ -191,11 +188,17 @@ if option_proc == 'density':
             lat[isite],
         )
 
-        # Compute the mid-depth 
-        depth_mid[isite, :] = gsw.z_from_p(p_mid,lat[isite])
+        # Convert midpoint pressure to vertical position
+        depth_mid[isite,:] = gsw.z_from_p(p_mid,lat[isite])
 
     # Compute bouyancy frequency in units of cycles/hour
     N = np.sqrt(Nsquare) / (2 * np.pi) * 3600 
+
+    #------------------------------------------# 
+    # Compute Mixed Layer Depth
+    #------------------------------------------# 
+
+
 
     #------------------------------------------# 
     # Transform to Isopycnal Surfaces
