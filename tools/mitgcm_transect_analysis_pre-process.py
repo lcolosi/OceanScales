@@ -24,6 +24,7 @@ import xarray as xr
 from xmitgcm import open_mdsdataset
 from geopy.distance import geodesic
 import xgcm
+import warnings
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,13 @@ sys.path.append(str(PATH_tools))
 # Import plotting toolbox for cartopy figures
 from plotting import status
 from process_mitgcm_data import compute_bearing_angle
+
+# Suppress the interpolation warning message from xgcm
+warnings.filterwarnings(
+    "ignore",
+    message=r"The return type of `Dataset\.dims` will be changed",
+    category=FutureWarning,
+)
 
 status(f"Starting MITgcm pre-processing for the Transect Analysis")
 
