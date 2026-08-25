@@ -46,6 +46,8 @@ import gsw
 # - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
 #                     option_mask is true. Units: meters. 
 # - R_earth: Specify the radius of the Earth. Units: kilometers.
+# - phi : Specifies the potential energy anomaly threshold for computing the mixed
+#         depth. 
 #
 # ------------ # 
 
@@ -55,13 +57,21 @@ option_depth_mask    = True
 
 # Set physical parameters 
 vel_depth_thresh = 400   
-R_earth      = 6371 
+R_earth          = 6371 
+phi              = 100
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
 
 # Set path to project data directory
 PATH_data = ROOT / "data" / "mitgcm" / "transect"
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import analysis functions 
+from ocean_analysis import compute_mld
 
 # Parameter verification
 if option_proc not in ('vel', 'density'):
@@ -381,7 +391,7 @@ if option_proc == 'density':
     # Initialize regularly gridded N^2
     Nsquare_reg = np.ma.masked_all((ndist, depth_mid_reg.size))
 
-    # Interpolate each transect profile
+    # Loop through distance off shore
     for idist in range(ndist):
 
         # Extract local profile
@@ -427,6 +437,31 @@ if option_proc == 'density':
     #------------------------------------------# 
     # Compute Mixed Layer Depth
     #------------------------------------------# 
+
+    # Set the positive downward depth vector
+    depth_pos = np.abs(depth)
+
+    # Initialize arrays 
+    mld = np.ma.masked_all((ndist, ntime))
+
+    # Loop through distance off shore 
+    for idist in range(ndist):
+
+        # Loop through time 
+        for itime in range(ntime):
+
+            # Extract density profile
+            sigma0_prof = sigma0[idist, itime, :]
+
+            # Skip fully masked profiles
+            if np.ma.getmaskarray(sigma0_prof).all():
+                continue
+
+            # Compute MLD using the potential energy anomaly method
+            mld[idist, itime] = compute_mld(depth_pos, density=sigma0_prof, method='potential_energy', phi=phi)
+
+    # Mask nan values
+    mld = np.ma.masked_invalid(mld)
 
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
@@ -582,15 +617,6 @@ elif option_proc == 'density':
     )
 
     # --- Sea State Varibles --- # 
-    Pressure = xr.DataArray(data=pressure, 
-                        dims=['dist','time','depth'],
-                        coords=dict(dist=dist,time=time_dt,depth=depth),
-                        attrs=dict(
-                            description='Pressure profile time series along the CalCOFI line 80 transect.',
-                            units='dbar'
-                            )
-    )
-
     SIG = xr.DataArray(data=sigma0, 
                         dims=['dist','time','depth'],
                         coords=dict(dist=dist,time=time_dt,depth=depth),
@@ -627,8 +653,17 @@ elif option_proc == 'density':
                             )
     )
 
+    MLD = xr.DataArray(data=mld, 
+                    dims=['dist','time'],
+                    coords=dict(dist=dist,time=time_dt),
+                    attrs=dict(
+                            description='Mixed layer depth along the CalCOFI line 80 transect computed using the potential energy anomaly method.',
+                            units='meters'
+                            )
+    )
+
     # Create data set from data arrays
-    data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal, 'N':N})
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'DIST':DIST,'SIG':SIG,'CTemp':CTemp,'ASal':ASal,'N':N,'MLD':MLD})
 
     # Set file path for saving the netcdf file
     file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_trans.nc"

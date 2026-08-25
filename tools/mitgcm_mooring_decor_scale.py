@@ -33,7 +33,7 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import plotting toolbox 
+# Import analysis functions 
 from autocorr import compute_autocorr_biased, compute_decor_scale, compute_decor_scale_unc, segment_time_series
 from lsf import unweighted_lsf, detrend, compute_fve
 from filter import gaussian_low_pass_filter  
@@ -195,7 +195,7 @@ for isite in tqdm(range(nsite), desc="Computing Least-Squares Fit", unit="moorin
         # Set the time series 
         data_ts = data[isite,:,idepth]
 
-        # Skip grid points containing only masked data
+        # Skip time series containing only masked data
         if np.ma.getmaskarray(data_ts).all():
             continue
 

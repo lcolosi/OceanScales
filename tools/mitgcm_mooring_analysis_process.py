@@ -19,6 +19,7 @@
 # =============================================================================
 
 # Import python libraries 
+import sys
 import os
 from pathlib import Path
 import xarray as xr
@@ -42,6 +43,8 @@ from scipy.interpolate import PchipInterpolator, interp1d
 #                  surfaces. Options include: 'linear' or 'Pchip'
 # - vel_depth_thresh: Specify the lower depth limit of velocity depth average if 
 #                     option_mask is true. Units: meters. 
+# - phi : Specifies the potential energy anomaly threshold for computing the mixed
+#         depth.
 # - rmsd_thresh: Threshold for significant overturn. Units: kg/m^3. 
 # - threshold_frac: Threshold for continuity of isopycnal surfaces. 
 #                   Units: fraction of time series.
@@ -53,6 +56,7 @@ option_proc          = 'density'
 option_interp        = 'Pchip'
 
 # Set physical parameters 
+phi              = 100
 rmsd_thresh      = 1e-3
 threshold_frac   = 0.75
 
@@ -61,6 +65,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Set path to project data directory
 PATH_data = ROOT / "data" / "mitgcm" / "mooring"
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import analysis functions 
+from ocean_analysis import compute_mld
 
 # Parameter verification
 if option_proc not in ('vel', 'density'):
@@ -198,7 +209,30 @@ if option_proc == 'density':
     # Compute Mixed Layer Depth
     #------------------------------------------# 
 
+    # Set the positive downward depth vector
+    depth_pos = np.abs(depth)
 
+    # Initialize arrays 
+    mld = np.ma.masked_all((nsite, ntime))
+
+    # Loop through moorings 
+    for isite in range(nsite):
+
+        # Loop through time 
+        for itime in range(ntime):
+
+            # Extract density profile
+            sigma0_prof = sigma0[isite, itime, :]
+
+            # Skip fully masked profiles
+            if np.ma.getmaskarray(sigma0_prof).all():
+                continue
+
+            # Compute MLD using the potential energy anomaly method
+            mld[isite, itime] = compute_mld(depth_pos, density=sigma0_prof, method='potential_energy', phi=phi)
+
+    # Mask nan values
+    mld = np.ma.masked_invalid(mld)
 
     #------------------------------------------# 
     # Transform to Isopycnal Surfaces
@@ -413,15 +447,6 @@ if option_proc == 'density':
     )
 
     # --- Sea State Variables --- # 
-    Pressure = xr.DataArray(data=pressure, 
-                        dims=['site','time','depth'],
-                        coords=dict(site=site,time=time_dt,depth=depth),
-                        attrs=dict(
-                            description='Pressure profile time series for the three CCE mooring sites.',
-                            units='dbar'
-                            )
-    )
-
     SIG = xr.DataArray(data=sigma0, 
                         dims=['site','time','depth'],
                         coords=dict(site=site,time=time_dt,depth=depth),
@@ -453,7 +478,7 @@ if option_proc == 'density':
                       dims=['depth_mid_cce1'],
                       coords=dict(depth_mid_cce1=depth_mid[0,:]),
                       attrs=dict(
-                            description='Background Buoyancy Frequency profile at the CCE1 mooring sites.',
+                            description='Background Buoyancy Frequency profile at the CCE1 mooring site.',
                             units='cycles/hour'
                             )
     )
@@ -462,7 +487,7 @@ if option_proc == 'density':
                       dims=['depth_mid_cce2'],
                       coords=dict(depth_mid_cce2=depth_mid[1,:]),
                       attrs=dict(
-                            description='Background Buoyancy Frequency profile at the CCE2 mooring sites.',
+                            description='Background Buoyancy Frequency profile at the CCE2 mooring site.',
                             units='cycles/hour'
                             )
     )
@@ -471,8 +496,17 @@ if option_proc == 'density':
                       dims=['depth_mid_cce3'],
                       coords=dict(depth_mid_cce3=depth_mid[2,:]),
                       attrs=dict(
-                            description='Background Buoyancy Frequency profile at the CCE3 mooring sites.',
+                            description='Background Buoyancy Frequency profile at the CCE3 mooring site.',
                             units='cycles/hour'
+                            )
+    )
+
+    MLD = xr.DataArray(data=mld, 
+                    dims=['site','time'],
+                    coords=dict(site=site,time=time_dt),
+                    attrs=dict(
+                            description='Mixed layer depth at the CCE mooring sites computed using the potential energy anomaly method.',
+                            units='meters'
                             )
     )
 
@@ -558,7 +592,7 @@ if option_proc == 'density':
         )
 
     # Create data set from data arrays
-    data = xr.Dataset({'LON':LON,'LAT':LAT,'Pressure':Pressure,'SIG':SIG,'CTemp':CTemp,'ASal':ASal,'N1':N1,'N2':N2,'N3':N3,'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'SIG':SIG,'CTemp':CTemp,'ASal':ASal,'N1':N1,'N2':N2,'N3':N3,'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
 
     # Set file path for saving the netcdf file
     file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_mooring.nc"
