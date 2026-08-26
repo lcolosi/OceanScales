@@ -70,7 +70,7 @@ status(f"Starting MITgcm pre-processing for the Regional Analysis")
 delta_t = 150  
 
 # Set time and space parameters  
-depth      = 0.5                                                         
+depth      = 10                                                         
 lat_bnds   = [33.0, 35.0]                                          
 lon_bnds   = [237.0, 240.0]
 halo_cells = 3                                          

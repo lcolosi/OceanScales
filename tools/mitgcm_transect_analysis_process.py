@@ -53,7 +53,7 @@ from tqdm import tqdm
 # ------------ # 
 
 # Set processing parameters
-option_proc          = 'density'        
+option_proc          = 'vel'        
 option_depth_mask    = True      
 
 # Set physical parameters 
@@ -102,8 +102,8 @@ if option_proc == 'vel':
     dist   = nc_u.variables['distance'][:]
     time   =  num2date(nc_u.variables['time'][:], nc_u.variables['time'].units)
 
-    u = nc_u.variables['U_center'][:]
-    v  = nc_v.variables['V_center'][:]
+    u = nc_u.variables['UVEL'][:]
+    v  = nc_v.variables['VVEL'][:]
 
     # Mask dry cells previously set to NaN during preprocessing
     u_m = np.ma.masked_invalid(u)
@@ -190,7 +190,7 @@ if option_proc == 'vel':
     v_bar = np.ma.masked_all((ndist, ntime))
 
     # Loop through distance from shore
-    for idist in range(ndist):
+    for idist in tqdm(range(ndist), desc="Computing Depth Average Velocity", unit="distance"):
 
         # Loop through time 
         for itime in range(ntime):
