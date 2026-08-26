@@ -250,7 +250,7 @@ else:
 # Initialize arrays 
 fve = np.ma.masked_all((nsite,ndepth))
 
-# Loop through longitude
+# Loop over each site
 for isite in tqdm(range(nsite), desc="Computing Fraction of Variance Explained", unit="mooring site"):
 
     # Loop over each depth
@@ -406,6 +406,17 @@ FVE = xr.DataArray(data=fve,
 
 # Create data set from data arrays 
 data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'FVE':FVE})
+
+# Set global variables to document the processing parameters used 
+data.attrs.update({
+    "variable": option_data,
+    "interannual_method": option_interannual,
+    "seasonal_harmonics": option_harmonics,
+    "segment_duration_years": segment_duration,
+    "segment_overlap": segment_overlap,
+    "segment_processing": seg_proc,
+    "sampling_interval_seconds": dt,
+})
 
 # Set file path for saving the netcdf file
 file_path = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}.nc"

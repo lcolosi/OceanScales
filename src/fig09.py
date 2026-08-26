@@ -54,6 +54,8 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 #                 (units: meters). Not used for SSH.
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
+# - option_detrend_seg: Specifies whether each segment is detrended or not. 
+#                        Options: True or False
 # - ns : Noise to signal ratio. 
 #
 # ------------#
