@@ -95,7 +95,6 @@ nc = Dataset(filename_mitgcm, 'r')
 # Extract data variables
 dist    = nc.variables['dist'][:]
 depth   = nc.variables['depth'][:]
-lon     = nc.variables['LON'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 Lt_std  = nc.variables['decor_scale_std'][:]
@@ -109,7 +108,8 @@ filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_trans.nc"
 nc = Dataset(filename_mld, 'r')
 
 # Extract data variables
-mld  = nc.variables['MLD'][:]
+lon = nc.variables['LON'][:]
+mld = nc.variables['MLD'][:]
 
 # --- Bathymetry --- # 
 
@@ -159,7 +159,7 @@ data_mask = np.where(Lt_mask, 1, np.nan)
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-level = np.arange(5,40+1,1)
+level = np.arange(15,40+1,1)
 cmap = cmo.amp
 
 # Create figure
@@ -176,7 +176,6 @@ ax.contourf(
     levels=[0.5, 1.5],      
     hatches=['///'],       
     colors='none',          
-    linewidths=0,
     zorder=10,              
 )
 
@@ -186,6 +185,7 @@ ax.fill_between(dist, abs(water_depth), abs(depth[-1]), color='0.4')
 # Set axis attributes
 ax.set_xlabel('Distance from shore (km)')
 ax.set_ylabel('Depth (m)')
+#ax.set_xlim(0,275)
 ax.set_ylim(0,200)
 ax.set_xticks(np.arange(0,250+25,25))
 ax.invert_xaxis()
@@ -196,7 +196,7 @@ ax.grid(linestyle='--',alpha=0.3,color='grey')
 cax = fig.add_axes([0.96, 0.16, 0.025, 0.73])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
 cbar.set_label('Decorrelation Scale (days)')
-cbar.set_ticks(np.arange(5,40+5,5))
+cbar.set_ticks(np.arange(15,40+5,5))
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()

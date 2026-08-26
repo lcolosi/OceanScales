@@ -60,6 +60,8 @@ from filter import gaussian_low_pass_filter
 #                    (e.g., 0.75 for 75% overlap).
 # - segment_duration: Specifies the length of each segment in years.
 # - depth_lim : Specifies the deepest depth to preform analysis. 
+# - lat_bnds: Latitude bounds setting the region of interest.
+# - lon_bnds: Longitude bounds setting the region of interest.
 #
 # ------------#
 
@@ -67,7 +69,7 @@ from filter import gaussian_low_pass_filter
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_harmonics   = 2      
-option_detrend_seg = False
+option_detrend_seg = True
 
 # Set time and space parameters
 dt               = 3600    
@@ -75,6 +77,8 @@ T_annual         = 365.25*(24)*(60)*(60)
 segment_overlap  = 0.5                                        
 segment_duration = 1   
 depth_lim        = -220 
+lat_bnds         = [33.0, 35.0]                                          
+lon_bnds         = [237.0, 240.0]
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density", "uvel", "vvel"):
@@ -113,7 +117,7 @@ if option_data in ("temp", "sal", "density"):
         PATH_processed
         / f"mitgcm_proc_density_hrly_trans.nc"
     )
-elif option_data in ("uvel", "vvel"):
+elif option_data in ("u_along", "v_cross"):
     filename = (
         PATH_processed
         / f"mitgcm_proc_vel_hrly_trans.nc"
@@ -125,6 +129,8 @@ else:
 with Dataset(filename, "r") as nc:
     dist  = nc.variables["dist"][:]
     depth = nc.variables["depth"][:]
+    lon   = nc.variables["LON"][:]
+    lat   = nc.variables["LAT"][:]
 
     time = num2date(
         nc.variables["time"][:],
@@ -148,11 +154,26 @@ time_dt = np.array(
     ]
 )
 
-# Select depth levels shallower than the depth limit 
+# Select depth levels shallower than the depth limit
 idx_depth = depth >= depth_lim
 
-# Extract depth and data from the specified depth levels
+# Select transect locations within the study region
+dist_mask = (
+    (lat >= lat_bnds[0])
+    & (lat <= lat_bnds[1])
+    & (lon >= lon_bnds[0])
+    & (lon <= lon_bnds[1])
+)
+idx_dist = np.where(dist_mask)[0]
+
+# Extract coordinates within the specified region
 depth = depth[idx_depth]
+dist  = dist[idx_dist]
+lon   = lon[idx_dist]
+lat   = lat[idx_dist]
+
+# Extract data within the specified region
+data = data[idx_dist, :, :]
 data = data[:, :, idx_depth]
 
 # -----------------------------------------------------------------------------
@@ -174,7 +195,7 @@ data = data[:, :, idx_depth]
 w = 2 * np.pi * np.arange(1, option_harmonics + 1) / T_annual
 
 # Set option for linear trend
-linear_trend = option_interannual == "linear"
+linear_trend = False #option_interannual == "linear"
 
 # Compute the elapsed time from beginning of time series (units: seconds)
 t0 = time[0]
@@ -352,10 +373,29 @@ for idist in tqdm(range(ndist), desc="Computing Decorrelation Scales", unit="dis
 Lt_days      = Lt/(24*60*60) 
 Lt_stdm_days = Lt_stdm/(24*60*60) 
 Lt_std_days  = Lt_std/(24*60*60) 
-        
+
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
 # -----------------------------------------------------------------------------
+
+# --- Coordinates --- # 
+LON = xr.DataArray(data=lon, 
+                    dims=['dist'],
+                    coords=dict(dist=dist),
+                    attrs=dict(
+                        description='Longitude along CalCOFI line 80 transect within study region.',
+                        units='degrees'
+                        )
+)
+
+LAT = xr.DataArray(data=lat, 
+                    dims=['dist'],
+                    coords=dict(dist=dist),
+                    attrs=dict(
+                        description='Latitude along CalCOFI line 80 transect within study region.',
+                        units='degrees'
+                        )
+)
 
 # --- Decorrelation Time Scales --- # 
 decor_scale = xr.DataArray(data=Lt_days,
@@ -406,7 +446,7 @@ FVE = xr.DataArray(data=fve,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'FVE':FVE})
+data = xr.Dataset({'LON':LON,'LAT':LAT,'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'FVE':FVE})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
