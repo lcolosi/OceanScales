@@ -57,6 +57,8 @@ from filter import gaussian_low_pass_filter
 # - option_depth: Specifies the water depth which the time series is extracted from 
 #                 at each mooring.
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit. 
+# - option_detrend_seg: Specifies whether each segment is detrended or not. 
+#                        Options: True or False
 # - dt: Specify the model time resolution (units: seconds)
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
@@ -69,6 +71,7 @@ from filter import gaussian_low_pass_filter
 option_interannual = 'linear'    
 option_depth       = 9 
 option_harmonics   = 2
+option_detrend_seg = True
  
 # Set time and space parameters
 dt               = 1*(60)*(60)     
@@ -102,8 +105,8 @@ lat   = nc.variables['LAT'][:]
 time  =  num2date(nc.variables['time'][:], nc.variables['time'].units)
 sig = nc.variables['SIG'][:]
 
-# Mask data at fill values (zero for the MITgcm output)
-sig_m = np.ma.masked_where(sig == 0, sig)
+# Mask dry cells previously set to NaN during preprocessing
+sig_m = np.ma.mask_invalid(sig)
 
 # Convert cftime.DatetimeGregorian to Python datetime objects
 time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second) for d in time])
@@ -133,9 +136,6 @@ sig_depth = sig_m[:, :, depth_index]
 # independently from the original time series before both are removed.
 # ------------ # 
 
-# Set the dimensions of the array
-nsite,ntime = np.shape(sig_depth)
-
 # Set the radian frequencies for the seasonal cycle LSF (units: rad/sec)
 w = 2 * np.pi * np.arange(1, option_harmonics + 1) / T_annual
 
@@ -146,9 +146,12 @@ linear_trend = option_interannual == "linear"
 t0 = time[0]
 time_elapsed = np.array([(t - t0).total_seconds() for t in time])
 
+# Obtain the dimensions of the sigma0 array
+nsite,ntime = np.shape(sig_depth)
+
 # Initialize arrays 
-fit = np.ma.zeros((nsite,ntime))
-sig_res = np.ma.zeros((nsite,ntime))
+fit = np.ma.masked_all((nsite,ntime))
+sig_res = np.ma.masked_all((nsite,ntime))
 
 # Loop through mooring sites 
 for isite in range(nsite): 
@@ -162,7 +165,8 @@ for isite in range(nsite):
                                            parameters=option_harmonics, 
                                            freqs=w, 
                                            sigma=None, 
-                                           linear_trend=linear_trend)
+                                           linear_trend=linear_trend
+                                           )
 
     # Compute the residual time series 
     sig_res[isite,:] = data_ts - fit[isite,:]
@@ -172,7 +176,6 @@ if option_interannual == 'gaussian':
 
     # Initialize arrays for the low-pass interannual signal and final residuals
     sig_interannual = np.ma.zeros((nsite, ntime))
-    sig_filtered = np.ma.zeros((nsite, ntime))
 
     # Loop through mooring sites
     for isite in range(nsite):
@@ -181,19 +184,15 @@ if option_interannual == 'gaussian':
         data_ts = np.ma.masked_invalid(sig_depth[isite, :])
 
         # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-        sig_interannual[isite, :] = gaussian_low_pass_filter(
-            data_ts,
-            fwhm_days=365,
-            dt_hours=1,
-            mode='constant',
-            truncate=4,
-        )
+        sig_interannual[isite, :] = gaussian_low_pass_filter(data_ts,
+                                                             fwhm_days=365,
+                                                             dt_hours=1,
+                                                             mode='constant',
+                                                             truncate=4,
+                                                            )
 
-        # Remove interannual variability
-        sig_filtered[isite, :] = data_ts - sig_interannual[isite, :]
-
-    # Remove the interannual variability from the seasonal cycle anomaly
-    sig_res = sig_res - sig_filtered
+    # Remove seasonal and interannual variability
+    sig_res = sig_depth - fit - sig_interannual
 
 # Set the model for the interannual and seasonal cycles 
 if option_interannual == 'gaussian': 
@@ -206,13 +205,15 @@ else:
 # -----------------------------------------------------------------------------
 
 # Segment a single time series 
-segments = segment_time_series(time, 
+segments = segment_time_series(time_dt, 
                                sig_res[0,:], 
                                duration=segment_duration, 
-                               overlap=segment_overlap)
+                               overlap=segment_overlap
+                               )
 
 # Obtain the dimensions of the segmented time series
-nseg,ntime_seg = np.shape(segments)[0], np.shape(segments)[2]
+nseg = len(segments)
+ntime_seg = len(segments[0][0])
 
 # Intialize arrays 
 autocorr_seg   = np.zeros((nsite,nseg,2*ntime_seg-1))

@@ -53,7 +53,7 @@ from filter import gaussian_low_pass_filter
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
-# - option_detrend_Sseg: Specifies whether each segment is detrended or not. 
+# - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
@@ -68,13 +68,13 @@ option_data        = 'density'
 option_depth       = 9   
 option_interannual = 'linear' 
 option_harmonics   = 2      
-option_detrend_seg = False
+option_detrend_seg = True
 
 # Set time and space parameters
 dt               = 3600    
 T_annual         = 365.25*(24)*(60)*(60)    
 segment_overlap  = 0.5                                        
-segment_duration = 1    
+segment_duration = 0.5    
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density", "uvel", "vvel", "ssh"):
@@ -432,13 +432,15 @@ data.attrs.update({
 if option_data == "ssh":
     file_path = (
         PATH_processed
-        / f"mitgcm_decor_scale_ssh_hrly_reg_{option_interannual}_{seg_proc}.nc"
+        / f"mitgcm_decor_scale_ssh_hrly_reg_{option_interannual}_{seg_proc}_"
+          f"seg_duration_{segment_duration}.nc"
     )
 else:
     file_path = (
         PATH_processed
         / f"mitgcm_decor_scale_{option_data}_hrly_reg_"
-          f"depth_{option_depth}m_{option_interannual}_{seg_proc}.nc"
+          f"depth_{option_depth}m_{option_interannual}_{seg_proc}_"
+          f"seg_duration_{segment_duration}.nc"
     )
 
 # Check if file exists, then delete it

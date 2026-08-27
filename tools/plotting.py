@@ -19,6 +19,7 @@ import cartopy.feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import matplotlib.dates as mdates
 from datetime import datetime
+import matplotlib.transforms as transforms
 
 # --- Coastline and Land Mask Function --- #
 def set_coastlines(
@@ -370,6 +371,99 @@ def add_scalebar(
             ha='center', va='bottom',
             transform=ccrs.PlateCarree(),
             **text_kwargs)
+
+
+# --- Plot Top Axis Markers --- #
+def add_x_axis_marker(
+    ax,
+    x_pos,
+    marker,
+    label,
+    y_marker=1.01,
+    y_text=1.07,
+    ms=6,
+    x_text_offset_pts=0.0,
+    markerfacecolor="white",
+    markeredgecolor="k",
+    fontsize=10,
+):
+    """
+    Add a marker above the top x-axis with a text label.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes on which to draw the marker and label.
+    x_pos : float
+        Marker position along the x-axis in data coordinates.
+    marker : str
+        Matplotlib marker symbol.
+    label : str
+        Text label to place above the marker.
+    y_marker : float, optional
+        Vertical marker position in axes coordinates. Values greater
+        than 1 place the marker above the plotting area. Default is 1.01.
+    y_text : float, optional
+        Vertical text position in axes coordinates. Default is 1.07.
+    ms : float, optional
+        Marker size. Default is 6.
+    x_text_offset_pts : float, optional
+        Horizontal text offset from the marker in points. Positive values
+        shift the text right and negative values shift it left.
+        Default is 0.0.
+    markerfacecolor : str or tuple, optional
+        Marker face color. Default is "white".
+    markeredgecolor : str or tuple, optional
+        Marker edge color. Default is "k".
+    fontsize : float, optional
+        Text label font size. Default is 10.
+
+    Returns
+    -------
+    None
+    """
+
+    # Use data coordinates for x and axes coordinates for y
+    marker_transform = transforms.blended_transform_factory(
+        ax.transData,
+        ax.transAxes,
+    )
+
+    # Plot marker above the top axis
+    ax.plot(
+        x_pos,
+        y_marker,
+        marker=marker,
+        linestyle="None",
+        markersize=ms,
+        markerfacecolor=markerfacecolor,
+        markeredgecolor=markeredgecolor,
+        transform=marker_transform,
+        clip_on=False,
+        zorder=10,
+    )
+
+    # Apply an optional horizontal offset to the text label
+    text_transform = transforms.offset_copy(
+        marker_transform,
+        fig=ax.figure,
+        x=x_text_offset_pts,
+        y=0.0,
+        units="points",
+    )
+
+    # Add text label above the marker
+    ax.text(
+        x_pos,
+        y_text,
+        label,
+        ha="center",
+        va="bottom",
+        fontsize=fontsize,
+        transform=text_transform,
+        clip_on=False,
+        zorder=10,
+    )
 
 
 # --- Status Message --- # 

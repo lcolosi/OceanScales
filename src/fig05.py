@@ -37,7 +37,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox for cartopy figures
-from plotting import set_cbar
+from plotting import add_x_axis_marker
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -60,13 +60,13 @@ from plotting import set_cbar
 # Set processing parameters
 option_data        = 'density'    
 option_interannual = 'linear' 
-option_detrend_seg = False
+option_detrend_seg = True
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # Set uncertainty estimate parameters
-ns = 1
+ns = 1.5
 
 # Set font and fontsize using LaTeX 
 fontsize=18
@@ -95,6 +95,8 @@ nc = Dataset(filename_mitgcm, 'r')
 # Extract data variables
 dist    = nc.variables['dist'][:]
 depth   = nc.variables['depth'][:]
+lon     = nc.variables['LON'][:]
+lat     = nc.variables['LAT'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 Lt_std  = nc.variables['decor_scale_std'][:]
@@ -108,7 +110,6 @@ filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_trans.nc"
 nc = Dataset(filename_mld, 'r')
 
 # Extract data variables
-lon = nc.variables['LON'][:]
 mld = nc.variables['MLD'][:]
 
 # --- Bathymetry --- # 
@@ -120,7 +121,11 @@ filename_bathy = PATH_data / "mitgcm" / "transect" / "DEPTH_CCS_trans.nc"
 nc_bathy = Dataset(filename_bathy, 'r')
 
 # Extract data variables
+dist_wd     = nc.variables['dist'][:]
 water_depth = nc_bathy.variables['water_depth'][:]
+
+# Set the depth at the coast to zero 
+water_depth[0] = 0
 
 # --- CCE Mooring Locations --- # 
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
@@ -140,7 +145,7 @@ mld_std = np.ma.var(mld,axis=1,ddof=1)
 Lt_reg_mean = np.ma.mean(Lt)
 
 # Compute the relative uncertainty (with respect to the regional mean)
-Lt_rel_unc = Lt_stdm / (Lt - Lt_reg_mean)
+Lt_rel_unc = Lt_stdm / np.abs(Lt - Lt_reg_mean)
 
 # Mask not statistically significant grid points
 Lt_mask = np.ma.getmask(np.ma.masked_greater_equal(Lt_rel_unc, ns))
@@ -163,7 +168,7 @@ level = np.arange(15,40+1,1)
 cmap = cmo.amp
 
 # Create figure
-fig, ax = plt.subplots(figsize=(10,5))
+fig, ax = plt.subplots(figsize=(12,5))
 
 # Plot decorrelation time scale
 cf = ax.contourf(dist,abs(depth),Lt.T, levels=level, cmap=cmap, extend='both')
@@ -180,20 +185,21 @@ ax.contourf(
 )
 
 # Plot the ocean bottom depth 
-ax.fill_between(dist, abs(water_depth), abs(depth[-1]), color='0.4') 
+ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
 
 # Set axis attributes
 ax.set_xlabel('Distance from shore (km)')
 ax.set_ylabel('Depth (m)')
-#ax.set_xlim(0,275)
+ax.set_xlim(0,dist[-1])
 ax.set_ylim(0,200)
 ax.set_xticks(np.arange(0,250+25,25))
+ax.set_yticks(np.arange(0,200+25,25))
 ax.invert_xaxis()
 ax.invert_yaxis()
-ax.grid(linestyle='--',alpha=0.3,color='grey')
+ax.grid(linestyle='--',alpha=0.1,color='k')
 
 # Set colorbar
-cax = fig.add_axes([0.96, 0.16, 0.025, 0.73])
+cax = fig.add_axes([0.915, 0.125, 0.025, 0.73])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
 cbar.set_label('Decorrelation Scale (days)')
 cbar.set_ticks(np.arange(15,40+5,5))
@@ -230,10 +236,10 @@ dist1 = np.interp(lon1, lon_sorted, dist_sorted)
 dist2 = np.interp(lon2, lon_sorted, dist_sorted)
 dist3 = np.interp(lon3, lon_sorted, dist_sorted)
 
-# Add CCE1, CCE2, and CCE3 locations 
-# add_freq_marker(ax_top, dist1, '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
-# add_freq_marker(ax_top, dist2, '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
-# add_freq_marker(ax_top, dist3, '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
+# Add CCE1, CCE2, and CCE3 locations markers
+add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
+add_x_axis_marker(ax_top, dist2, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
+add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
 # Plot vertical lines at CCE1, CCE2, and CCE3 locations
 ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)

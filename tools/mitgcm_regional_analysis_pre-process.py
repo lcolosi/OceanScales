@@ -43,6 +43,7 @@ warnings.filterwarnings(
 )
 
 status(f"Starting MITgcm pre-processing for the Regional Analysis")
+
 # -----------------------------------------------------------------------------
 # Set data parameters
 # -----------------------------------------------------------------------------

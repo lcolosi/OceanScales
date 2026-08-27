@@ -195,7 +195,7 @@ data = data[:, :, idx_depth]
 w = 2 * np.pi * np.arange(1, option_harmonics + 1) / T_annual
 
 # Set option for linear trend
-linear_trend = False #option_interannual == "linear"
+linear_trend = option_interannual == "linear"
 
 # Compute the elapsed time from beginning of time series (units: seconds)
 t0 = time[0]

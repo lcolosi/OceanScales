@@ -64,7 +64,7 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 option_data        = 'density'    
 option_depth       = 9   
 option_interannual = 'linear' 
-option_detrend_seg = False
+option_detrend_seg = True
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -146,10 +146,10 @@ calCOFI_lon   = calCOFI_line80[:, 2]
 # -----------------------------------------------------------------------------
 
 # Compute spatial mean
-Lt_reg_mean = np.ma.mean(Lt, axis=(0, 1))
+Lt_reg_mean = np.ma.mean(Lt)
 
 # Compute the relative uncertainty (with respect to the regional mean)
-Lt_rel_unc = Lt_stdm / (Lt - Lt_reg_mean)
+Lt_rel_unc = Lt_stdm / np.abs(Lt - Lt_reg_mean)
 
 # Mask not statistically significant grid points
 Lt_mask = np.ma.getmask(np.ma.masked_greater_equal(Lt_rel_unc, ns))
@@ -175,25 +175,36 @@ resolution = "10m"
 bounds = np.arange(0,360+40,40)
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(15,40+1,1) 
+levels = np.arange(5,20+0.5,0.5) 
 level_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
 fontsize_g = 18
 fontsize_c = 10
+cmap = cmo.amp
 
 # Create figure
 fig, ax = plt.subplots(figsize=(12, 8), subplot_kw={"projection": projection})
 
 # Plot coastlines and land 
-set_coastlines(ax, projection, resolution, lon_min=lon_min, lon_max=lon_max, 
-               lat_min=lat_min, lat_max=lat_max) 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
 
 # Plot decorrelation time scales
 ct = ax.contourf(
-    lon, lat, Lt, levels=levels,
+    lon, 
+    lat, 
+    Lt, 
+    levels=levels,
     transform=ccrs.PlateCarree(),
-    cmap=cmo.amp, 
-    extend = 'both'
+    cmap=cmap, 
+    extend='both'
 )
 
 # Overlay a contourf with hatching for the non-significant regions
@@ -202,7 +213,7 @@ ax.contourf(
     lat,
     data_mask,
     levels=[0.5, 1.5],      
-    hatches=['///'],        
+    hatches=['..'],        
     colors='none',          
     zorder=10,              
     transform=ccrs.PlateCarree()
@@ -210,9 +221,12 @@ ax.contourf(
 
 # Plot the CCE1 mooring point
 ax.scatter(
-    lon1, lat1, 
+    lon1, 
+    lat1, 
     color='w',
-    edgecolor='black', marker='^', s=40, 
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
     transform=ccrs.PlateCarree(),
     zorder=10, 
     label='CCE1'
@@ -220,9 +234,12 @@ ax.scatter(
 
 # Plot the CCE2 mooring point
 ax.scatter(
-    lon2, lat2, 
+    lon2, 
+    lat2, 
     color='w',  
-    edgecolor='black', marker='s', s=40,  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
     transform=ccrs.PlateCarree(),
     zorder=10, 
     label='CCE2'
@@ -230,19 +247,54 @@ ax.scatter(
 
 # Plot the CCE3 mooring point
 ax.scatter(
-    lon3, lat3, 
+    lon3, 
+    lat3, 
     color= 'w',  
-    edgecolor='black', marker='o', s=40,  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
     transform=ccrs.PlateCarree(),
     zorder=10, 
     label='CCE3'
 )
 
 # Plot depth contour lines
-ct1 = ax.contour(lon_b, lat_b, -1*(bathy),levels=levels_ms, colors='black', linewidths=0.5, linestyles='dashed')
-ct2 = ax.contour(lon_b, lat_b, -1*(bathy),levels=[2000], colors='black', linewidths=1, linestyles='solid')
-ct3 = ax.contour(lon_b, lat_b, -1*(bathy),levels=level_is, colors='black', linewidths=0.5, linestyles='dashed')
-ct4 = ax.contour(lon_b, lat_b, -1*(bathy),levels=[200], colors='black', linewidths=1, linestyles='solid')
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=level_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
 plt.clabel(ct1, fontsize=fontsize_c)
 plt.clabel(ct2, fontsize=fontsize_c)
 plt.clabel(ct3, fontsize=fontsize_c)
@@ -250,7 +302,8 @@ plt.clabel(ct4, fontsize=fontsize_c)
 
 # Plot Line 80 CalCOFI Stations
 ax.plot(
-    calCOFI_lon % 360, calCOFI_lat,
+    calCOFI_lon % 360, 
+    calCOFI_lat,
     color='k',
     linestyle=(0, (5, 3)),  
     linewidth=1.5,
@@ -269,7 +322,7 @@ set_grid_ticks(
     color='k',
     lw=1,
     ls='--',
-    alpha=0.3
+    alpha=0.1
 )
 
 # Create colormap
@@ -282,7 +335,7 @@ set_cbar(
     extend="both",
     label='Decorrelation Scale (days)',
     fontsize=fontsize_g,
-    ticks=np.arange(15,40+5,5), 
+    ticks=np.arange(5,20+5,5), 
     invert = False
 )
 
