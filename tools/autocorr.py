@@ -273,6 +273,11 @@ def compute_decor_scale_unc(
         Standard deviation of decorrelation scales for individual
         realizations, estimated from the projected autocorrelation
         deviations.
+    
+    decor_scale_stds : float 
+        Standard error of the standard deviation of the decorrelation scale
+        computed from the mean autocorrelation, accounting approximately for 
+        dependence between overlapping segments.
     """
 
     # Convert inputs to arrays
@@ -357,18 +362,29 @@ def compute_decor_scale_unc(
     projected_var = np.var(q, ddof=1)
     decor_scale_std = np.sqrt(projected_var)
 
-    # Approximate effective number of independent segments
-    nseg_eff = nseg / (
+    # Approximate effective number of independent segments for uncertainty of the mean
+    nseg_eff_mean = nseg / (
         1.0
         + 2.0
         * (1.0 - 1.0 / nseg)
         * overlap
     )
 
-    # Compute standard error of the decorrelation scale from the mean
-    decor_scale_stdm = decor_scale_std / np.sqrt(nseg_eff)
+    # Approximate effective number of independent segments for uncertainty of the variance/std
+    nseg_eff_var = nseg / (
+        1.0
+        + 2.0
+        * (1.0 - 1.0 / nseg)
+        * overlap**2
+    )
 
-    return decor_scale_stdm, decor_scale_std
+    # Compute standard error of the decorrelation scale from the mean
+    decor_scale_stdm = decor_scale_std / np.sqrt(nseg_eff_mean)
+
+    # Compute the standard error of the standard deviation of the decorrelation scale
+    decor_scale_stds = decor_scale_std / np.sqrt(2 * (nseg_eff_var - 1))
+
+    return decor_scale_stdm, decor_scale_std, decor_scale_stds
 
 
 # --- Analytic Solution of the Autocorrelation --- # 
