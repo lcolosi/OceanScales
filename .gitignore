@@ -8,12 +8,14 @@ data/mitgcm/
 data/calcofi/
 
 # Figs directory
+figs/figS*.png
 
 # Docs directory 
 docs/
 
 # Src directory
 src/__pycache__/
+src/figS*.py
 
 # Tools directory
 tools/__pycache__/
