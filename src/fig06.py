@@ -1,5 +1,5 @@
 # =============================================================================
-# Figure 04
+# Figure 06
 # =============================================================================
 #
 # Caption:
@@ -49,15 +49,23 @@ from plotting import add_corner_label
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
+#                Options: "temp", "sal", "density", "uvel", or "vvel".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
+# - option_detrend_seg: Specifies whether each segment is detrended or not. 
+#                        Options: True or False
+# - segment_months : Specifies the window duration. 
 #
 # ------------#
 
 # Set processing parameters
 option_data        = 'density'    
 option_interannual = 'linear' 
+option_detrend_seg = True
+segment_months     = 8
+
+# Label segment processing 
+seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # Set font and fontsize using LaTeX 
 fontsize=16
@@ -78,7 +86,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "mooring" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -90,7 +98,14 @@ Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 Lt_std  = nc.variables['decor_scale_std'][:]
 
+# --- Mixed Layer Depth ---# 
+
+
 # --- CCE Data --- # 
+
+# -----------------------------------------------------------------------------
+# Compute the time mean and standard deviation mixed layer depth 
+# -----------------------------------------------------------------------------
 
 
 # -----------------------------------------------------------------------------

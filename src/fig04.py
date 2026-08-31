@@ -1,9 +1,9 @@
 # =============================================================================
-# Figure 09
+# Figure 04
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale in the study domain at 9 meter water depth. Black
+#   Decorrelation time scale in the study domain at 9.6 meter water depth. Black
 #   contour lines are the ocean topography with 200 and 2000 meter isobaths 
 #   highlighted as solid black lines. Decorrelation scales less than or equal to 
 #   one standard error are considered not statistically significant and are indicated
@@ -37,7 +37,7 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import plotting toolbox for cartopy figures
+# Import plotting toolbox 
 from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 
 # -----------------------------------------------------------------------------
@@ -50,7 +50,6 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 #
 # - option_data: Data variable to analyze.
 #                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
-#
 # - option_depth: Depth at which the decorrelation time scale is computed
 #                 (units: meters). Not used for SSH.
 # - option_interannual: Specifies the model of the interannual variability. 
@@ -58,7 +57,10 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
 # - segment_months : Specifies the window duration. 
-# - ns : Noise to signal ratio. 
+# - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
+#                  criteria. Represents the number of standard deviation a
+#                  decorrelation scale estimate is away from the regional spatial
+#                  median. 
 #
 # ------------#
 
@@ -67,13 +69,13 @@ option_data        = 'density'
 option_depth       = 9   
 option_interannual = 'linear' 
 option_detrend_seg = True
-segment_months     = 8
+segment_months     = 6
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # Set uncertainty estimate parameters
-ns = 1
+sn_threshold = 1
 
 # Set font and fontsize using LaTeX 
 fontsize=18
@@ -149,13 +151,13 @@ calCOFI_lon   = calCOFI_line80[:, 2]
 # -----------------------------------------------------------------------------
 
 # Compute spatial mean
-Lt_reg_mean = np.ma.mean(Lt)
+Lt_reg_mean = np.ma.median(Lt)
 
-# Compute the relative uncertainty (with respect to the regional mean)
-Lt_rel_unc = Lt_stdm / np.abs(Lt - Lt_reg_mean)
+# Compute the signal-to-noise ratio (with respect to the regional mean)
+Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm
 
 # Mask not statistically significant grid points
-Lt_mask = np.ma.getmask(np.ma.masked_greater_equal(Lt_rel_unc, ns))
+Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))
 
 # Get land mask from Lt
 land_mask = np.ma.getmaskarray(Lt)
@@ -362,7 +364,7 @@ add_scalebar(
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "fig09.png",
+    PATH_figs / "fig04.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

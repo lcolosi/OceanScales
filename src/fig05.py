@@ -36,7 +36,7 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import plotting toolbox for cartopy figures
+# Import plotting toolbox 
 from plotting import add_x_axis_marker
 
 # -----------------------------------------------------------------------------
@@ -54,7 +54,10 @@ from plotting import add_x_axis_marker
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
 # - segment_months : Specifies the window duration. 
-# - ns : Noise to signal ratio. 
+# - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
+#                  criteria. Represents the number of standard deviation a
+#                  decorrelation scale estimate is away from the regional spatial
+#                  median.
 #
 # ------------#
 
@@ -62,13 +65,13 @@ from plotting import add_x_axis_marker
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_detrend_seg = True
-segment_months     = 8
+segment_months     = 6
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # Set uncertainty estimate parameters
-ns = 1.5
+sn_threshold = 1
 
 # Set font and fontsize using LaTeX 
 fontsize=18
@@ -144,13 +147,13 @@ mld_std = np.ma.var(mld,axis=1,ddof=1)
 # -----------------------------------------------------------------------------
 
 # Compute spatial mean
-Lt_reg_mean = np.ma.mean(Lt)
+Lt_reg_mean = np.ma.median(Lt)
 
 # Compute the relative uncertainty (with respect to the regional mean)
-Lt_rel_unc = Lt_stdm / np.abs(Lt - Lt_reg_mean)
+Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm 
 
 # Mask not statistically significant grid points
-Lt_mask = np.ma.getmask(np.ma.masked_greater_equal(Lt_rel_unc, ns))
+Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))
 
 # Get land mask from Lt
 land_mask = np.ma.getmaskarray(Lt)
