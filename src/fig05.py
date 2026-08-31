@@ -22,8 +22,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
-import cartopy.crs as ccrs
 import cmocean.cm as cmo
+import matplotlib as mpl
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +53,7 @@ from plotting import add_x_axis_marker
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
+# - segment_months : Specifies the window duration. 
 # - ns : Noise to signal ratio. 
 #
 # ------------#
@@ -61,6 +62,7 @@ from plotting import add_x_axis_marker
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_detrend_seg = True
+segment_months     = 8
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -87,7 +89,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
 
 # Obtain filename path
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_trans_{option_interannual}_{seg_proc}.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_trans_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -164,8 +166,9 @@ data_mask = np.where(Lt_mask, 1, np.nan)
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-level = np.arange(15,40+1,1)
+level = np.arange(8,32+0.5,0.5)
 cmap = cmo.amp
+mpl.rcParams["hatch.linewidth"] = 0.2 
 
 # Create figure
 fig, ax = plt.subplots(figsize=(12,5))
@@ -179,7 +182,7 @@ ax.contourf(
     abs(depth),
     data_mask.T,
     levels=[0.5, 1.5],      
-    hatches=['///'],       
+    hatches=['..'],       
     colors='none',          
     zorder=10,              
 )
@@ -202,7 +205,7 @@ ax.grid(linestyle='--',alpha=0.1,color='k')
 cax = fig.add_axes([0.915, 0.125, 0.025, 0.73])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
 cbar.set_label('Decorrelation Scale (days)')
-cbar.set_ticks(np.arange(15,40+5,5))
+cbar.set_ticks(np.arange(8,32+4,4))
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()

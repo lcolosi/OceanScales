@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 import cartopy.crs as ccrs
 import cmocean.cm as cmo
+import matplotlib as mpl
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +57,7 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
+# - segment_months : Specifies the window duration. 
 # - ns : Noise to signal ratio. 
 #
 # ------------#
@@ -65,6 +67,7 @@ option_data        = 'density'
 option_depth       = 9   
 option_interannual = 'linear' 
 option_detrend_seg = True
+segment_months     = 8
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -91,7 +94,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -175,12 +178,13 @@ resolution = "10m"
 bounds = np.arange(0,360+40,40)
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(5,20+0.5,0.5) 
+levels = np.arange(8,32+0.5,0.5) 
 level_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
 fontsize_g = 18
 fontsize_c = 10
 cmap = cmo.amp
+mpl.rcParams["hatch.linewidth"] = 0.2 
 
 # Create figure
 fig, ax = plt.subplots(figsize=(12, 8), subplot_kw={"projection": projection})
@@ -335,7 +339,7 @@ set_cbar(
     extend="both",
     label='Decorrelation Scale (days)',
     fontsize=fontsize_g,
-    ticks=np.arange(5,20+5,5), 
+    ticks=np.arange(8,32+4,4), 
     invert = False
 )
 
