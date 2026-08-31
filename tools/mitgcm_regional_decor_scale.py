@@ -290,6 +290,7 @@ ntime_seg = len(segments[0][0])
 Lt             = np.ma.masked_all((nlat,nlon))
 Lt_stdm        = np.ma.masked_all((nlat,nlon))
 Lt_std         = np.ma.masked_all((nlat,nlon))
+Lt_stds        = np.ma.masked_all((nlat,nlon))
 
 # Loop through longitude 
 for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon"):
@@ -344,17 +345,18 @@ for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon")
         Lt[ilat,ilon], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
     
         # Compute the standard error of the decorrelation scale
-        Lt_stdm[ilat,ilon], Lt_std[ilat,ilon] = compute_decor_scale_unc(autocorr_mean, 
-                                                                        autocorr_seg, 
-                                                                        M_lag, 
-                                                                        dt, 
-                                                                        segment_overlap,
-                                                                        )
+        Lt_stdm[ilat,ilon], Lt_std[ilat,ilon], Lt_stds[ilat,ilon] = compute_decor_scale_unc(autocorr_mean, 
+                                                                                            autocorr_seg, 
+                                                                                            M_lag, 
+                                                                                            dt, 
+                                                                                            segment_overlap,
+                                                                                            )
 
 # Convert time scale to units of days
 Lt_days      = Lt/(24*60*60) 
 Lt_stdm_days = Lt_stdm/(24*60*60) 
 Lt_std_days  = Lt_std/(24*60*60) 
+Lt_stds_days  = Lt_stds/(24*60*60) 
 
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
@@ -402,6 +404,21 @@ decor_scale_std = xr.DataArray(data=Lt_std_days,
                            )
 )
 
+decor_scale_stds = xr.DataArray(data=Lt_stds_days,
+                            dims=['lat','lon'],
+                            coords=dict(lat=lat,lon=lon),
+                            attrs=dict(
+                                description=('Standard error of the standard deviatio of the decorrelation time ' +
+                                                'scale computed from the mean ' + 
+                                                'autocorrelation across the Point ' +
+                                                'Conception Study region at ' +
+                                                str(option_depth) + 
+                                                ' meter depth, accounting approximately ' +
+                                                'for dependence between overlapping segments.'),
+                                units='days'
+                            )
+    )
+
 # --- Model Diagnostics --- # 
 FVE = xr.DataArray(data=fve,
                    dims=['lat','lon'],
@@ -414,7 +431,7 @@ FVE = xr.DataArray(data=fve,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'FVE':FVE})
+data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
@@ -428,6 +445,9 @@ data.attrs.update({
     "sampling_interval_seconds": dt,
 })
 
+# Set segment duration in months
+segment_months = int(round(segment_duration * 12))
+
 # Set file path for saving the netcdf file
 if option_data == "ssh":
     file_path = (
@@ -440,7 +460,7 @@ else:
         PATH_processed
         / f"mitgcm_decor_scale_{option_data}_hrly_reg_"
           f"depth_{option_depth}m_{option_interannual}_{seg_proc}_"
-          f"seg_duration_{segment_duration}.nc"
+          f"seg_duration_{segment_months}mo.nc"
     )
 
 # Check if file exists, then delete it

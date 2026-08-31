@@ -105,67 +105,122 @@ calCOFI_lon   = calCOFI_line80[:, 2]
 
 # Set plotting parameters
 projection = ccrs.PlateCarree(central_longitude=0.0)
-xticks = [-123, -122, -121, -120]
-yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 resolution = "10m"
-bounds = np.arange(0,360+40,40)
+
+xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
+yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
+
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(0, 4500, 100) 
-level_is = np.arange(100,300,100)
+
+levels    = np.arange(0, 4500+50, 50) 
+
+levels_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
+
 fontsize_g = 25
 
 # Create figure
 fig, ax = plt.subplots(figsize=(18, 20), subplot_kw={"projection": projection})
 
 # Plot coastlines and land 
-set_coastlines(ax, projection, resolution, lon_min=lon_min, lon_max=lon_max, 
-               lat_min=lat_min, lat_max=lat_max) 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max,
+) 
 
 # Plot bathymetry
 ct = ax.contourf(
-    lon, lat, abs(bathy), levels=levels,
+    lon, 
+    lat, 
+    abs(bathy), 
+    levels=levels,
     transform=ccrs.PlateCarree(),
     cmap=cmo.deep, 
-    extend = 'max'
+    extend = 'max',
 )
 
 # Plot the CCE1 mooring point
 ax.scatter(
-    lon1, lat1, 
+    lon1, 
+    lat1, 
     color='w',
-    edgecolor='black', marker='^', s=180, 
+    edgecolor='black', 
+    marker='^', 
+    s=180, 
     transform=ccrs.PlateCarree(),
     zorder=10, 
-    label='CCE1'
+    label='CCE1',
 )
 
 # Plot the CCE2 mooring point
 ax.scatter(
-    lon2, lat2, 
+    lon2, 
+    lat2, 
     color='w',  
-    edgecolor='black', marker='s', s=180,  
+    edgecolor='black', 
+    marker='s', 
+    s=180,  
     transform=ccrs.PlateCarree(),
     zorder=10, 
-    label='CCE2'
+    label='CCE2',
 )
 
 # Plot the CCE3 mooring point
 ax.scatter(
-    lon3, lat3, 
+    lon3, 
+    lat3, 
     color= 'w',  
-    edgecolor='black', marker='o', s=180,  
+    edgecolor='black', 
+    marker='o', 
+    s=180,  
     transform=ccrs.PlateCarree(),
     zorder=10, 
-    label='CCE3'
+    label='CCE3',
 )
 
 # Plot depth contour lines
-ct1 = ax.contour(lon, lat, -1*(bathy),levels=levels_ms, colors='black', linewidths=1, linestyles='dashed')
-ct2 = ax.contour(lon, lat, -1*(bathy),levels=[2000], colors='black', linewidths=2, linestyles='solid')
-ct3 = ax.contour(lon, lat, -1*(bathy),levels=level_is, colors='black', linewidths=1, linestyles='dashed')
-ct4 = ax.contour(lon, lat, -1*(bathy),levels=[200], colors='black', linewidths=2, linestyles='solid')
+ct1 = ax.contour(
+    lon, 
+    lat, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon, 
+    lat, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon, 
+    lat, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon, 
+    lat, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
 plt.clabel(ct1, fontsize=fontsize)
 plt.clabel(ct2, fontsize=fontsize)
 plt.clabel(ct3, fontsize=fontsize)
@@ -173,12 +228,13 @@ plt.clabel(ct4, fontsize=fontsize)
 
 # Plot Line 80 CalCOFI Stations
 ax.plot(
-    calCOFI_lon % 360, calCOFI_lat,
+    calCOFI_lon % 360, 
+    calCOFI_lat,
     color='tab:red',
     linestyle=(0, (5, 3)),  
     linewidth=3,
     transform=ccrs.PlateCarree(),
-    label='CalCOFI \n Line 80.0'
+    label='CalCOFI \n Line 80.0',
 )
 
 # Set grid ticks 
@@ -193,7 +249,7 @@ set_grid_ticks(
     color='k',
     lw=1,
     ls='--',
-    alpha=0.3
+    alpha=0.3,
 )
 
 # Create colormap
@@ -207,7 +263,7 @@ set_cbar(
     label='Depth (m)',
     fontsize=fontsize_g,
     ticks=np.arange(0,4500+500,500), 
-    invert = True
+    invert = True,
 )
 
 # Set legend

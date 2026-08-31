@@ -66,13 +66,13 @@ from filter import gaussian_low_pass_filter
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_harmonics   = 2      
-option_detrend_seg = False
+option_detrend_seg = True
 
 # Set time and space parameters
 dt               = 3600    
 T_annual         = 365.25*(24)*(60)*(60)    
 segment_overlap  = 0.5                                        
-segment_duration = 1   
+segment_duration = 0.5   
 depth_lim        = -220 
 
 # Parameter verification
@@ -286,6 +286,7 @@ ntime_seg = len(segments[0][0])
 Lt      = np.ma.masked_all((nsite,ndepth))
 Lt_stdm = np.ma.masked_all((nsite,ndepth))
 Lt_std  = np.ma.masked_all((nsite,ndepth))
+Lt_stds = np.ma.masked_all((nsite,ndepth))
 
 # Loop over each site
 for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="mooring site"):
@@ -340,18 +341,19 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
         Lt[isite,idepth], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
     
         # Compute the standard error of the decorrelation scale
-        Lt_stdm[isite,idepth], Lt_std[isite,idepth] = compute_decor_scale_unc(autocorr_mean, 
-                                                                        autocorr_seg, 
-                                                                        M_lag, 
-                                                                        dt, 
-                                                                        segment_overlap,
-                                                                        )
+        Lt_stdm[isite,idepth], Lt_std[isite,idepth], Lt_stds[isite,idepth]  = compute_decor_scale_unc(autocorr_mean, 
+                                                                                                      autocorr_seg, 
+                                                                                                      M_lag, 
+                                                                                                      dt, 
+                                                                                                      segment_overlap,
+                                                                                                     )
 
 # Convert time scale to units of days
 Lt_days      = Lt/(24*60*60) 
 Lt_stdm_days = Lt_stdm/(24*60*60) 
 Lt_std_days  = Lt_std/(24*60*60) 
-        
+Lt_stds_days = Lt_stds/(24*60*60)   
+     
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
 # -----------------------------------------------------------------------------
@@ -393,6 +395,19 @@ decor_scale_std = xr.DataArray(data=Lt_std_days,
                            )
 )
 
+decor_scale_stds = xr.DataArray(data=Lt_stds_days,
+                        dims=['site','depth'],
+                        coords=dict(site=site,depth=depth),
+                        attrs=dict(
+                            description=('Standard error of the standard deviatio of the decorrelation time ' +
+                                         'scale computed from the mean ' + 
+                                         'autocorrelation at the CCE mooring locations, ' + 
+                                         'accounting approximately ' +
+                                         'for dependence between overlapping segments.'),
+                            units='days'
+                        )
+)
+
 # --- Model Diagnostics --- # 
 FVE = xr.DataArray(data=fve,
                    dims=['site','depth'],
@@ -405,7 +420,7 @@ FVE = xr.DataArray(data=fve,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'FVE':FVE})
+data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
@@ -418,8 +433,11 @@ data.attrs.update({
     "sampling_interval_seconds": dt,
 })
 
+# Set segment duration in months
+segment_months = int(round(segment_duration * 12))
+
 # Set file path for saving the netcdf file
-file_path = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}.nc"
+file_path = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

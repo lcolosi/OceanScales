@@ -62,7 +62,7 @@ from plotting import add_corner_label
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_detrend_seg = True
-segment_months     = 8
+segment_months     = 6
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"

@@ -67,17 +67,17 @@ from filter import gaussian_low_pass_filter
 # 
 # ------------ # 
 
-# Set processing parameters
-option_interannual = 'linear'    
+# Set processing parameters   
 option_depth       = 9 
+option_interannual = 'linear' 
 option_harmonics   = 2
 option_detrend_seg = True
  
 # Set time and space parameters
-dt               = 1*(60)*(60)     
+dt               = 3600      
 T_annual         = 365.25*(24)*(60)*(60)    
 segment_overlap  = 0.5                                        
-segment_duration = 1                                           
+segment_duration = 0.5                                           
 
 # Set font and fontsize
 fontsize=16
@@ -106,7 +106,7 @@ time  =  num2date(nc.variables['time'][:], nc.variables['time'].units)
 sig = nc.variables['SIG'][:]
 
 # Mask dry cells previously set to NaN during preprocessing
-sig_m = np.ma.mask_invalid(sig)
+sig_m = np.ma.masked_invalid(sig)
 
 # Convert cftime.DatetimeGregorian to Python datetime objects
 time_dt = np.array([datetime(d.year, d.month, d.day, d.hour, d.minute, d.second) for d in time])
@@ -216,11 +216,12 @@ nseg = len(segments)
 ntime_seg = len(segments[0][0])
 
 # Intialize arrays 
-autocorr_seg   = np.zeros((nsite,nseg,2*ntime_seg-1))
-autocorr_mean  = np.zeros((nsite,2*ntime_seg-1))
-Lt             = np.zeros(nsite)
-Lt_stdm        = np.zeros(nsite)
-Lt_std         = np.zeros(nsite)
+autocorr_seg   = np.ma.masked_all((nsite,nseg,2*ntime_seg-1))
+autocorr_mean  = np.ma.masked_all((nsite,2*ntime_seg-1))
+Lt             = np.ma.masked_all(nsite)
+Lt_stdm        = np.ma.masked_all(nsite)
+Lt_std         = np.ma.masked_all(nsite)
+Lt_stds        = np.ma.masked_all(nsite)
 
 # Loop through mooring sites 
 for isite in range(nsite): 
@@ -241,8 +242,11 @@ for isite in range(nsite):
         t0 = tseg[0]
         time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
         
-        # Detrend data record 
-        data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
+        # Remove segment-wise mean or linear trend
+        if option_detrend_seg: 
+            data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
+        else: 
+            data_dt = dseg - np.ma.mean(dseg)
         
         # Compute autocorrelation function
         autocorr_seg[isite,iseg,:], time_lag = compute_autocorr_biased(data_dt, time_elapsed_seg)
@@ -254,16 +258,18 @@ for isite in range(nsite):
     Lt[isite], M_lag = compute_decor_scale(autocorr_mean[isite,:],time_lag) 
 
     # Compute the standard error of the decorrelation scale
-    Lt_stdm[isite], Lt_std[isite] = compute_decor_scale_unc(autocorr_mean[isite,:], 
-                                                            autocorr_seg[isite,:,:], 
-                                                            M_lag, 
-                                                            dt, 
-                                                            segment_overlap)
+    Lt_stdm[isite], Lt_std[isite], Lt_stds[isite] = compute_decor_scale_unc(autocorr_mean[isite,:], 
+                                                                            autocorr_seg[isite,:,:], 
+                                                                            M_lag, 
+                                                                            dt, 
+                                                                            segment_overlap
+                                                                            )
 
     # Convert from seconds to days
     time_lag_days = time_lag/(24*60*60) 
-    Lt_days = Lt/(24*60*60) 
-    Lt_stdm_days = Lt_stdm/(24*60*60)
+    Lt_days       = Lt/(24*60*60) 
+    Lt_stdm_days  = Lt_stdm/(24*60*60)
+    Lt_stds_days  = Lt_stds/(24*60*60)
 
 # -----------------------------------------------------------------------------
 # Plot time series, least-squares fit, residual, and autocorrelation
@@ -278,8 +284,8 @@ autocorr_pos      = autocorr_seg[:,:,zero_lag_index:]
 autocorr_mean_pos = autocorr_mean[:,zero_lag_index:]
 
 # Set plotting parameters 
-x_max = 200
-dx = 25
+x_max = 182.5
+dx = 20
 
 # Create figure and axis objects 
 fig, axes = plt.subplots(3,3,figsize=(20, 12))
@@ -403,11 +409,52 @@ ax.plot(time_lag_pos, autocorr_mean[0,zero_lag_index:], color='tab:green', linew
 ax.set_xlabel('Time Lag (days)')
 ax.set_ylabel('Autocorrelation')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.4, 1.05)
+ax.set_ylim(-0.45, 1.05)
 ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
+
+# Add inset showing short-lag autocorrelation
+axins = ax.inset_axes([0.35, 0.57, 0.4, 0.4])
+
+# Plot the autocorrelation of each window
+for iseg in range(nseg):
+
+    axins.plot(
+        time_lag_pos,
+        autocorr_pos[0, iseg, :],
+        color='tab:green',
+        alpha=0.4,
+        linewidth=0.8
+    )
+
+# Plot the mean autocorrelation
+axins.plot(
+    time_lag_pos,
+    autocorr_mean_pos[0, :],
+    color='tab:green',
+    linewidth=1.5
+)
+
+# Set inset axis attributes
+axins.set_xlabel('Time Lag (days)',fontsize=10)
+axins.set_ylabel('Autocorrelation',fontsize=10)
+axins.set_xlim(0, 15)
+axins.set_ylim(-0.1,1.05)
+axins.set_xticks(np.arange(0, 16+2, 2))
+axins.set_yticks(np.arange(0,1+0.25,0.25))
+axins.grid(True, linestyle='--', alpha=0.3)
+axins.tick_params(
+    which='both',
+    direction='out',
+    top=False,
+    right=False,
+    left=True,
+    bottom=True,
+    labelsize=10,
+    length=3
+)
 
 #--- Subplot 8 ---# 
 ax = axes[2,1]
@@ -427,12 +474,53 @@ ax.plot(time_lag_pos, autocorr_mean[1,zero_lag_index:], color='tab:red', linewid
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.4, 1.05)
+ax.set_ylim(-0.45, 1.05)
 ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.set_yticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
+
+# Add inset showing short-lag autocorrelation
+axins = ax.inset_axes([0.35, 0.57, 0.4, 0.4])
+
+# Plot the autocorrelation of each window
+for iseg in range(nseg):
+
+    axins.plot(
+        time_lag_pos,
+        autocorr_pos[1, iseg, :],
+        color='tab:red',
+        alpha=0.4,
+        linewidth=0.8
+    )
+
+# Plot the mean autocorrelation
+axins.plot(
+    time_lag_pos,
+    autocorr_mean_pos[1, :],
+    color='tab:red',
+    linewidth=1.5
+)
+
+# Set inset axis attributes
+axins.set_xlabel('Time Lag (days)',fontsize=10)
+axins.set_ylabel('Autocorrelation',fontsize=10)
+axins.set_xlim(0, 15)
+axins.set_ylim(-0.1,1.05)
+axins.set_xticks(np.arange(0, 16+2, 2))
+axins.set_yticks(np.arange(0,1+0.25,0.25))
+axins.grid(True, linestyle='--', alpha=0.3)
+axins.tick_params(
+    which='both',
+    direction='out',
+    top=False,
+    right=False,
+    left=True,
+    bottom=True,
+    labelsize=10,
+    length=3
+)
 
 #--- Subplot 9 ---# 
 ax = axes[2,2]
@@ -452,12 +540,53 @@ ax.plot(time_lag_pos, autocorr_mean[2,zero_lag_index:], color='tab:blue', linewi
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.4, 1.05)
+ax.set_ylim(-0.45, 1.05)
 ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.set_yticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
+
+# Add inset showing short-lag autocorrelation
+axins = ax.inset_axes([0.35, 0.57, 0.4, 0.4])
+
+# Plot the autocorrelation of each window
+for iseg in range(nseg):
+
+    axins.plot(
+        time_lag_pos,
+        autocorr_pos[2, iseg, :],
+        color='tab:blue',
+        alpha=0.4,
+        linewidth=0.8
+    )
+
+# Plot the mean autocorrelation
+axins.plot(
+    time_lag_pos,
+    autocorr_mean_pos[2, :],
+    color='tab:blue',
+    linewidth=1.5
+)
+
+# Set inset axis attributes
+axins.set_xlabel('Time Lag (days)',fontsize=10)
+axins.set_ylabel('Autocorrelation',fontsize=10)
+axins.set_xlim(0, 15)
+axins.set_ylim(-0.1,1.05)
+axins.set_xticks(np.arange(0, 16+2, 2))
+axins.set_yticks(np.arange(0,1+0.25,0.25))
+axins.grid(True, linestyle='--', alpha=0.3)
+axins.tick_params(
+    which='both',
+    direction='out',
+    top=False,
+    right=False,
+    left=True,
+    bottom=True,
+    labelsize=10,
+    length=3
+)
 
 # Label each subplot
 pos = [0.95, 0.91] 

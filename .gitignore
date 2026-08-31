@@ -20,7 +20,6 @@ src/figS*.py
 # Tools directory
 tools/__pycache__/
 tools/README.md
-tools/*wrapper.py
 
 # Notebooks directory
 notebooks/__pycache__/

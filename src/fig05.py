@@ -169,7 +169,9 @@ data_mask = np.where(Lt_mask, 1, np.nan)
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-level = np.arange(8,32+0.5,0.5)
+levels = np.arange(7,20+0.25,0.25)
+ticks  = np.arange(8,20+2,2)
+
 cmap = cmo.amp
 mpl.rcParams["hatch.linewidth"] = 0.2 
 
@@ -177,7 +179,7 @@ mpl.rcParams["hatch.linewidth"] = 0.2
 fig, ax = plt.subplots(figsize=(12,5))
 
 # Plot decorrelation time scale
-cf = ax.contourf(dist,abs(depth),Lt.T, levels=level, cmap=cmap, extend='both')
+cf = ax.contourf(dist,abs(depth),Lt.T, levels=levels, cmap=cmap, extend='both')
 
 # Overlay a contourf with hatching for the non-significant regions
 ax.contourf(
@@ -205,10 +207,10 @@ ax.invert_yaxis()
 ax.grid(linestyle='--',alpha=0.1,color='k')
 
 # Set colorbar
-cax = fig.add_axes([0.915, 0.125, 0.025, 0.73])
+cax = fig.add_axes([0.915, 0.125, 0.02, 0.73])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
 cbar.set_label('Decorrelation Scale (days)')
-cbar.set_ticks(np.arange(8,32+4,4))
+cbar.set_ticks(ticks)
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()

@@ -3,11 +3,11 @@
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale in the study domain at 9.6 meter water depth. Black
-#   contour lines are the ocean topography with 200 and 2000 meter isobaths 
-#   highlighted as solid black lines. Decorrelation scales less than or equal to 
-#   one standard error are considered not statistically significant and are indicated
-#   with a hatched overlay.
+#   Decorrelation time scale in the study domain at 9.6 meter water depth. 
+#   Black contour lines are the ocean topography with 200 and 2000 meter
+#   isobaths highlighted as solid black lines. Decorrelation scales that differ
+#   from the regional spatial mean by less than or equal to one standard error
+#   are considered not statistically significant and are indicated by hatching.
 #
 # Author:
 #   Luke Colosi
@@ -174,17 +174,23 @@ data_mask = np.where(Lt_mask, 1, np.nan)
 
 # Set plotting parameters
 projection = ccrs.PlateCarree(central_longitude=0.0)
-xticks = [-123, -122, -121, -120]
-yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 resolution = "10m"
-bounds = np.arange(0,360+40,40)
+
+xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
+yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
+
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(8,32+0.5,0.5) 
-level_is = np.arange(100,300,100)
+
+levels = np.arange(7,20+0.25,0.25) 
+ticks  = np.arange(8,20+2,2) 
+
+levels_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
+
 fontsize_g = 18
 fontsize_c = 10
+
 cmap = cmo.amp
 mpl.rcParams["hatch.linewidth"] = 0.2 
 
@@ -287,7 +293,7 @@ ct3 = ax.contour(
     lon_b, 
     lat_b, 
     -1*(bathy),
-    levels=level_is, 
+    levels=levels_is, 
     colors='black', 
     linewidths=0.5, 
     linestyles='dashed'
@@ -341,7 +347,7 @@ set_cbar(
     extend="both",
     label='Decorrelation Scale (days)',
     fontsize=fontsize_g,
-    ticks=np.arange(8,32+4,4), 
+    ticks=ticks, 
     invert = False
 )
 
