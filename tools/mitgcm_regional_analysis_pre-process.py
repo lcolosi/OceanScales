@@ -32,7 +32,7 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import plotting toolbox for cartopy figures
+# Import plotting toolbox
 from plotting import status
 
 # Suppress the interpolation warning message from xgcm
