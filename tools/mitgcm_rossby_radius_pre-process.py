@@ -45,7 +45,7 @@ warnings.filterwarnings(
     category=FutureWarning,
 )
 
-status(f"Starting MITgcm pre-processing for the Regional Analysis")
+status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis")
 
 # -----------------------------------------------------------------------------
 # Set data parameters
