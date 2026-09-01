@@ -356,32 +356,37 @@ vvel_upper_season = vvel_upper_season.sel(season=seasons)
 # -----------------------------------------------------------------------------
 status("Saving time-mean and seasonal-mean background fields...")
 
+# Remove unnecessary auxiliary grid coordinates
+def clean_coords(da):
+    """Remove auxiliary coordinates while retaining dimension coordinates."""
+    return da.reset_coords(drop=True)
+
 # Create output dataset
 ds_out = xr.Dataset(
     data_vars={
         # Time-mean hydrographic fields
-        "SA_mean": SA_mean,
-        "CT_mean": CT_mean,
-        "sigma0_mean": sigma0_mean,
-        "theta_mean": theta_mean,
+        "SA_mean": clean_coords(SA_mean),
+        "CT_mean": clean_coords(CT_mean),
+        "sigma0_mean": clean_coords(sigma0_mean),
+        "theta_mean": clean_coords(theta_mean),
 
         # Seasonal-mean hydrographic fields
-        "SA_season": SA_season,
-        "CT_season": CT_season,
-        "sigma0_season": sigma0_season,
-        "theta_season": theta_season,
+        "SA_season": clean_coords(SA_season),
+        "CT_season": clean_coords(CT_season),
+        "sigma0_season": clean_coords(sigma0_season),
+        "theta_season": clean_coords(theta_season),
 
         # Time-mean depth-averaged velocity fields
-        "uvel_full_mean": uvel_full_mean,
-        "vvel_full_mean": vvel_full_mean,
-        "uvel_upper_mean": uvel_upper_mean,
-        "vvel_upper_mean": vvel_upper_mean,
+        "uvel_full_mean": clean_coords(uvel_full_mean),
+        "vvel_full_mean": clean_coords(vvel_full_mean),
+        "uvel_upper_mean": clean_coords(uvel_upper_mean),
+        "vvel_upper_mean": clean_coords(vvel_upper_mean),
 
         # Seasonal-mean depth-averaged velocity fields
-        "uvel_full_season": uvel_full_season,
-        "vvel_full_season": vvel_full_season,
-        "uvel_upper_season": uvel_upper_season,
-        "vvel_upper_season": vvel_upper_season,
+        "uvel_full_season": clean_coords(uvel_full_season),
+        "vvel_full_season": clean_coords(vvel_full_season),
+        "uvel_upper_season": clean_coords(uvel_upper_season),
+        "vvel_upper_season": clean_coords(vvel_upper_season),
     }
 )
 
