@@ -140,7 +140,7 @@ lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784
 # Compute the time mean and standard deviation mixed layer depth 
 # -----------------------------------------------------------------------------
 mld_mean = np.ma.mean(mld,axis=1)
-mld_std = np.ma.var(mld,axis=1,ddof=1)
+mld_std = np.ma.std(mld,axis=1,ddof=1)
 
 # -----------------------------------------------------------------------------
 # Compute the relative uncertainty of the decorrelation scale

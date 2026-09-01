@@ -100,6 +100,14 @@ Lt_std  = nc.variables['decor_scale_std'][:]
 
 # --- Mixed Layer Depth ---# 
 
+# Obtain filename path
+filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_mooring.nc"
+
+# Generate the nc data structure
+nc = Dataset(filename_mld, 'r')
+
+# Extract data variables
+mld = nc.variables['MLD'][:]
 
 # --- CCE Data --- # 
 
@@ -107,6 +115,8 @@ Lt_std  = nc.variables['decor_scale_std'][:]
 # Compute the time mean and standard deviation mixed layer depth 
 # -----------------------------------------------------------------------------
 
+mld_mean = np.ma.mean(mld,axis=1)
+mld_std = np.ma.std(mld,axis=1,ddof=1)
 
 # -----------------------------------------------------------------------------
 # Plot decorrelation time scales at mooring locations 
@@ -117,6 +127,8 @@ depth_pos_m = abs(depth_m)
 depth_lim = [0,200]
 cce1_sensor_depth = np.array([9, 19, 29, 39, 60, 75, 150])
 cce2_sensor_depth = np.array([6, 14, 25, 44, 74])
+x_max = 25
+dx = 5
 
 # Create figure
 fig, axes = plt.subplots(2,3,figsize=(15, 10))
@@ -131,8 +143,14 @@ ax.plot(Lt[0,:],depth_pos_m,'.-', color='tab:green', label='CCE1')
 # Plot standard error of the mean
 ax.fill_betweenx(depth_pos_m, Lt[0,:] - Lt_stdm[0,:], Lt[0,:] + Lt_stdm[0,:], color='tab:green', alpha=0.5)
 
+# Plot the mean mixed layer depth 
+ax.axhline(mld_mean[0], ls='--', lw=1.5, color='tab:green', alpha=1, label=r"$\overline{z}_{mld}$")
+
+# Plot the range of mixed layer depths (1 standard deviation)
+ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='tab:green', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
+
 # Set left edge x-position
-x_right = ax.get_xlim()[0] - 13.6  
+x_right = ax.get_xlim()[0] + 2.2  
 
 # Plot model grid depth levels
 ax.plot(
@@ -148,9 +166,9 @@ ax.plot(
 
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(0,45)
+ax.set_xlim(0,x_max)
 ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,45+5,5))
+ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xticklabels([])
 ax.invert_yaxis()
@@ -172,8 +190,14 @@ ax.plot(Lt[1,:],depth_pos_m,'.-', color='tab:red', label='CCE1')
 # Plot standard error of the mean
 ax.fill_betweenx(depth_pos_m, Lt[1,:] - Lt_stdm[1,:], Lt[1,:] + Lt_stdm[1,:], color='tab:red', alpha=0.5)
 
+# Plot the mean mixed layer depth 
+ax.axhline(mld_mean[1], ls='--', lw=1.5, color='tab:red', alpha=1)
+
+# Plot the range of mixed layer depths (1 standard deviation)
+ax.fill_between([0, 45], mld_mean[1] - mld_std[1], mld_mean[1] + mld_std[1], color='tab:red', alpha=0.15)
+
 # Set left edge x-position
-x_left = ax.get_xlim()[0] - 10.4  
+x_left = ax.get_xlim()[0] + 2.2  
 
 # Plot model grid depth levels
 ax.plot(
@@ -188,9 +212,9 @@ ax.plot(
 )
 
 # Set axis attributes
-ax.set_xlim(0,45)
+ax.set_xlim(0,x_max)
 ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,45+5,5))
+ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xticklabels([])
 ax.set_yticklabels([])
@@ -213,8 +237,14 @@ ax.plot(Lt[2,:],depth_pos_m,'.-', color='tab:blue', label='CCE3')
 # Plot standard error of the mean
 ax.fill_betweenx(depth_pos_m, Lt[2,:] - Lt_stdm[2,:], Lt[2,:] + Lt_stdm[2,:], color='tab:blue', alpha=0.5)
 
+# Plot the mean mixed layer depth 
+ax.axhline(mld_mean[2], ls='--', lw=1.5, color='tab:blue', alpha=1)
+
+# Plot the range of mixed layer depths (1 standard deviation)
+ax.fill_between([0, 45], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='tab:blue', alpha=0.15)
+
 # Set left edge x-position
-x_left = ax.get_xlim()[0] - 9 
+x_left = ax.get_xlim()[0] + 2.25  
 
 # Plot model grid depth levels
 ax.plot(
@@ -231,9 +261,9 @@ ax.plot(
 
 # Set axis attributes
 ax.set_xlabel(r'Decorrelation Scale (days)')
-ax.set_xlim(0,45)
+ax.set_xlim(0,x_max)
 ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,45+5,5))
+ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_yticklabels([])
 ax.invert_yaxis()
@@ -268,9 +298,9 @@ ax.plot(
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
 ax.set_xlabel(r'Decorrelation Scale (days)')
-ax.set_xlim(0,45)
+ax.set_xlim(0,x_max)
 ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,45+5,5))
+ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(0,200+25,25))
 ax.invert_yaxis()
 ax.tick_params(top=True, 
@@ -302,9 +332,9 @@ ax.plot(
 
 # Set axis attributes
 ax.set_xlabel(r'Decorrelation Scale (days)')
-ax.set_xlim(0,45)
+ax.set_xlim(0,x_max)
 ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,45+5,5))
+ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_yticklabels([])
 ax.invert_yaxis()
@@ -349,7 +379,7 @@ plt.subplots_adjust(hspace=0.1, wspace=0.1)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "fig04.png",
+    PATH_figs / "fig06.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

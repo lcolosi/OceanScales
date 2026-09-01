@@ -592,7 +592,7 @@ if option_proc == 'density':
         )
 
     # Create data set from data arrays
-    data = xr.Dataset({'LON':LON,'LAT':LAT,'SIG':SIG,'CTemp':CTemp,'ASal':ASal,'N1':N1,'N2':N2,'N3':N3,'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
+    data = xr.Dataset({'LON':LON,'LAT':LAT,'SIG':SIG,'CTemp':CTemp,'ASal':ASal,'N1':N1,'N2':N2,'N3':N3, 'MLD':MLD, 'CTemp1_sig':CTemp1_sig, 'CTemp2_sig':CTemp2_sig, 'CTemp3_sig':CTemp3_sig, 'ASal1_sig':ASal1_sig, 'ASal2_sig':ASal2_sig, 'ASal3_sig':ASal3_sig, 'Z1_sig':Z1_sig, 'Z2_sig':Z2_sig, 'Z3_sig':Z3_sig})
 
     # Set file path for saving the netcdf file
     file_path = PATH_data / "processed" / "mitgcm_proc_density_hrly_mooring.nc"

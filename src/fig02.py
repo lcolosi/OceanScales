@@ -81,6 +81,7 @@ segment_duration = 0.5
 
 # Set font and fontsize
 fontsize=16
+fontsize_ins=9
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -438,8 +439,8 @@ axins.plot(
 )
 
 # Set inset axis attributes
-axins.set_xlabel('Time Lag (days)',fontsize=10)
-axins.set_ylabel('Autocorrelation',fontsize=10)
+axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
+axins.set_ylabel('Autocorrelation',fontsize=fontsize_ins)
 axins.set_xlim(0, 15)
 axins.set_ylim(-0.1,1.05)
 axins.set_xticks(np.arange(0, 16+2, 2))
@@ -452,7 +453,7 @@ axins.tick_params(
     right=False,
     left=True,
     bottom=True,
-    labelsize=10,
+    labelsize=fontsize_ins,
     length=3
 )
 
@@ -504,8 +505,8 @@ axins.plot(
 )
 
 # Set inset axis attributes
-axins.set_xlabel('Time Lag (days)',fontsize=10)
-axins.set_ylabel('Autocorrelation',fontsize=10)
+axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
+axins.set_ylabel('Autocorrelation',fontsize=fontsize_ins)
 axins.set_xlim(0, 15)
 axins.set_ylim(-0.1,1.05)
 axins.set_xticks(np.arange(0, 16+2, 2))
@@ -518,7 +519,7 @@ axins.tick_params(
     right=False,
     left=True,
     bottom=True,
-    labelsize=10,
+    labelsize=fontsize_ins,
     length=3
 )
 
@@ -570,8 +571,8 @@ axins.plot(
 )
 
 # Set inset axis attributes
-axins.set_xlabel('Time Lag (days)',fontsize=10)
-axins.set_ylabel('Autocorrelation',fontsize=10)
+axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
+axins.set_ylabel('Autocorrelation',fontsize=fontsize_ins)
 axins.set_xlim(0, 15)
 axins.set_ylim(-0.1,1.05)
 axins.set_xticks(np.arange(0, 16+2, 2))
@@ -584,7 +585,7 @@ axins.tick_params(
     right=False,
     left=True,
     bottom=True,
-    labelsize=10,
+    labelsize=fontsize_ins,
     length=3
 )
 
