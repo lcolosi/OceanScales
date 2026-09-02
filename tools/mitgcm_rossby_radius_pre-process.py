@@ -280,6 +280,7 @@ def depth_average(var, dz, max_depth=None):
     -------
     var_avg : xarray.DataArray
         Thickness-weighted vertical average.
+
     """
 
     # Limit cell thickness to the specified maximum depth
@@ -288,20 +289,27 @@ def depth_average(var, dz, max_depth=None):
         # Depth of the top of each model cell
         cell_top = np.abs(var["Z"]) - 0.5 * ds["drF"]
 
-        # Maximum thickness of each cell lying above max_depth
+        # Thickness of each cell lying above max_depth
         dz_max = (max_depth - cell_top).clip(
             min=0.0,
             max=ds["drF"],
         )
 
-        # Account for both max_depth and partial bottom cells
+        # Account for max_depth and partial bottom cells
         dz = xr.where(dz < dz_max, dz, dz_max)
 
     # Exclude cells without valid data
     weights = dz.where(var.notnull())
 
+    # Compute numerator and denominator
+    numerator   = (var * weights).sum(dim="Z")
+    denominator = weights.sum(dim="Z")
+
+    # Avoid division by zero over land
+    denominator = denominator.where(denominator > 0)
+
     # Compute thickness-weighted vertical average
-    return (var * weights).sum(dim="Z") / weights.sum(dim="Z")
+    return numerator / denominator
 
 # Compute full-water-column velocity
 uvel_full = depth_average(uvel, dz).where(wet_surface)

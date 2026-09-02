@@ -149,7 +149,7 @@ mld_std = np.ma.std(mld,axis=1,ddof=1)
 # Compute spatial mean
 Lt_reg_mean = np.ma.median(Lt)
 
-# Compute the relative uncertainty (with respect to the regional mean)
+# Compute the signal-to-noise ratio (with respect to the regional mean)
 Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm 
 
 # Mask not statistically significant grid points

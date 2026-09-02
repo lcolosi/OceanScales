@@ -175,22 +175,16 @@ data_mask = np.where(Lt_mask, 1, np.nan)
 # Set plotting parameters
 projection = ccrs.PlateCarree(central_longitude=0.0)
 resolution = "10m"
-
 xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
-
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-
 levels = np.arange(7,20+0.25,0.25) 
 ticks  = np.arange(8,20+2,2) 
-
 levels_is = np.arange(100,300,100)
 levels_ms = np.arange(1000,3000,500)
-
 fontsize_g = 18
 fontsize_c = 10
-
 cmap = cmo.amp
 mpl.rcParams["hatch.linewidth"] = 0.2 
 
