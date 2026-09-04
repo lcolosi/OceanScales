@@ -24,9 +24,21 @@ import sys
 from pathlib import Path
 import xarray as xr
 import numpy as np
-from netCDF4 import Dataset, num2date
-from datetime import datetime
+from netCDF4 import Dataset
 import gsw
+
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_data = ROOT / "data"
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import plotting toolbox 
+from ocean_analysis import compute_rossby_modes
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -38,60 +50,70 @@ import gsw
 #
 # - option_depth_avg: Specifies the depth threshold at which the depth-average
 #                     velocity is computed to.  
+# - nmode : Specifies the number of vertical modes to compute in the Rossby
+#           deformation radius calculation. For example, nmode = 4 computes the
+#           first four vertical modes: 
+#                    mode 0 = barotropic
+#                    mode 1 = first baroclinic
+#                    mode 2 = second baroclinic
+#                    mode 3 = third baroclinic
+# - nz_mode : Specifies the number of vertical points used in finite-difference
+#             eigenproblem.   
 #
 # ------------# 
 
 # Set processing parameters
 option_depth_avg = 200   
+nmode            = 4
+nz_mode          = 256 
 
-# Set path to project root directory
-ROOT = Path(__file__).resolve().parents[1]
-PATH_tools = ROOT / "tools"
-
-# Set path to access additional python functions
-sys.path.append(str(PATH_tools))
-
-# Set path to project data directory
-PATH_data = ROOT / "data" / "mitgcm" / "regional"
+# Set path to regional pre-processed data directory
+PATH_preproc = PATH_data / "mitgcm" / "regional"
 
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
 # -----------------------------------------------------------------------------
 print("Loading time-mean and seasonal-mean fields...")
 
-#------------------------------------------#
-# Background Density and Velocity Fields
-#------------------------------------------#
-
 # Obtain filename paths
-filename = PATH_data / f"MITgcm_CCS_rossby_radius_background_upper_{option_depth_avg}m.nc"
+filename = PATH_preproc / f"MITgcm_CCS_rossby_radius_background_upper_{option_depth_avg}m.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename, 'r')
 
-# Extract data variables
+# Extract coordinate variables
 depth  = nc.variables['Z'][:]
 lon    = nc.variables['XC'][:]
 lat    = nc.variables['YC'][:]
 season = nc.variables['season'][:]
 
+# Extract time-mean hydrographic variables
 SA_mean      = nc.variables['SA_mean'][:]
 CT_mean      = nc.variables['CT_mean'][:]
 sigma0_mean  = nc.variables['sigma0_mean'][:]
 
+# Extract seasonal hydrographic variables
 SA_season      = nc.variables['SA_season'][:]
 CT_season      = nc.variables['CT_season'][:]
 sigma0_season  = nc.variables['sigma0_season'][:]
 
+# Extract time-mean velocity variables
 uvel_full_mean  = nc.variables['uvel_full_mean'][:]
 vvel_full_mean  = nc.variables['vvel_full_mean'][:]
 uvel_upper_mean = nc.variables['uvel_upper_mean'][:]
 vvel_upper_mean = nc.variables['vvel_upper_mean'][:]
 
-uvel_full_season   = nc.variables['uvel_full_season'][:]
+# Extract seasonal velocity variables
+uvel_full_season  = nc.variables['uvel_full_season'][:]
 vvel_full_season  = nc.variables['vvel_full_season'][:]
 uvel_upper_season = nc.variables['uvel_upper_season'][:]
 vvel_upper_season = nc.variables['vvel_upper_season'][:]
+
+# Extract local bathymetric depth
+water_depth = nc.variables["water_depth"][:]
+
+# Close input file
+nc.close()
 
 # Mask dry cells previously set to NaN during preprocessing
 SA_mean_m     = np.ma.masked_invalid(SA_mean)
@@ -112,9 +134,7 @@ vvel_full_season_m  = np.ma.masked_invalid(vvel_full_season)
 uvel_upper_season_m = np.ma.masked_invalid(uvel_upper_season)
 vvel_upper_season_m = np.ma.masked_invalid(vvel_upper_season)
 
-#------------------------------------------#
-# Water Depth 
-#------------------------------------------#
+water_depth_m = np.ma.masked_invalid(water_depth)
 
 # -----------------------------------------------------------------------------
 # Compute the Buoyancy Frequency 
@@ -201,8 +221,51 @@ N_season = np.ma.sqrt(
 # -----------------------------------------------------------------------------
 # Compute the Rossby Deformation Radius 
 # -----------------------------------------------------------------------------
+print("Computing time-mean and seasonal-mean Rossby deformation radii...")
 
+# Set the mode number vector 
+mode = np.arange(nmode)
 
+# Set the number of horizontal grid points and seasons
+nlat = len(lat)
+nlon = len(lon)
+nseason = len(season)
+
+# Initialize arrays 
+phase_speed_mean     = np.full((nmode, nlat, nlon), np.nan, dtype=float)
+rossby_radius_mean   = np.full((nmode, nlat, nlon), np.nan, dtype=float)
+phase_speed_season   = np.full((nseason, nmode, nlat, nlon), np.nan, dtype=float)
+rossby_radius_season = np.full((nseason, nmode, nlat, nlon), np.nan, dtype=float)
+
+# ------------------------------------------#
+# Time-mean Rossby Deformation Radius
+# ------------------------------------------#
+
+# Loop through latitude 
+for ilat in range(nlat): 
+
+    # Print progress statement
+    print(
+        f"  Time mean: latitude {ilat + 1}/{nlat}",
+        end="\r",
+        flush=True,
+    )
+
+    # Loop through longitude 
+    for ilon in range(nlon): 
+
+        # Skip dry cells 
+        if np.ma.ismasked(water_depth[ilat,ilon]): 
+            continue
+
+        # Obtain water depth
+        H = float(water_depth(ilat,ilon))
+
+        # Compute the 
+
+# -----------------------------------------------------------------------------
+# Compute the RMS velocity 
+# -----------------------------------------------------------------------------
 
 
 # -----------------------------------------------------------------------------

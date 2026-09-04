@@ -356,20 +356,22 @@ def compute_rossby_modes(
     Compute barotropic and baroclinic gravity-wave modes and the
     corresponding Rossby deformation radii.
 
-    The vertical structure equation is
+    The vertical structure equation for the vertical displacement is
 
-        d²W/dz² + (N²/c²) W = 0,
+        d^2A/dz^2 + (N^2/c^2) A = 0,
 
-    where z is positive downward and c is the modal long-wave
-    phase speed.
+    where z is positive downward, c is the phase speed of long mode-m
+    gravity waves, N^2(z) is the squared buoyancy frequency, and A is
+    the vertical structure of the vertical displacement of the background
+    isopycnal surfaces.
 
-    A free surface is used at z = 0,
+    A free surface boundary condition is used at z = 0,
 
-        dW/dz = -(g/c²) W,
+        dA/dz -(g/c^2) A = 0,
 
-    together with a rigid, impermeable bottom,
+    together with a rigid, impermeable bottom boundary condition at z = H,
 
-        W(H) = 0.
+        A(z = H) = 0.
 
     The first eigenmode is the external/barotropic mode. Subsequent
     modes are the baroclinic modes.
@@ -401,8 +403,8 @@ def compute_rossby_modes(
     Returns
     -------
     result : dict
-        Dictionary containing modal phase speeds, deformation radii,
-        inverse deformation-radius squared, and optionally mode shapes.
+        Dictionary containing modal phase speeds, deformation radii, and 
+        optionally mode shapes.
     """
 
     # -----------------------------------------------------------------
@@ -463,7 +465,7 @@ def compute_rossby_modes(
     n_in = n_in[unique]
 
     # -----------------------------------------------------------------
-    # Coriolis parameter
+    # Set the Coriolis parameter
     # -----------------------------------------------------------------
 
     f = 2.0 * omega * np.sin(np.deg2rad(lat))
@@ -475,7 +477,7 @@ def compute_rossby_modes(
         )
 
     # -----------------------------------------------------------------
-    # Uniform vertical grid
+    # Define the uniform vertical grid
     # -----------------------------------------------------------------
 
     dz = H / nz
@@ -484,11 +486,21 @@ def compute_rossby_modes(
     z = np.arange(nz) * dz
 
     # -----------------------------------------------------------------
-    # Interpolate N² onto uniform grid
+    # Interpolate N^2 onto uniform grid
     # -----------------------------------------------------------------
 
+    # Set the uniform vertical grid spacing 
+    dz = H / nz
+    
+    # Define the new uniform z-grid where the bottom point is excluded from
+    # the eigenproblem because A(z = H) = 0. 
+    z = np.arange(nz) * dz
+
+    # Compute the squared Buoyancy
     n2_in = n_in**2
 
+    # Interpolate onto the uniform grid with a constant extrapolation at
+    # the two end points
     n2 = np.interp(
         z,
         z_in,
@@ -497,43 +509,44 @@ def compute_rossby_modes(
         right=n2_in[-1],
     )
 
-    # Numerical floor for essentially unstratified layers
+    # Numerical floor for essentially unstratified layers (helps avoid
+    # singularities in the eigenvalue problem)
     n2 = np.maximum(n2, n_floor**2)
 
     # -----------------------------------------------------------------
-    # Generalized eigenproblem
+    # Set up the generalized eigenproblem
     #
-    #       K W = mu M W
+    #       K A = mu M A
     #
     # where
     #
-    #       mu = 1 / c²
+    #       mu = 1 / c^2
     #
     # -----------------------------------------------------------------
 
-    # Diagonal of -d²/dz²
+    # Diagonal of K matrix (the discrete representation of -d^2/dz^2) 
     k_diag = np.full(nz, 2.0 / dz**2)
 
-    # Free-surface boundary condition changes first diagonal element
-    k_diag[0] = 1.0 / dz**2
-
-    # Off-diagonal elements
+    # Off-diagonal elements of K matrix
     k_off = np.full(nz - 1, -1.0 / dz**2)
 
-    # Weight matrix
+    # Diagonal of M matrix (the weight matrix in the generalized problem)
     m_diag = n2.copy()
 
-    # Free-surface boundary condition
+    # Apply the free-surface boundary condition to K and M 
+    k_diag[0] = 1.0 / dz**2
     m_diag[0] = grav / dz
 
     # -----------------------------------------------------------------
     # Convert generalized problem into standard symmetric problem
     #
-    # C y = mu y
+    #       C y = mu y
     #
     # with
     #
-    # C = M^(-1/2) K M^(-1/2)
+    #       C = M^(-1/2) K M^(-1/2)
+    # 
+    # Transformation improves efficiency and numerical stability. 
     # -----------------------------------------------------------------
 
     c_diag = k_diag / m_diag
@@ -543,11 +556,11 @@ def compute_rossby_modes(
         / np.sqrt(m_diag[:-1] * m_diag[1:])
     )
 
-    # Need external mode + requested number of baroclinic modes
+    # Set modes to compute (barotropic mode + requested number of baroclinic modes)
     select_range = (0, nmodes)
 
     # -----------------------------------------------------------------
-    # Solve only the modes that are actually needed
+    # Solve standard symmetric eigenvalue problem
     # -----------------------------------------------------------------
 
     if return_modes:
@@ -580,14 +593,11 @@ def compute_rossby_modes(
     # Convert eigenvalues to physical quantities
     # -----------------------------------------------------------------
 
-    # Long-wave phase speed
+    # Phase speed of long mode-m gravity waves
     phase_speed = 1.0 / np.sqrt(mu)
 
-    # Rossby deformation radius
+    # Mode-m rossby deformation radius
     radius = phase_speed / np.abs(f)
-
-    # lambda² = 1 / R²
-    lambda_sq = 1.0 / radius**2
 
     # -----------------------------------------------------------------
     # Package results
@@ -595,12 +605,10 @@ def compute_rossby_modes(
 
     result = {
         # External/barotropic mode
-        "lambda0_sq": lambda_sq[0],
-        "c0": phase_speed[0],
-        "Rd0": radius[0],
+        "c_barotropic": phase_speed[0],
+        "Rd_barotropic": radius[0],
 
         # Baroclinic modes
-        "lambda_baroclinic_sq": lambda_sq[1:],
         "c_baroclinic": phase_speed[1:],
         "Rd_baroclinic": radius[1:],
     }
@@ -611,29 +619,29 @@ def compute_rossby_modes(
 
     if return_modes:
 
-        # Transform eigenvectors back to physical W
+        # Transform eigenvectors back to physical A(z) 
         modes = eigvecs / np.sqrt(m_diag)[:, None]
 
-        # Add bottom point, where W(H) = 0
+        # Add bottom grid point using boundary condition, where A(H) = 0
         modes_full = np.zeros((nz + 1, nmodes + 1))
-
         modes_full[:-1, :] = modes
 
-        # Normalize each mode by maximum absolute amplitude
+        # Loop through modes 
         for imode in range(nmodes + 1):
 
+            # Compute the maximum absolute amplitude
             scale = np.max(np.abs(modes_full[:, imode]))
 
+            # Normalize each mode by maximum absolute amplitude
             modes_full[:, imode] /= scale
 
             # Choose consistent sign
             if modes_full[0, imode] < 0.0:
                 modes_full[:, imode] *= -1.0
 
+        # Save depth coordinate and barotropic/baroclinic vertical structure
         result["z"] = np.linspace(0.0, H, nz + 1)
-
-        result["w0"] = modes_full[:, 0]
-
+        result["w_barotropic"] = modes_full[:, 0]
         result["w_baroclinic"] = modes_full[:, 1:]
 
     return result
