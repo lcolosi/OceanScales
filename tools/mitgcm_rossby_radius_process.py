@@ -59,6 +59,10 @@ PATH_data = ROOT / "data" / "mitgcm" / "regional"
 # -----------------------------------------------------------------------------
 print("Loading time-mean and seasonal-mean fields...")
 
+#------------------------------------------#
+# Background Density and Velocity Fields
+#------------------------------------------#
+
 # Obtain filename paths
 filename = PATH_data / f"MITgcm_CCS_rossby_radius_background_upper_{option_depth_avg}m.nc"
 
@@ -107,6 +111,10 @@ uvel_full_season_m  = np.ma.masked_invalid(uvel_full_season)
 vvel_full_season_m  = np.ma.masked_invalid(vvel_full_season)
 uvel_upper_season_m = np.ma.masked_invalid(uvel_upper_season)
 vvel_upper_season_m = np.ma.masked_invalid(vvel_upper_season)
+
+#------------------------------------------#
+# Water Depth 
+#------------------------------------------#
 
 # -----------------------------------------------------------------------------
 # Compute the Buoyancy Frequency 
@@ -193,6 +201,8 @@ N_season = np.ma.sqrt(
 # -----------------------------------------------------------------------------
 # Compute the Rossby Deformation Radius 
 # -----------------------------------------------------------------------------
+
+
 
 
 # -----------------------------------------------------------------------------

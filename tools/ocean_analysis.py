@@ -16,6 +16,7 @@
 
 # Import libraries 
 import numpy as np
+from scipy.linalg import eigh_tridiagonal
 
 # --- Mixed Layer Depth --- #
 def compute_mld(
@@ -336,4 +337,304 @@ def compute_mld(
         else:
             # Return the shallowest depth where criterion is met
             return depth_valid[idx[0]]
+
+
+# --- Rossby Deformation Radius and Vertical Struction of Displacement --- #
+def compute_rossby_modes(
+    zin,
+    nin,
+    lat,
+    depth_bottom,
+    nmodes=1,
+    nz=256,
+    grav=9.81,
+    omega=7.292115e-5,
+    n_floor=1.0e-7,
+    return_modes=False,
+):
+    """
+    Compute barotropic and baroclinic gravity-wave modes and the
+    corresponding Rossby deformation radii.
+
+    The vertical structure equation is
+
+        d²W/dz² + (N²/c²) W = 0,
+
+    where z is positive downward and c is the modal long-wave
+    phase speed.
+
+    A free surface is used at z = 0,
+
+        dW/dz = -(g/c²) W,
+
+    together with a rigid, impermeable bottom,
+
+        W(H) = 0.
+
+    The first eigenmode is the external/barotropic mode. Subsequent
+    modes are the baroclinic modes.
+
+    Parameters
+    ----------
+    zin : array_like
+        Vertical coordinates of N [m]. May be either TEOS-10 z
+        (negative below the surface) or positive-down depth.
+    nin : array_like
+        Buoyancy frequency N(z) [s^-1].
+    lat : float
+        Latitude [degrees].
+    depth_bottom : float
+        Actual bathymetric water depth H [m].
+    nmodes : int, optional
+        Number of baroclinic modes to calculate. Default is 1.
+    nz : int, optional
+        Number of uniformly spaced vertical intervals. Default is 256.
+    grav : float, optional
+        Gravitational acceleration [m s^-2].
+    omega : float, optional
+        Earth's rotation rate [s^-1].
+    n_floor : float, optional
+        Small numerical floor applied to N [s^-1].
+    return_modes : bool, optional
+        If True, also return the vertical eigenfunctions.
+
+    Returns
+    -------
+    result : dict
+        Dictionary containing modal phase speeds, deformation radii,
+        inverse deformation-radius squared, and optionally mode shapes.
+    """
+
+    # -----------------------------------------------------------------
+    # Prepare input profiles
+    # -----------------------------------------------------------------
+
+    z_in = np.asarray(
+        np.ma.filled(np.ma.asarray(zin, dtype=float), np.nan),
+        dtype=float,
+    )
+
+    n_in = np.asarray(
+        np.ma.filled(np.ma.asarray(nin, dtype=float), np.nan),
+        dtype=float,
+    )
+
+    if z_in.ndim != 1 or n_in.ndim != 1 or z_in.size != n_in.size:
+        raise ValueError(
+            "zin and nin must be 1-D arrays with the same length."
+        )
+
+    # Actual water-column depth
+    H = float(depth_bottom)
+
+    if not np.isfinite(H) or H <= 0.0:
+        raise ValueError(
+            "depth_bottom must be a finite positive depth."
+        )
+
+    # Accept either negative TEOS-10 z or positive-down depth
+    z_in = np.abs(z_in)
+
+    # Remove invalid data
+    valid = (
+        np.isfinite(z_in)
+        & np.isfinite(n_in)
+        & (z_in >= 0.0)
+        & (z_in < H)
+        & (n_in >= 0.0)
+    )
+
+    z_in = z_in[valid]
+    n_in = n_in[valid]
+
+    if z_in.size < 2:
+        raise ValueError(
+            "At least two valid N(z) values are required."
+        )
+
+    # Sort vertically
+    order = np.argsort(z_in)
+
+    z_in = z_in[order]
+    n_in = n_in[order]
+
+    # Remove duplicate depths
+    z_in, unique = np.unique(z_in, return_index=True)
+    n_in = n_in[unique]
+
+    # -----------------------------------------------------------------
+    # Coriolis parameter
+    # -----------------------------------------------------------------
+
+    f = 2.0 * omega * np.sin(np.deg2rad(lat))
+
+    if np.abs(f) < 1.0e-10:
+        raise ValueError(
+            "Midlatitude Rossby-radius formula is not valid near "
+            "the equator."
+        )
+
+    # -----------------------------------------------------------------
+    # Uniform vertical grid
+    # -----------------------------------------------------------------
+
+    dz = H / nz
+
+    # Bottom point is excluded from the eigenproblem because W(H) = 0
+    z = np.arange(nz) * dz
+
+    # -----------------------------------------------------------------
+    # Interpolate N² onto uniform grid
+    # -----------------------------------------------------------------
+
+    n2_in = n_in**2
+
+    n2 = np.interp(
+        z,
+        z_in,
+        n2_in,
+        left=n2_in[0],
+        right=n2_in[-1],
+    )
+
+    # Numerical floor for essentially unstratified layers
+    n2 = np.maximum(n2, n_floor**2)
+
+    # -----------------------------------------------------------------
+    # Generalized eigenproblem
+    #
+    #       K W = mu M W
+    #
+    # where
+    #
+    #       mu = 1 / c²
+    #
+    # -----------------------------------------------------------------
+
+    # Diagonal of -d²/dz²
+    k_diag = np.full(nz, 2.0 / dz**2)
+
+    # Free-surface boundary condition changes first diagonal element
+    k_diag[0] = 1.0 / dz**2
+
+    # Off-diagonal elements
+    k_off = np.full(nz - 1, -1.0 / dz**2)
+
+    # Weight matrix
+    m_diag = n2.copy()
+
+    # Free-surface boundary condition
+    m_diag[0] = grav / dz
+
+    # -----------------------------------------------------------------
+    # Convert generalized problem into standard symmetric problem
+    #
+    # C y = mu y
+    #
+    # with
+    #
+    # C = M^(-1/2) K M^(-1/2)
+    # -----------------------------------------------------------------
+
+    c_diag = k_diag / m_diag
+
+    c_off = (
+        k_off
+        / np.sqrt(m_diag[:-1] * m_diag[1:])
+    )
+
+    # Need external mode + requested number of baroclinic modes
+    select_range = (0, nmodes)
+
+    # -----------------------------------------------------------------
+    # Solve only the modes that are actually needed
+    # -----------------------------------------------------------------
+
+    if return_modes:
+
+        mu, eigvecs = eigh_tridiagonal(
+            c_diag,
+            c_off,
+            select="i",
+            select_range=select_range,
+            check_finite=False,
+        )
+
+    else:
+
+        mu = eigh_tridiagonal(
+            c_diag,
+            c_off,
+            eigvals_only=True,
+            select="i",
+            select_range=select_range,
+            check_finite=False,
+        )
+
+    if np.any(mu <= 0.0):
+        raise RuntimeError(
+            "Non-positive vertical-mode eigenvalue encountered."
+        )
+
+    # -----------------------------------------------------------------
+    # Convert eigenvalues to physical quantities
+    # -----------------------------------------------------------------
+
+    # Long-wave phase speed
+    phase_speed = 1.0 / np.sqrt(mu)
+
+    # Rossby deformation radius
+    radius = phase_speed / np.abs(f)
+
+    # lambda² = 1 / R²
+    lambda_sq = 1.0 / radius**2
+
+    # -----------------------------------------------------------------
+    # Package results
+    # -----------------------------------------------------------------
+
+    result = {
+        # External/barotropic mode
+        "lambda0_sq": lambda_sq[0],
+        "c0": phase_speed[0],
+        "Rd0": radius[0],
+
+        # Baroclinic modes
+        "lambda_baroclinic_sq": lambda_sq[1:],
+        "c_baroclinic": phase_speed[1:],
+        "Rd_baroclinic": radius[1:],
+    }
+
+    # -----------------------------------------------------------------
+    # Optionally recover vertical mode shapes
+    # -----------------------------------------------------------------
+
+    if return_modes:
+
+        # Transform eigenvectors back to physical W
+        modes = eigvecs / np.sqrt(m_diag)[:, None]
+
+        # Add bottom point, where W(H) = 0
+        modes_full = np.zeros((nz + 1, nmodes + 1))
+
+        modes_full[:-1, :] = modes
+
+        # Normalize each mode by maximum absolute amplitude
+        for imode in range(nmodes + 1):
+
+            scale = np.max(np.abs(modes_full[:, imode]))
+
+            modes_full[:, imode] /= scale
+
+            # Choose consistent sign
+            if modes_full[0, imode] < 0.0:
+                modes_full[:, imode] *= -1.0
+
+        result["z"] = np.linspace(0.0, H, nz + 1)
+
+        result["w0"] = modes_full[:, 0]
+
+        result["w_baroclinic"] = modes_full[:, 1:]
+
+    return result
 

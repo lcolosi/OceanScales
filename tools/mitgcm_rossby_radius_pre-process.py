@@ -360,6 +360,17 @@ uvel_upper_season = uvel_upper_season.sel(season=seasons)
 vvel_upper_season = vvel_upper_season.sel(season=seasons)
 
 # -----------------------------------------------------------------------------
+# Obtain bathymetry in study region
+# -----------------------------------------------------------------------------
+status(f"Obtain water depth in study region...")
+
+# Extract native model bathymetry
+water_depth = ds["Depth"]
+
+# Mask land
+water_depth = water_depth.where(water_depth > 0)
+
+# -----------------------------------------------------------------------------
 # Save background fields to NetCDF
 # -----------------------------------------------------------------------------
 status("Saving time-mean and seasonal-mean background fields...")
@@ -395,6 +406,9 @@ ds_out = xr.Dataset(
         "vvel_full_season": clean_coords(vvel_full_season),
         "uvel_upper_season": clean_coords(uvel_upper_season),
         "vvel_upper_season": clean_coords(vvel_upper_season),
+
+        # Water Depth 
+        "water_depth": clean_coords(water_depth),
     }
 )
 
@@ -478,6 +492,13 @@ ds_out["uvel_upper_season"].attrs.update(
 ds_out["vvel_upper_season"].attrs.update(
     long_name=f"Seasonal-mean upper-{max_depth:g}-m depth-averaged meridional velocity",
     units="m s-1",
+)
+
+# Water depth 
+ds_out["water_depth"].attrs.update(
+    long_name="ocean water depth",
+    units="m",
+    positive="down",
 )
 
 # Add global metadata
