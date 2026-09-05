@@ -367,7 +367,7 @@ def compute_rossby_modes(
 
     A free surface boundary condition is used at z = 0,
 
-        dA/dz -(g/c^2) A = 0,
+        dA/dz + (g/c^2) A = 0,
 
     together with a rigid, impermeable bottom boundary condition at z = H,
 
@@ -626,18 +626,15 @@ def compute_rossby_modes(
         modes_full = np.zeros((nz + 1, nmodes + 1))
         modes_full[:-1, :] = modes
 
-        # Loop through modes 
+        # Loop through modes
         for imode in range(nmodes + 1):
 
-            # Compute the maximum absolute amplitude
-            scale = np.max(np.abs(modes_full[:, imode]))
+            # Find the value of A(z) at the surface
+            scale = modes_full[0, imode]
 
-            # Normalize each mode by maximum absolute amplitude
-            modes_full[:, imode] /= scale
-
-            # Choose consistent sign
-            if modes_full[0, imode] < 0.0:
-                modes_full[:, imode] *= -1.0
+            # Normalize so surface amplitude is 1
+            if np.abs(scale) > 1.0e-12:
+                modes_full[:, imode] /= scale
 
         # Save depth coordinate and barotropic/baroclinic vertical structure
         result["z"] = np.linspace(0.0, H, nz + 1)

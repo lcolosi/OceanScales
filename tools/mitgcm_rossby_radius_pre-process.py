@@ -175,6 +175,8 @@ uvel  = ds['U_center'].sel(YC=lat_slice,
                            XC=lon_slice)
 vvel  = ds['V_center'].sel(YC=lat_slice, 
                            XC=lon_slice)
+water_depth  = ds['Depth'].sel(YC=lat_slice, 
+                               XC=lon_slice)
 
 # -----------------------------------------------------------------------------
 # Mask dry cells
@@ -190,11 +192,15 @@ hfac = ds["hFacC"].sel(
 # Identify wet cells
 wet = hfac > 0
 
+# Identify the wet cells at just the surface
+wet_surface = hfac.isel(Z=0) > 0
+
 # Mask dry cells
 theta = theta.where(wet)
 salt  = salt.where(wet)
 uvel  = uvel.where(wet)
 vvel  = vvel.where(wet)
+water_depth = water_depth.where(wet_surface)
 
 # -----------------------------------------------------------------------------
 # Compute Absolute Salinity, Conservative Temperature, and Potential Density
@@ -358,17 +364,6 @@ vvel_full_season = vvel_full_season.sel(season=seasons)
 
 uvel_upper_season = uvel_upper_season.sel(season=seasons)
 vvel_upper_season = vvel_upper_season.sel(season=seasons)
-
-# -----------------------------------------------------------------------------
-# Obtain bathymetry in study region
-# -----------------------------------------------------------------------------
-status(f"Obtain water depth in study region...")
-
-# Extract native model bathymetry
-water_depth = ds["Depth"]
-
-# Mask land
-water_depth = water_depth.where(water_depth > 0)
 
 # -----------------------------------------------------------------------------
 # Save background fields to NetCDF
