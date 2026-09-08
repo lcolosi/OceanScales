@@ -65,6 +65,7 @@ status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis")
 # - halo_cells : Number of data points to extend the boundaries to ensure data is
 #                present at the boundaries the study doamin when plotting
 #                with contourf.
+# - encoding: Start time of the model run.
 # - PATH_GRID: Directory containing the model grid.
 # - PATH_OUTPUT: Directory containing model diagnostics.
 # - PATH_nc: Directory where netCDF files are saved.
@@ -82,7 +83,8 @@ delta_t = 150
 max_depth  = 200.0                                                      
 lat_bnds   = [33.0, 35.0]                                          
 lon_bnds   = [237.0, 240.0]
-halo_cells = 3                                          
+halo_cells = 3    
+encoding   = {'time': {'units': 'seconds since 2015-12-01 2:00'}}                                        
 
 # Set path to project directory
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                    
@@ -369,7 +371,11 @@ def clean_coords(da):
     """Remove auxiliary coordinates while retaining dimension coordinates."""
     return da.reset_coords(drop=True)
 
-# Create background dataset
+# ------------------------------------------#
+# Create datasets
+# ------------------------------------------#
+
+# --- Background --- # 
 ds_background = xr.Dataset(
     data_vars={
         # Time-mean hydrographic fields
@@ -388,16 +394,21 @@ ds_background = xr.Dataset(
 )
 
 # Create depth-averaged velocity dataset
-ds_velocity = xr.Dataset(
+ds_uvel = xr.Dataset(
     data_vars={
-
-        # Full water column depth-averaged velocity fields 
         "uvel_depth_avg": clean_coords(uvel_depth_avg),
-        "vvel_depth_avg": clean_coords(vvel_depth_avg),
     }
 )   
 
+ds_vvel = xr.Dataset(
+    data_vars={
+        "vvel_depth_avg": clean_coords(vvel_depth_avg),
+    }
+)  
+
+# ------------------------------------------#
 # Add variable metadata
+# ------------------------------------------#
 
 # --- Background --- # 
 ds_background["SA_mean"].attrs.update(
@@ -438,23 +449,28 @@ ds_background["water_depth"].attrs.update(
 
 # --- Velocity --- # 
 if option_depth_avg == "full":
+
     long_name_uvel = "Full-water-column depth-averaged zonal velocity"
     long_name_vvel = "Full-water-column depth-averaged meridional velocity"
+
 elif option_depth_avg == "upper":
+
     long_name_uvel = f"Upper-{max_depth:g}-m depth-averaged zonal velocity"
     long_name_vvel = f"Upper-{max_depth:g}-m depth-averaged meridional velocity"
 
-ds_velocity["uvel_depth_avg"].attrs.update(
+ds_uvel["uvel_depth_avg"].attrs.update(
     long_name=long_name_uvel,
     units="m s-1",
 )
 
-ds_velocity["vvel_depth_avg"].attrs.update(
+ds_vvel["vvel_depth_avg"].attrs.update(
     long_name=long_name_vvel,
     units="m s-1",
 )
 
+# ------------------------------------------#
 # Add global metadata
+# ------------------------------------------#
 
 # --- Background --- # 
 ds_background.attrs.update(
@@ -466,31 +482,42 @@ ds_background.attrs.update(
 )
 
 # --- Velocity --- # 
-ds_velocity.attrs.update(
-    title="MITgcm CCS depth average velocity fields for Rossby radius analysis",
+ds_uvel.attrs.update(
+    title="MITgcm CCS depth-average zonal velocity",
     description=(
-        "Depth-average velocity fields from a high resolution MITgcm"
+        "Depth-average zonal velocity fields from a high resolution MITgcm"
         " regional simulation."
     ),
 )
 
-if option_depth_avg == "upper":
-    ds_velocity.attrs["max_depth_m"] = max_depth
-
-# Set output filename
-filename_background = (
-    f"SEA-STATE_CCS_background.nc"
+ds_vvel.attrs.update(
+    title="MITgcm CCS depth-average meridional velocity",
+    description=(
+        "Depth-average meridional velocity fields from a high resolution MITgcm"
+        " regional simulation."
+    ),
 )
 
+# Save averaging depth as metadata for upper-ocean averages
+if option_depth_avg == "upper":
+
+    ds_uvel.attrs["max_depth_m"] = max_depth
+    ds_vvel.attrs["max_depth_m"] = max_depth
+
+# Set output filename
+filename_background = "SEA-STATE_CCS_background.nc"
+
 if option_depth_avg == "full":
-    filename_velocity = (
-        f"VEL_CCS_hrly_depth_avg_full_water_column.nc"
-    )
+
+    filename_uvel = "UVEL_CCS_hrly_depth_avg_full_water_column.nc"
+
+    filename_vvel = "VVEL_CCS_hrly_depth_avg_full_water_column.nc"
+
 elif option_depth_avg == "upper":
-    filename_velocity = (
-        f"VEL_CCS_hrly_depth_avg_"
-        f"upper_{max_depth:g}m.nc"
-    )
+
+    filename_uvel = f"UVEL_CCS_hrly_depth_avg_upper_{max_depth:g}m.nc"
+
+    filename_vvel = f"VVEL_CCS_hrly_depth_avg_upper_{max_depth:g}m.nc"
 
 # ------------------------------------------#
 # Save background hydrographic fields 
@@ -510,13 +537,23 @@ status(f"Saved {filename_background} to {PATH_nc}.")
 # ------------------------------------------#
 
 # Save to NetCDF
-ds_velocity.to_netcdf(
-    Path(PATH_nc) / filename_velocity,
+ds_uvel.to_netcdf(
+    Path(PATH_nc) / filename_uvel,
     engine="netcdf4",
     format="NETCDF4",
+    encoding=encoding,
 )
 
-status(f"Saved {filename_velocity} to {PATH_nc}.")
+status(f"Saved {filename_uvel} to {PATH_nc}.")
+
+ds_vvel.to_netcdf(
+    Path(PATH_nc) / filename_vvel,
+    engine="netcdf4",
+    format="NETCDF4",
+    encoding=encoding,
+)
+
+status(f"Saved {filename_vvel} to {PATH_nc}.")
 status("MITgcm Rossby radius pre-processing complete!")
 
 
