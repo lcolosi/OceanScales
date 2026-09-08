@@ -371,9 +371,9 @@ def clean_coords(da):
     """Remove auxiliary coordinates while retaining dimension coordinates."""
     return da.reset_coords(drop=True)
 
-# ------------------------------------------#
+# ------------------------------------------ #
 # Create datasets
-# ------------------------------------------#
+# ------------------------------------------ #
 
 # --- Background --- # 
 ds_background = xr.Dataset(
@@ -406,9 +406,9 @@ ds_vvel = xr.Dataset(
     }
 )  
 
-# ------------------------------------------#
+# ------------------------------------------ #
 # Add variable metadata
-# ------------------------------------------#
+# ------------------------------------------ #
 
 # --- Background --- # 
 ds_background["SA_mean"].attrs.update(
@@ -468,9 +468,9 @@ ds_vvel["vvel_depth_avg"].attrs.update(
     units="m s-1",
 )
 
-# ------------------------------------------#
+# ------------------------------------------ #
 # Add global metadata
-# ------------------------------------------#
+# ------------------------------------------ #
 
 # --- Background --- # 
 ds_background.attrs.update(
@@ -519,9 +519,9 @@ elif option_depth_avg == "upper":
 
     filename_vvel = f"VVEL_CCS_hrly_depth_avg_upper_{max_depth:g}m.nc"
 
-# ------------------------------------------#
+# ------------------------------------------ #
 # Save background hydrographic fields 
-# ------------------------------------------#
+# ------------------------------------------ #
 
 # Save to NetCDF
 ds_background.to_netcdf(
