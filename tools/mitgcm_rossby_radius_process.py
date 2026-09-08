@@ -37,9 +37,11 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import plotting toolbox 
+# Import python toolboxes
 from ocean_analysis import compute_rossby_modes
+from plotting import status
 
+status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis...")
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
 # -----------------------------------------------------------------------------
@@ -73,10 +75,10 @@ PATH_preproc = PATH_data / "mitgcm" / "regional"
 # -----------------------------------------------------------------------------
 # Load mitgcm data netcdf files 
 # -----------------------------------------------------------------------------
-print("Loading time-mean and seasonal-mean fields...")
+status("Loading time-mean and seasonal-mean fields...")
 
 # Obtain filename paths
-filename = PATH_preproc / f"MITgcm_CCS_rossby_radius_background_upper_{option_depth_avg}m.nc"
+filename = PATH_preproc / f"SEA-STATE_CCS_background_upper_{option_depth_avg}m.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename, 'r')
@@ -139,7 +141,7 @@ water_depth_m = np.ma.masked_invalid(water_depth)
 # -----------------------------------------------------------------------------
 # Compute the Buoyancy Frequency 
 # -----------------------------------------------------------------------------
-print("Computing time-mean and seasonal-mean buoyancy frequency...")
+status("Computing time-mean and seasonal-mean buoyancy frequency...")
 
 # Number of vertical levels
 ndepth = len(depth)
@@ -221,7 +223,7 @@ N_season = np.ma.sqrt(
 # -----------------------------------------------------------------------------
 # Compute the Rossby Deformation Radius 
 # -----------------------------------------------------------------------------
-print("Computing time-mean and seasonal-mean Rossby deformation radii...")
+status("Computing time-mean and seasonal-mean Rossby deformation radii...")
 
 # Set the mode number vector 
 mode = np.arange(nmode)
@@ -258,15 +260,107 @@ for ilat in range(nlat):
         if np.ma.ismasked(water_depth[ilat,ilon]): 
             continue
 
-        # Obtain water depth
-        H = float(water_depth(ilat,ilon))
+        # Set input variables for Rossby wave solver 
+        z_in   = depth_mid_mean[:,ilat,ilon]
+        N_in   = N_mean[:,ilat,ilon]
+        lat_in = lat[ilat]
+        H_in   = float(water_depth[ilat,ilon])
 
-        # Compute the 
+        # Run the linear Rossby wave solver 
+        result = compute_rossby_modes(
+                                      z_in,
+                                      N_in,
+                                      lat_in,
+                                      depth_bottom=H_in,
+                                      nmodes=3,
+                                      return_modes=False,
+                                ) 
+
+        # Save variables 
+        phase_speed_mean[:,ilat,ilon] = np.concatenate((
+            [result["c_barotropic"]],
+            result["c_baroclinic"],
+        ))
+
+        rossby_radius_mean[:,ilat,ilon] = np.concatenate((
+            [result["Rd_barotropic"]],
+            result["Rd_baroclinic"],
+        ))
+
+# Loop through seasons
+for iseason in range(nseason):
+
+    # Loop through latitude 
+    for ilat in range(nlat):
+
+        print(
+            f"  Season {iseason + 1}/{nseason}: "
+            f"latitude {ilat + 1}/{nlat}",
+            end="\r",
+            flush=True,
+        )
+
+        # Loop through longitude 
+        for ilon in range(nlon): 
+
+            # Skip dry cells 
+            if np.ma.ismasked(water_depth[ilat,ilon]): 
+                continue
+
+            # Set input variables for Rossby wave solver 
+            z_in   = depth_mid_mean[iseason,:,ilat,ilon]
+            N_in   = N_season[iseason,:,ilat,ilon]
+            lat_in = lat[ilat]
+            H_in   = float(water_depth[ilat,ilon])
+
+            # Run the linear Rossby wave solver 
+            result = compute_rossby_modes(
+                                            z_in,
+                                            N_in,
+                                            lat_in,
+                                            depth_bottom=H_in,
+                                            nmodes=3,
+                                            return_modes=False,
+                                    ) 
+    
+            # Save variables 
+            phase_speed_season[iseason,:,ilat,ilon] = np.concatenate((
+                [result["c_barotropic"]],
+                result["c_baroclinic"],
+            ))
+    
+            rossby_radius_season[iseason,:,ilat,ilon] = np.concatenate((
+                [result["Rd_barotropic"]],
+                result["Rd_baroclinic"],
+            ))
+
+# Convert outputs to masked arrays
+phase_speed_mean_m     = np.ma.masked_invalid(phase_speed_mean)
+rossby_radius_mean_m   = np.ma.masked_invalid(rossby_radius_mean)
+phase_speed_season_m   = np.ma.masked_invalid(phase_speed_season)
+rossby_radius_season_m = np.ma.masked_invalid(rossby_radius_season)
 
 # -----------------------------------------------------------------------------
 # Compute the RMS velocity 
 # -----------------------------------------------------------------------------
 
+# Compute the mean of the velocity components 
+u_mean = np.mean(u, axis=0)
+v_mean = np.mean(v, axis=0) 
+
+# Compute mean speed 
+U_mean = np.sqrt(u_mean**2 + v_mean**2)
+
+# Compute the root-mean-square of velocity components 
+u_rms = np.sqrt(np.mean(u**2,axis=0))
+v_rms = np.sqrt(np.mean(v**2,axis=0))
+
+u_rms_p = np.sqrt(np.mean((u - u_mean)**2,axis=0))
+v_rms_p = np.sqrt(np.mean((v - v_mean)**2,axis=0))
+
+# Compute the root mean square velocity (with mean and without mean)
+U_rms = np.sqrt(u_rms**2 + v_rms**2)
+U_rms_p = np.sqrt(u_rms_p**2 + v_rms_p**2)
 
 # -----------------------------------------------------------------------------
 # Compute the Advection Time Scale 

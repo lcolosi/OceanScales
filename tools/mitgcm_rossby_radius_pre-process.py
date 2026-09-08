@@ -55,6 +55,9 @@ status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis")
 # --- Note ---# 
 # ------------#
 #
+# - option_depth_avg: Depth averaging option for the velocity fields. Options are:
+#                     "full" for full-water-column depth average, or "upper" for 
+#                     upper-ocean depth average to a specified depth.
 # - delta_t: Model time step in seconds (time increments of the diagnostics can differ).
 # - max_depth : Depth threshold for the depth average velocity calculation (units: m). 
 # - lat_bnds: Latitude bounds setting the region of interest.
@@ -69,6 +72,9 @@ status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis")
 #
 # ------------# 
 
+# Set processing parameters
+option_depth_avg = "upper" 
+
 # Model parameters 
 delta_t = 150  
 
@@ -82,6 +88,12 @@ halo_cells = 3
 PATH_GRID   = '/data/SO2/SWOT/GRID/BIN/'                    
 PATH_OUTPUT = '/data/SO2/SWOT/MARA/RUN4_LY/DIAGS_HRLY/'     
 PATH_nc     = '/data/SO3/lcolosi/OceanScales/mitgcm/regional/'  
+
+# Validate processing parameters
+if option_depth_avg not in {"full", "upper"}:
+    raise ValueError(
+        "option_depth_avg must be either 'full' or 'upper'"
+    )
 
 # -----------------------------------------------------------------------------
 # Load the grid and diagnostics data into a python structure
@@ -242,7 +254,7 @@ CT = xr.apply_ufunc(
     output_dtypes=[np.float64],
 )
 
-# Compute potential density anomaly referenced to the surface
+# Compute Potential Density Anomaly referenced to the surface
 sigma0 = xr.apply_ufunc(
     gsw.sigma0,
     SA,
@@ -255,7 +267,6 @@ sigma0 = xr.apply_ufunc(
 SA_mean     = SA.mean(dim="time")
 CT_mean     = CT.mean(dim="time")
 sigma0_mean = sigma0.mean(dim="time")
-theta_mean  = theta.mean(dim="time")
 
 # -----------------------------------------------------------------------------
 # Compute depth-averaged velocity fields
@@ -268,6 +279,7 @@ dz = ds["drF"] * hfac
 # Set the surface ocean mask for 2-D fields
 wet_surface = wet.isel(Z=0)
 
+# Define depth average function 
 def depth_average(var, dz, max_depth=None):
     """
     Compute the thickness-weighted vertical average of a variable.
@@ -317,38 +329,27 @@ def depth_average(var, dz, max_depth=None):
     # Compute thickness-weighted vertical average
     return numerator / denominator
 
-# Compute full-water-column velocity
-uvel_full = depth_average(uvel, dz).where(wet_surface)
-vvel_full = depth_average(vvel, dz).where(wet_surface)
+if option_depth_avg == "full":
 
-# Compute upper-ocean velocity
-uvel_upper = depth_average(uvel, dz, max_depth=max_depth).where(wet_surface)
-vvel_upper = depth_average(vvel, dz, max_depth=max_depth).where(wet_surface)
+    # Compute full-water-column velocity 
+    uvel_depth_avg = depth_average(uvel, dz).where(wet_surface)
+    vvel_depth_avg = depth_average(vvel, dz).where(wet_surface)
 
-# Compute the time-average of the depth-averaged velocity fields
-uvel_full_mean = uvel_full.mean(dim="time")
-vvel_full_mean = vvel_full.mean(dim="time")
+elif option_depth_avg == "upper":
 
-uvel_upper_mean = uvel_upper.mean(dim="time")
-vvel_upper_mean = vvel_upper.mean(dim="time")
+    # Compute upper-ocean velocity from the surface to the specified depth  
+    uvel_depth_avg = depth_average(uvel, dz, max_depth=max_depth).where(wet_surface)
+    vvel_depth_avg = depth_average(vvel, dz, max_depth=max_depth).where(wet_surface)
 
 # -----------------------------------------------------------------------------
 # Compute seasonal-mean background fields
 # -----------------------------------------------------------------------------
-status("Computing seasonal background hydrographic and velocity fields...")
+status("Computing seasonal background hydrographic fields...")
 
 # Hydrographic fields
 SA_season     = SA.groupby("time.season").mean(dim="time")
 CT_season     = CT.groupby("time.season").mean(dim="time")
 sigma0_season = sigma0.groupby("time.season").mean(dim="time")
-theta_season  = theta.groupby("time.season").mean(dim="time")
-
-# Depth-averaged velocity fields
-uvel_full_season = uvel_full.groupby("time.season").mean(dim="time")
-vvel_full_season = vvel_full.groupby("time.season").mean(dim="time")
-
-uvel_upper_season = uvel_upper.groupby("time.season").mean(dim="time")
-vvel_upper_season = vvel_upper.groupby("time.season").mean(dim="time")
 
 # Set chronological order of seasons 
 seasons = ["DJF", "MAM", "JJA", "SON"]
@@ -357,172 +358,165 @@ seasons = ["DJF", "MAM", "JJA", "SON"]
 SA_season     = SA_season.sel(season=seasons)
 CT_season     = CT_season.sel(season=seasons)
 sigma0_season = sigma0_season.sel(season=seasons)
-theta_season  = theta_season.sel(season=seasons)
-
-uvel_full_season = uvel_full_season.sel(season=seasons)
-vvel_full_season = vvel_full_season.sel(season=seasons)
-
-uvel_upper_season = uvel_upper_season.sel(season=seasons)
-vvel_upper_season = vvel_upper_season.sel(season=seasons)
 
 # -----------------------------------------------------------------------------
-# Save background fields to NetCDF
+# Save background and velocity fields to NetCDF
 # -----------------------------------------------------------------------------
-status("Saving time-mean and seasonal-mean background fields...")
+status("Saving time-mean and seasonal-mean background fields and depth-average velocity fields...")
 
 # Remove unnecessary auxiliary grid coordinates
 def clean_coords(da):
     """Remove auxiliary coordinates while retaining dimension coordinates."""
     return da.reset_coords(drop=True)
 
-# Create output dataset
-ds_out = xr.Dataset(
+# Create background dataset
+ds_background = xr.Dataset(
     data_vars={
         # Time-mean hydrographic fields
         "SA_mean": clean_coords(SA_mean),
         "CT_mean": clean_coords(CT_mean),
         "sigma0_mean": clean_coords(sigma0_mean),
-        "theta_mean": clean_coords(theta_mean),
 
         # Seasonal-mean hydrographic fields
         "SA_season": clean_coords(SA_season),
         "CT_season": clean_coords(CT_season),
         "sigma0_season": clean_coords(sigma0_season),
-        "theta_season": clean_coords(theta_season),
-
-        # Time-mean depth-averaged velocity fields
-        "uvel_full_mean": clean_coords(uvel_full_mean),
-        "vvel_full_mean": clean_coords(vvel_full_mean),
-        "uvel_upper_mean": clean_coords(uvel_upper_mean),
-        "vvel_upper_mean": clean_coords(vvel_upper_mean),
-
-        # Seasonal-mean depth-averaged velocity fields
-        "uvel_full_season": clean_coords(uvel_full_season),
-        "vvel_full_season": clean_coords(vvel_full_season),
-        "uvel_upper_season": clean_coords(uvel_upper_season),
-        "vvel_upper_season": clean_coords(vvel_upper_season),
 
         # Water Depth 
         "water_depth": clean_coords(water_depth),
     }
 )
 
+# Create depth-averaged velocity dataset
+ds_velocity = xr.Dataset(
+    data_vars={
+
+        # Full water column depth-averaged velocity fields 
+        "uvel_depth_avg": clean_coords(uvel_depth_avg),
+        "vvel_depth_avg": clean_coords(vvel_depth_avg),
+    }
+)   
+
 # Add variable metadata
-ds_out["SA_mean"].attrs.update(
+
+# --- Background --- # 
+ds_background["SA_mean"].attrs.update(
     long_name="Time-mean Absolute Salinity",
     units="g kg-1",
 )
 
-ds_out["SA_season"].attrs.update(
+ds_background["SA_season"].attrs.update(
     long_name="Seasonal-mean Absolute Salinity",
     units="g kg-1",
 )
 
-ds_out["CT_mean"].attrs.update(
+ds_background["CT_mean"].attrs.update(
     long_name="Time-mean Conservative Temperature",
     units="degC",
 )
 
-ds_out["CT_season"].attrs.update(
+ds_background["CT_season"].attrs.update(
     long_name="Seasonal-mean Conservative Temperature",
     units="degC",
 )
 
-ds_out["sigma0_mean"].attrs.update(
+ds_background["sigma0_mean"].attrs.update(
     long_name="Time-mean potential density anomaly referenced to 0 dbar",
     units="kg m-3",
 )
 
-ds_out["sigma0_season"].attrs.update(
+ds_background["sigma0_season"].attrs.update(
     long_name="Seasonal-mean potential density anomaly referenced to 0 dbar",
     units="kg m-3",
 )
-
-ds_out["theta_mean"].attrs.update(
-    long_name="Time-mean potential temperature",
-    units="degC",
-)
-
-ds_out["theta_season"].attrs.update(
-    long_name="Seasonal-mean potential temperature",
-    units="degC",
-)
-
-# Velocity metadata
-ds_out["uvel_full_mean"].attrs.update(
-    long_name="Time-mean full-water-column depth-averaged zonal velocity",
-    units="m s-1",
-)
-
-ds_out["vvel_full_mean"].attrs.update(
-    long_name="Time-mean full-water-column depth-averaged meridional velocity",
-    units="m s-1",
-)
-
-ds_out["uvel_upper_mean"].attrs.update(
-    long_name=f"Time-mean upper-{max_depth:g}-m depth-averaged zonal velocity",
-    units="m s-1",
-)
-
-ds_out["vvel_upper_mean"].attrs.update(
-    long_name=f"Time-mean upper-{max_depth:g}-m depth-averaged meridional velocity",
-    units="m s-1",
-)
-
-ds_out["uvel_full_season"].attrs.update(
-    long_name="Seasonal-mean full-water-column depth-averaged zonal velocity",
-    units="m s-1",
-)
-
-ds_out["vvel_full_season"].attrs.update(
-    long_name="Seasonal-mean full-water-column depth-averaged meridional velocity",
-    units="m s-1",
-)
-
-ds_out["uvel_upper_season"].attrs.update(
-    long_name=f"Seasonal-mean upper-{max_depth:g}-m depth-averaged zonal velocity",
-    units="m s-1",
-)
-
-ds_out["vvel_upper_season"].attrs.update(
-    long_name=f"Seasonal-mean upper-{max_depth:g}-m depth-averaged meridional velocity",
-    units="m s-1",
-)
-
-# Water depth 
-ds_out["water_depth"].attrs.update(
+ 
+ds_background["water_depth"].attrs.update(
     long_name="ocean water depth",
     units="m",
     positive="down",
 )
 
-# Add global metadata
-ds_out.attrs.update(
-    title="MITgcm CCS background fields for Rossby radius analysis",
-    description=(
-        "Time-mean and seasonal-mean hydrographic and depth-averaged "
-        "velocity fields from the MITgcm regional simulation."
-    ),
-    upper_velocity_max_depth_m=max_depth,
+# --- Velocity --- # 
+if option_depth_avg == "full":
+    long_name_uvel = "Full-water-column depth-averaged zonal velocity"
+    long_name_vvel = "Full-water-column depth-averaged meridional velocity"
+elif option_depth_avg == "upper":
+    long_name_uvel = f"Upper-{max_depth:g}-m depth-averaged zonal velocity"
+    long_name_vvel = f"Upper-{max_depth:g}-m depth-averaged meridional velocity"
+
+ds_velocity["uvel_depth_avg"].attrs.update(
+    long_name=long_name_uvel,
+    units="m s-1",
 )
+
+ds_velocity["vvel_depth_avg"].attrs.update(
+    long_name=long_name_vvel,
+    units="m s-1",
+)
+
+# Add global metadata
+
+# --- Background --- # 
+ds_background.attrs.update(
+    title="MITgcm CCS background hydrographic fields for Rossby radius analysis",
+    description=(
+        "Time-mean and seasonal-mean hydrographic fields from a high resolution MITgcm"
+        " regional simulation."
+    ),
+)
+
+# --- Velocity --- # 
+ds_velocity.attrs.update(
+    title="MITgcm CCS depth average velocity fields for Rossby radius analysis",
+    description=(
+        "Depth-average velocity fields from a high resolution MITgcm"
+        " regional simulation."
+    ),
+)
+
+if option_depth_avg == "upper":
+    ds_velocity.attrs["max_depth_m"] = max_depth
 
 # Set output filename
-filename = (
-    f"MITgcm_CCS_rossby_radius_background_"
-    f"upper_{max_depth:g}m.nc"
+filename_background = (
+    f"SEA-STATE_CCS_background.nc"
 )
 
-# Load reduced dataset into memory before writing
-ds_out = ds_out.load()
+if option_depth_avg == "full":
+    filename_velocity = (
+        f"VEL_CCS_hrly_depth_avg_full_water_column.nc"
+    )
+elif option_depth_avg == "upper":
+    filename_velocity = (
+        f"VEL_CCS_hrly_depth_avg_"
+        f"upper_{max_depth:g}m.nc"
+    )
+
+# ------------------------------------------#
+# Save background hydrographic fields 
+# ------------------------------------------#
 
 # Save to NetCDF
-ds_out.to_netcdf(
-    Path(PATH_nc) / filename,
+ds_background.to_netcdf(
+    Path(PATH_nc) / filename_background,
     engine="netcdf4",
     format="NETCDF4",
 )
 
-status(f"Saved {filename}")
+status(f"Saved {filename_background} to {PATH_nc}.")
+
+# ------------------------------------------#
+# Save depth average velocity fields 
+# ------------------------------------------#
+
+# Save to NetCDF
+ds_velocity.to_netcdf(
+    Path(PATH_nc) / filename_velocity,
+    engine="netcdf4",
+    format="NETCDF4",
+)
+
+status(f"Saved {filename_velocity} to {PATH_nc}.")
 status("MITgcm Rossby radius pre-processing complete!")
 
 
