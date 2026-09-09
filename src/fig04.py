@@ -167,23 +167,11 @@ set_coastlines(
 ct = ax.contourf(
     lon, 
     lat, 
-    Lt, 
+    T_adv, 
     levels=levels,
     transform=ccrs.PlateCarree(),
     cmap=cmap, 
     extend='both'
-)
-
-# Overlay a contourf with hatching for the non-significant regions
-ax.contourf(
-    lon,
-    lat,
-    data_mask,
-    levels=[0.5, 1.5],      
-    hatches=['..'],        
-    colors='none',          
-    zorder=10,              
-    transform=ccrs.PlateCarree()
 )
 
 # Plot the CCE1 mooring point
@@ -300,7 +288,7 @@ set_cbar(
     fig,
     orientation="vertical",
     extend="both",
-    label='Decorrelation Scale (days)',
+    label='Advective Time Scale (days)',
     fontsize=fontsize_g,
     ticks=ticks, 
     invert = False
@@ -325,7 +313,7 @@ add_scalebar(
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "fig05.png",
+    PATH_figs / "fig04.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
