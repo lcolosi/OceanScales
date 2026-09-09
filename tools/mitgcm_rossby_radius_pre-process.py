@@ -505,19 +505,19 @@ if option_depth_avg == "upper":
     ds_vvel.attrs["max_depth_m"] = max_depth
 
 # Set output filename
-filename_background = "SEA-STATE_CCS_background.nc"
+filename_background = "SEA-STATE_CCS_reg_background.nc"
 
 if option_depth_avg == "full":
 
-    filename_uvel = "UVEL_CCS_hrly_depth_avg_full_water_column.nc"
+    filename_uvel = "UVEL_CCS_hrly_reg_depth_avg_full_water_column.nc"
 
-    filename_vvel = "VVEL_CCS_hrly_depth_avg_full_water_column.nc"
+    filename_vvel = "VVEL_CCS_hrly_reg_depth_avg_full_water_column.nc"
 
 elif option_depth_avg == "upper":
 
-    filename_uvel = f"UVEL_CCS_hrly_depth_avg_upper_{max_depth:g}m.nc"
+    filename_uvel = f"UVEL_CCS_hrly_reg_depth_avg_upper_{max_depth:g}m.nc"
 
-    filename_vvel = f"VVEL_CCS_hrly_depth_avg_upper_{max_depth:g}m.nc"
+    filename_vvel = f"VVEL_CCS_hrly_reg_depth_avg_upper_{max_depth:g}m.nc"
 
 # ------------------------------------------ #
 # Save background hydrographic fields 

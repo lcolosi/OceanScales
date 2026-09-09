@@ -113,7 +113,7 @@ status("Loading time/seasonal-mean hydrographic and depth average fields...")
 # ------------------------------------------ #
 
 # Obtain filename paths
-filename = PATH_preproc / f"SEA-STATE_CCS_background.nc"
+filename = PATH_preproc / f"SEA-STATE_CCS_reg_background.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename, 'r')
@@ -146,11 +146,11 @@ nc.close()
 
 # Obtain filename paths
 if option_depth_avg == 'full':
-    filename_uvel = PATH_preproc / f"UVEL_CCS_hrly_full_depth_avg.nc"
-    filename_vvel = PATH_preproc / f"VVEL_CCS_hrly_full_depth_avg.nc"
+    filename_uvel = PATH_preproc / f"UVEL_CCS_hrly_reg_full_depth_avg.nc"
+    filename_vvel = PATH_preproc / f"VVEL_CCS_hrly_reg_full_depth_avg.nc"
 elif option_depth_avg == 'upper':
-    filename_uvel = PATH_preproc / f"UVEL_CCS_hrly_upper_{depth_avg_threshold:g}m.nc"
-    filename_vvel = PATH_preproc / f"VVEL_CCS_hrly_upper_{depth_avg_threshold:g}m.nc"
+    filename_uvel = PATH_preproc / f"UVEL_CCS_hrly_reg_depth_avg_upper_{depth_avg_threshold:g}m.nc"
+    filename_vvel = PATH_preproc / f"VVEL_CCS_hrly_reg_depth_avg_upper_{depth_avg_threshold:g}m.nc"
 
 # Generate the nc data structure
 nc_uvel = Dataset(filename_uvel, 'r')
