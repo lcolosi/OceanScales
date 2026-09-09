@@ -1,22 +1,19 @@
 # =============================================================================
-# Figure 06
+# Figure 05
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale of potential density (solid curve) as a function of
-#   depth from model data at (a) CCE1, (b) CCE2, and (c) CCE3, and observations
-#   at (d) CCE1 and (e) CCE2. The standard error of the mean for the decorrelation 
-#   scale is shown as the shaded regions. The seasonally averaged mixed-layer depth
-#   $\overline{z}_{mld}$ and its standard deviation are displayed as horizontal
-#   dashed lines and light shaded regions, respectively. For CCE1, CCE2, and CCE3
-#   model data, solid black circles denote the vertical model grid. For CCE1 and CCE2
-#   observations, solid back diamonds denote the depth of the CTD sensor.
+#   Decorrelation time scale along CalCOFI line 80. Gray shading is the ocean bottom.
+#   Decorrelation scales less than or equal to one standard error are considered
+#   not statistically significant and are indicated with a hatched overlay. Solid
+#   black curve is the seasonally averaged mixed-layer depth, and light black shading
+#   represents its standard deviation.
 #
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-08-19
+#   2026-08-26
 # =============================================================================
 
 # Import libraries 
@@ -25,6 +22,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
+import cmocean.cm as cmo
+import matplotlib as mpl
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +37,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_corner_label
+from plotting import add_x_axis_marker
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -49,12 +48,16 @@ from plotting import add_corner_label
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", or "vvel".
+#                Options: "temp", "sal", "density", "u_along", or "v_cross".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
 # - segment_months : Specifies the window duration. 
+# - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
+#                  criteria. Represents the number of standard deviation a
+#                  decorrelation scale estimate is away from the regional spatial
+#                  median.
 #
 # ------------#
 
@@ -67,8 +70,11 @@ segment_months     = 6
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
 
+# Set uncertainty estimate parameters
+sn_threshold = 1
+
 # Set font and fontsize using LaTeX 
-fontsize=16
+fontsize=18
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -77,31 +83,33 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scales, bathymetry, CCE, and CalCOFI data
+# Load MITgcm decorrelation scales, bathymetry, CCE, and mixed-layer depth data
 # -----------------------------------------------------------------------------
 
-# --- MITgcm Data --- # 
+# --- Decorrelation Time Scales --- # 
 
 # Set path to processed regional MITgcm data
-PATH_processed = PATH_data / "mitgcm" / "mooring" / "processed"
+PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
 
-# Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+# Obtain filename path
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_trans_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
-site    = nc.variables['site'][:]
-depth_m = nc.variables['depth'][:]
+dist    = nc.variables['dist'][:]
+depth   = nc.variables['depth'][:]
+lon     = nc.variables['LON'][:]
+lat     = nc.variables['LAT'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 Lt_std  = nc.variables['decor_scale_std'][:]
 
-# --- Mixed Layer Depth ---# 
+# --- Mixed Layer Depth --- # 
 
 # Obtain filename path
-filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_mooring.nc"
+filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_trans.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mld, 'r')
@@ -109,282 +117,152 @@ nc = Dataset(filename_mld, 'r')
 # Extract data variables
 mld = nc.variables['MLD'][:]
 
-# --- CCE Data --- # 
+# --- Bathymetry --- # 
+
+# Obtain filename path
+filename_bathy = PATH_data / "mitgcm" / "transect" / "DEPTH_CCS_trans.nc"
+
+# Generate the nc data structure
+nc_bathy = Dataset(filename_bathy, 'r')
+
+# Extract data variables
+dist_wd     = nc.variables['dist'][:]
+water_depth = nc_bathy.variables['water_depth'][:]
+
+# Set the depth at the coast to zero 
+water_depth[0] = 0
+
+# --- CCE Mooring Locations --- # 
+lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
+lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
 
 # -----------------------------------------------------------------------------
 # Compute the time mean and standard deviation mixed layer depth 
 # -----------------------------------------------------------------------------
-
 mld_mean = np.ma.mean(mld,axis=1)
 mld_std = np.ma.std(mld,axis=1,ddof=1)
 
 # -----------------------------------------------------------------------------
-# Plot decorrelation time scales at mooring locations 
+# Compute the relative uncertainty of the decorrelation scale
 # -----------------------------------------------------------------------------
 
-# Set plotting parameters 
-depth_pos_m = abs(depth_m)
-depth_lim = [0,200]
-cce1_sensor_depth = np.array([9, 19, 29, 39, 60, 75, 150])
-cce2_sensor_depth = np.array([6, 14, 25, 44, 74])
-x_max = 25
-dx = 5
+# Compute spatial mean
+Lt_reg_mean = np.ma.median(Lt)
+
+# Compute the signal-to-noise ratio (with respect to the regional mean)
+Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm 
+
+# Mask not statistically significant grid points
+Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))
+
+# Get land mask from Lt
+land_mask = np.ma.getmaskarray(Lt)
+
+# Combine statistical significance and land masks
+Lt_mask = Lt_mask & ~land_mask
+
+# Create a mask array where non-significant ocean points = 1, others = NaN
+data_mask = np.where(Lt_mask, 1, np.nan)
+
+# -----------------------------------------------------------------------------
+# Plot the CalCOFI line 80.0 transect decorrelation time scales  
+# -----------------------------------------------------------------------------
+
+# Set plotting parameters
+levels = np.arange(7,20+0.25,0.25)
+ticks  = np.arange(8,20+2,2)
+
+cmap = cmo.amp
+mpl.rcParams["hatch.linewidth"] = 0.2 
 
 # Create figure
-fig, axes = plt.subplots(2,3,figsize=(15, 10))
-ax_flat = axes.flatten()
+fig, ax = plt.subplots(figsize=(12,5))
 
-# --- Subplot 1 --- # 
-ax = ax_flat[0]
+# Plot decorrelation time scale
+cf = ax.contourf(dist,abs(depth),Lt.T, levels=levels, cmap=cmap, extend='both')
 
-# Plot CCE1 potential density decor scale
-ax.plot(Lt[0,:],depth_pos_m,'.-', color='tab:green', label='CCE1')
-
-# Plot standard error of the mean
-ax.fill_betweenx(depth_pos_m, Lt[0,:] - Lt_stdm[0,:], Lt[0,:] + Lt_stdm[0,:], color='tab:green', alpha=0.5)
-
-# Plot the mean mixed layer depth 
-ax.axhline(mld_mean[0], ls='--', lw=1.5, color='tab:green', alpha=1, label=r"$\overline{z}_{mld}$")
-
-# Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='tab:green', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
-
-# Set left edge x-position
-x_right = ax.get_xlim()[0] + 2.2  
-
-# Plot model grid depth levels
-ax.plot(
-    np.full_like(depth_pos_m[:-1], x_right),
-    depth_pos_m[:-1],
-    marker='.', 
-    linestyle='None',
-    color='k', 
-    markersize=6, 
-    alpha=0.6,
-    clip_on=False,
+# Overlay a contourf with hatching for the non-significant regions
+ax.contourf(
+    dist,
+    abs(depth),
+    data_mask.T,
+    levels=[0.5, 1.5],      
+    hatches=['..'],       
+    colors='none',          
+    zorder=10,              
 )
 
+# Plot the ocean bottom depth 
+ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
+
 # Set axis attributes
+ax.set_xlabel('Distance from shore (km)')
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(0,x_max)
-ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,x_max+dx,dx))
+ax.set_xlim(0,dist[-1])
+ax.set_ylim(0,200)
+ax.set_xticks(np.arange(0,250+25,25))
 ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xticklabels([])
+ax.invert_xaxis()
 ax.invert_yaxis()
-ax.tick_params(top=True, 
-               bottom=True, 
-               left=True, 
-               right=True, 
-               labelleft=True,
-               direction='out', 
-               length=3.5)
-ax.grid(True,linestyle='--',alpha=0.3)
+ax.grid(linestyle='--',alpha=0.1,color='k')
 
-# --- Subplot 2 --- # 
-ax = ax_flat[1]
+# Set colorbar
+cax = fig.add_axes([0.915, 0.125, 0.02, 0.73])
+cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
+cbar.set_label('Decorrelation Scale (days)')
+cbar.set_ticks(ticks)
 
-# Plot CCE1 potential density decor scale
-ax.plot(Lt[1,:],depth_pos_m,'.-', color='tab:red', label='CCE1')
+# --- Create top axis for longitude --- #
+ax_top = ax.twiny()
 
-# Plot standard error of the mean
-ax.fill_betweenx(depth_pos_m, Lt[1,:] - Lt_stdm[1,:], Lt[1,:] + Lt_stdm[1,:], color='tab:red', alpha=0.5)
+# Make sure limits match
+ax_top.set_xlim(ax.get_xlim())
 
-# Plot the mean mixed layer depth 
-ax.axhline(mld_mean[1], ls='--', lw=1.5, color='tab:red', alpha=1)
+# Choose where you want longitude ticks (same positions as distance ticks)
+dist_ticks = ax.get_xticks()
 
-# Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[1] - mld_std[1], mld_mean[1] + mld_std[1], color='tab:red', alpha=0.15)
+# Interpolate longitude at those distance values
+lon_180 = ((lon + 180) % 360) - 180
+lon_ticks = np.interp(dist_ticks, dist, lon_180)
 
-# Set left edge x-position
-x_left = ax.get_xlim()[0] + 2.2  
+# Create labels but only keep every other one
+labels = [
+    f"{abs(x):.1f}°W" if i % 2 == 0 else ""
+    for i, x in enumerate(lon_ticks)
+]
 
-# Plot model grid depth levels
-ax.plot(
-    np.full_like(depth_pos_m[:-1], x_left),
-    depth_pos_m[:-1],
-    marker='.', 
-    linestyle='None',
-    color='k', 
-    markersize=6, 
-    alpha=0.6,
-    clip_on=False,
-)
+# Set ticks and labels
+ax_top.set_xticks(dist_ticks)
+ax_top.set_xticklabels(labels) 
 
-# Set axis attributes
-ax.set_xlim(0,x_max)
-ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,x_max+dx,dx))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xticklabels([])
-ax.set_yticklabels([])
-ax.invert_yaxis()
-ax.tick_params(top=True, 
-               bottom=True, 
-               left=True, 
-               right=True, 
-               labelleft=True,
-               direction='out', 
-               length=3.5)
-ax.grid(True,linestyle='--',alpha=0.3)
+sort_idx = np.argsort(lon_180)
+lon_sorted = lon_180[sort_idx]
+dist_sorted = dist[sort_idx]
 
-# --- Subplot 3 --- # 
-ax = ax_flat[2]
+# Interpolate longtiude onto distance coordinates 
+dist1 = np.interp(lon1, lon_sorted, dist_sorted)
+dist2 = np.interp(lon2, lon_sorted, dist_sorted)
+dist3 = np.interp(lon3, lon_sorted, dist_sorted)
 
-# Plot CCE1 potential density decor scale
-ax.plot(Lt[2,:],depth_pos_m,'.-', color='tab:blue', label='CCE3')
+# Add CCE1, CCE2, and CCE3 locations markers
+add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
+add_x_axis_marker(ax_top, dist2, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
+add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot standard error of the mean
-ax.fill_betweenx(depth_pos_m, Lt[2,:] - Lt_stdm[2,:], Lt[2,:] + Lt_stdm[2,:], color='tab:blue', alpha=0.5)
-
-# Plot the mean mixed layer depth 
-ax.axhline(mld_mean[2], ls='--', lw=1.5, color='tab:blue', alpha=1)
-
-# Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='tab:blue', alpha=0.15)
-
-# Set left edge x-position
-x_left = ax.get_xlim()[0] + 2.25  
-
-# Plot model grid depth levels
-ax.plot(
-    np.full_like(depth_pos_m[:-1], x_left),
-    depth_pos_m[:-1],
-    marker='.', 
-    linestyle='None',
-    color='k', 
-    markersize=6, 
-    alpha=0.6,
-    clip_on=False, 
-    label='Model grid',
-)
-
-# Set axis attributes
-ax.set_xlabel(r'Decorrelation Scale (days)')
-ax.set_xlim(0,x_max)
-ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,x_max+dx,dx))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_yticklabels([])
-ax.invert_yaxis()
-ax.tick_params(top=True, 
-               bottom=True, 
-               left=True, 
-               right=True, 
-               labelleft=True,
-               direction='out', 
-               length=3.5)
-ax.grid(True,linestyle='--',alpha=0.3)
-
-#--- Subplot 4 ---# 
-ax = ax_flat[3]
-
-# Set left edge x-position 
-x_left = ax.get_xlim()[0]
-
-# Plot the sensor depths 
-ax.plot(
-    np.full_like(cce1_sensor_depth, x_left),
-    cce1_sensor_depth,
-    marker='d', 
-    linestyle='None',
-    color='k', 
-    markersize=5, 
-    alpha = 1, 
-    clip_on=False,
-    label='Sensor depth'  
-)
-
-# Set axis attributes
-ax.set_ylabel('Depth (m)')
-ax.set_xlabel(r'Decorrelation Scale (days)')
-ax.set_xlim(0,x_max)
-ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,x_max+dx,dx))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.invert_yaxis()
-ax.tick_params(top=True, 
-               bottom=True, 
-               left=True, 
-               right=True, 
-               labelleft=True,
-               direction='out', 
-               length=3.5)
-ax.grid(True,linestyle='--',alpha=0.3)
-
-#--- Subplot 5 ---# 
-ax = ax_flat[4]
-
-# Set left edge x-position 
-x_left = ax.get_xlim()[0] 
-
-# Plot the sensor depths 
-ax.plot(
-    np.full_like(cce2_sensor_depth, x_left),
-    cce2_sensor_depth,
-    marker='d', 
-    linestyle='None',
-    color='k', 
-    markersize=5, 
-    alpha = 1, 
-    clip_on=False,
-)
-
-# Set axis attributes
-ax.set_xlabel(r'Decorrelation Scale (days)')
-ax.set_xlim(0,x_max)
-ax.set_ylim(depth_lim[0], depth_lim[1])
-ax.set_xticks(np.arange(0,x_max+dx,dx))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_yticklabels([])
-ax.invert_yaxis()
-ax.tick_params(top=True, 
-               bottom=True, 
-               left=True, 
-               right=True, 
-               labelleft=True,
-               direction='out', 
-               length=3.5)
-ax.grid(True,linestyle='--',alpha=0.3)
-
-#--- Subplot 6 ---# 
-ax = ax_flat[5]
-
-# Turn off axis
-ax.axis('off')
-
-# Obtain the handle for the legend 
-handles = []
-labels = []
-
-# Loop through axes that contain legend items
-for i in [0,1,2,3]:  
-    h, l = ax_flat[i].get_legend_handles_labels()
-    handles.extend(h)
-    labels.extend(l)
-
-# Display legend in the position of the 6th axis
-ax.legend(handles, labels, loc='center', fontsize=16)
-
-# Label each subplot
-pos = [0.94, 0.07]
-add_corner_label(ax_flat[0], pos, 'A', fontsize = 16)
-add_corner_label(ax_flat[1], pos, 'B', fontsize = 16)
-add_corner_label(ax_flat[2], pos, 'C', fontsize = 16)
-add_corner_label(ax_flat[3], pos, 'D', fontsize = 16)
-add_corner_label(ax_flat[4], pos, 'E', fontsize = 16)
-
-# Adjust figure spacing
-plt.subplots_adjust(hspace=0.1, wspace=0.1)
+# Plot vertical lines at CCE1, CCE2, and CCE3 locations
+ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
+ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
+ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "fig06.png",
+    PATH_figs / "fig05.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
     pad_inches=0.1,
     transparent=False
 )
+
 
 

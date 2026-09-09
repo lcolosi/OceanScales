@@ -1,19 +1,19 @@
 # =============================================================================
-# Figure 05
+# Figure 04
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale along CalCOFI line 80. Gray shading is the ocean bottom.
-#   Decorrelation scales less than or equal to one standard error are considered
-#   not statistically significant and are indicated with a hatched overlay. Solid
-#   black curve is the seasonally averaged mixed-layer depth, and light black shading
-#   represents its standard deviation.
+#   Decorrelation time scale in the study domain at 9.6 meter water depth. 
+#   Black contour lines are the ocean topography with 200 and 2000 meter
+#   isobaths highlighted as solid black lines. Decorrelation scales that differ
+#   from the regional spatial mean by less than or equal to one standard error
+#   are considered not statistically significant and are indicated by hatching.
 #
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-08-26
+#   2026-08-18
 # =============================================================================
 
 # Import libraries 
@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
+import cartopy.crs as ccrs
 import cmocean.cm as cmo
 import matplotlib as mpl
 
@@ -37,7 +38,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_x_axis_marker
+from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -48,7 +49,9 @@ from plotting import add_x_axis_marker
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "u_along", or "v_cross".
+#                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
+# - option_depth: Depth at which the decorrelation time scale is computed
+#                 (units: meters). Not used for SSH.
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
@@ -57,12 +60,13 @@ from plotting import add_x_axis_marker
 # - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
 #                  criteria. Represents the number of standard deviation a
 #                  decorrelation scale estimate is away from the regional spatial
-#                  median.
+#                  median. 
 #
 # ------------#
 
 # Set processing parameters
 option_data        = 'density'    
+option_depth       = 9   
 option_interannual = 'linear' 
 option_detrend_seg = True
 segment_months     = 6
@@ -83,64 +87,64 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scales, bathymetry, CCE, and mixed-layer depth data
+# Load MITgcm decorrelation scales, bathymetry, CCE, and CalCOFI data
 # -----------------------------------------------------------------------------
 
 # --- Decorrelation Time Scales --- # 
 
 # Set path to processed regional MITgcm data
-PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
+PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
-# Obtain filename path
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_trans_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+# Obtain filename paths
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
-dist    = nc.variables['dist'][:]
-depth   = nc.variables['depth'][:]
-lon     = nc.variables['LON'][:]
-lat     = nc.variables['LAT'][:]
+lon     = nc.variables['lon'][:]
+lat     = nc.variables['lat'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 Lt_std  = nc.variables['decor_scale_std'][:]
 
-# --- Mixed Layer Depth --- # 
-
-# Obtain filename path
-filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_trans.nc"
-
-# Generate the nc data structure
-nc = Dataset(filename_mld, 'r')
-
-# Extract data variables
-mld = nc.variables['MLD'][:]
-
 # --- Bathymetry --- # 
 
 # Obtain filename path
-filename_bathy = PATH_data / "mitgcm" / "transect" / "DEPTH_CCS_trans.nc"
+filename_bathy = PATH_data / "bathymetry" / "etopo1_point_conception.nc"
 
 # Generate the nc data structure
 nc_bathy = Dataset(filename_bathy, 'r')
 
 # Extract data variables
-dist_wd     = nc.variables['dist'][:]
-water_depth = nc_bathy.variables['water_depth'][:]
-
-# Set the depth at the coast to zero 
-water_depth[0] = 0
+lon_b  = nc_bathy.variables['lon'][:]
+lat_b  = nc_bathy.variables['lat'][:]
+bathy  = nc_bathy.variables['BATHY'][:]
 
 # --- CCE Mooring Locations --- # 
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
 lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
 
-# -----------------------------------------------------------------------------
-# Compute the time mean and standard deviation mixed layer depth 
-# -----------------------------------------------------------------------------
-mld_mean = np.ma.mean(mld,axis=1)
-mld_std = np.ma.std(mld,axis=1,ddof=1)
+# --- CalCOFI Line 80.0 Positions --- # 
+
+# Obtain filename path
+filename = PATH_data / "calcofi" / "CalCOFIStationOrder.csv"
+
+# Load csv file 
+calCOFI_data = np.genfromtxt(
+    filename,
+    delimiter=",",
+    skip_header=1,
+    usecols=(1, 3, 7, 11),
+    invalid_raise=False
+)
+
+# Grab stations on line 80.0
+calCOFI_line80 = calCOFI_data[calCOFI_data[:, 0] == 80.0] 
+
+# Parse data into separate arrays
+calCOFI_lat   = calCOFI_line80[:, 1]
+calCOFI_lon   = calCOFI_line80[:, 2]
 
 # -----------------------------------------------------------------------------
 # Compute the relative uncertainty of the decorrelation scale
@@ -150,7 +154,7 @@ mld_std = np.ma.std(mld,axis=1,ddof=1)
 Lt_reg_mean = np.ma.median(Lt)
 
 # Compute the signal-to-noise ratio (with respect to the regional mean)
-Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm 
+Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm
 
 # Mask not statistically significant grid points
 Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))
@@ -165,104 +169,206 @@ Lt_mask = Lt_mask & ~land_mask
 data_mask = np.where(Lt_mask, 1, np.nan)
 
 # -----------------------------------------------------------------------------
-# Plot the CalCOFI line 80.0 transect decorrelation time scales  
+# Plot regional decorrelation time scales  
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-levels = np.arange(7,20+0.25,0.25)
-ticks  = np.arange(8,20+2,2)
-
+projection = ccrs.PlateCarree(central_longitude=0.0)
+resolution = "10m"
+xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
+yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
+lon_min, lon_max = -123, -120
+lat_min, lat_max = 33, 35
+levels = np.arange(7,20+0.25,0.25) 
+ticks  = np.arange(8,20+2,2) 
+levels_is = np.arange(100,300,100)
+levels_ms = np.arange(1000,3000,500)
+fontsize_g = 18
+fontsize_c = 10
 cmap = cmo.amp
 mpl.rcParams["hatch.linewidth"] = 0.2 
 
 # Create figure
-fig, ax = plt.subplots(figsize=(12,5))
+fig, ax = plt.subplots(figsize=(12, 8), subplot_kw={"projection": projection})
 
-# Plot decorrelation time scale
-cf = ax.contourf(dist,abs(depth),Lt.T, levels=levels, cmap=cmap, extend='both')
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
+
+# Plot decorrelation time scales
+ct = ax.contourf(
+    lon, 
+    lat, 
+    Lt, 
+    levels=levels,
+    transform=ccrs.PlateCarree(),
+    cmap=cmap, 
+    extend='both'
+)
 
 # Overlay a contourf with hatching for the non-significant regions
 ax.contourf(
-    dist,
-    abs(depth),
-    data_mask.T,
+    lon,
+    lat,
+    data_mask,
     levels=[0.5, 1.5],      
-    hatches=['..'],       
+    hatches=['..'],        
     colors='none',          
     zorder=10,              
+    transform=ccrs.PlateCarree()
 )
 
-# Plot the ocean bottom depth 
-ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
 
-# Set axis attributes
-ax.set_xlabel('Distance from shore (km)')
-ax.set_ylabel('Depth (m)')
-ax.set_xlim(0,dist[-1])
-ax.set_ylim(0,200)
-ax.set_xticks(np.arange(0,250+25,25))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.invert_xaxis()
-ax.invert_yaxis()
-ax.grid(linestyle='--',alpha=0.1,color='k')
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
 
-# Set colorbar
-cax = fig.add_axes([0.915, 0.125, 0.02, 0.73])
-cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
-cbar.set_label('Decorrelation Scale (days)')
-cbar.set_ticks(ticks)
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
 
-# --- Create top axis for longitude --- #
-ax_top = ax.twiny()
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+plt.clabel(ct1, fontsize=fontsize_c)
+plt.clabel(ct2, fontsize=fontsize_c)
+plt.clabel(ct3, fontsize=fontsize_c)
+plt.clabel(ct4, fontsize=fontsize_c)
 
-# Make sure limits match
-ax_top.set_xlim(ax.get_xlim())
+# Plot Line 80 CalCOFI Stations
+ax.plot(
+    calCOFI_lon % 360, 
+    calCOFI_lat,
+    color='k',
+    linestyle=(0, (5, 3)),  
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+)
 
-# Choose where you want longitude ticks (same positions as distance ticks)
-dist_ticks = ax.get_xticks()
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
+    xlabels=True,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
 
-# Interpolate longitude at those distance values
-lon_180 = ((lon + 180) % 360) - 180
-lon_ticks = np.interp(dist_ticks, dist, lon_180)
+# Create colormap
+cax = plt.axes([0.91, 0.3, 0.02, 0.4])
+set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="vertical",
+    extend="both",
+    label='Decorrelation Scale (days)',
+    fontsize=fontsize_g,
+    ticks=ticks, 
+    invert = False
+)
 
-# Create labels but only keep every other one
-labels = [
-    f"{abs(x):.1f}°W" if i % 2 == 0 else ""
-    for i, x in enumerate(lon_ticks)
-]
+# Set legend
+ax.legend(
+    loc='upper right',
+    fontsize=14,
+    framealpha=0.9,
+    edgecolor='black'
+)
 
-# Set ticks and labels
-ax_top.set_xticks(dist_ticks)
-ax_top.set_xticklabels(labels) 
-
-sort_idx = np.argsort(lon_180)
-lon_sorted = lon_180[sort_idx]
-dist_sorted = dist[sort_idx]
-
-# Interpolate longtiude onto distance coordinates 
-dist1 = np.interp(lon1, lon_sorted, dist_sorted)
-dist2 = np.interp(lon2, lon_sorted, dist_sorted)
-dist3 = np.interp(lon3, lon_sorted, dist_sorted)
-
-# Add CCE1, CCE2, and CCE3 locations markers
-add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
-add_x_axis_marker(ax_top, dist2, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
-add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
-
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
+# Add a 20-km scale bar
+add_scalebar(
+    ax, 
+    length_km=20, 
+    location=(0.925, 0.78),
+    linewidth=1, 
+    text_kwargs=dict(fontsize=14, color='white', weight='bold')
+)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "fig05.png",
+    PATH_figs / "fig04.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
     pad_inches=0.1,
     transparent=False
 )
-
-
 
