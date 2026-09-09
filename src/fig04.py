@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 import cartopy.crs as ccrs
 import cmocean.cm as cmo
-import matplotlib as mpl
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,7 +68,6 @@ plt.rcParams.update({
     "font.family": "serif",       
     "text.latex.preamble": r"\usepackage{amsmath}" 
 })
-
 
 # -----------------------------------------------------------------------------
 # Load MITgcm advective time scale, bathymetry, CCE, and CalCOFI data
@@ -140,14 +138,13 @@ xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(7,20+0.25,0.25) 
-ticks  = np.arange(8,20+2,2) 
-levels_is = np.arange(100,300,100)
-levels_ms = np.arange(1000,3000,500)
+levels = np.arange(0,3+0.05,0.05) 
+ticks  = np.arange(0,3+0.5,0.5) 
+levels_is = np.arange(100,300+100,100)
+levels_ms = np.arange(1000,3000+500,500)
 fontsize_g = 18
 fontsize_c = 10
-cmap = cmo.amp
-mpl.rcParams["hatch.linewidth"] = 0.2 
+cmap = cmo.tempo
 
 # Create figure
 fig, ax = plt.subplots(figsize=(12, 8), subplot_kw={"projection": projection})
@@ -250,10 +247,6 @@ ct4 = ax.contour(
     linewidths=1, 
     linestyles='solid'
 )
-plt.clabel(ct1, fontsize=fontsize_c)
-plt.clabel(ct2, fontsize=fontsize_c)
-plt.clabel(ct3, fontsize=fontsize_c)
-plt.clabel(ct4, fontsize=fontsize_c)
 
 # Plot Line 80 CalCOFI Stations
 ax.plot(

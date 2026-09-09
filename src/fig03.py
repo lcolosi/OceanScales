@@ -285,8 +285,8 @@ ax.legend(loc='center', bbox_to_anchor=(0.13, 0.75), fontsize=fontsize-4, framea
 # Label each subplot
 ax1, ax2, ax3, ax4 = axes.flatten()
 add_corner_label(ax1, [0.05,0.06], 'A', fontsize = fontsize)
-add_corner_label(ax2, [0.05,0.06], 'B', fontsize = fontsize)
-add_corner_label(ax3, [0.05,0.94], 'C', fontsize = fontsize)
+add_corner_label(ax2, [0.05,0.06], 'C', fontsize = fontsize)
+add_corner_label(ax3, [0.05,0.94], 'B', fontsize = fontsize)
 add_corner_label(ax4, [0.05,0.94], 'D', fontsize = fontsize)
 
 # Adjust spacing

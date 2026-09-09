@@ -703,3 +703,5 @@ if os.path.exists(file_path):
 
 # Create netcdf file
 data.to_netcdf(file_path,mode='w')
+
+status("MITgcm Rossby radius processing complete!")

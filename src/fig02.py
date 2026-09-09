@@ -410,14 +410,17 @@ ax.plot(time_lag_pos, autocorr_mean[0,zero_lag_index:], color='tab:green', linew
 ax.set_xlabel('Time Lag (days)')
 ax.set_ylabel('Autocorrelation')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.45, 1.05)
+ax.set_ylim(-0.45, 1.1)
 ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
 
 # Add inset showing short-lag autocorrelation
-axins = ax.inset_axes([0.35, 0.57, 0.4, 0.4])
+axins = ax.inset_axes([0.35, 0.59, 0.4, 0.38])
+
+# Plot the zero line 
+axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
 
 # Plot the autocorrelation of each window
 for iseg in range(nseg):
@@ -475,7 +478,7 @@ ax.plot(time_lag_pos, autocorr_mean[1,zero_lag_index:], color='tab:red', linewid
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.45, 1.05)
+ax.set_ylim(-0.45, 1.1)
 ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.set_yticklabels([])
@@ -483,7 +486,10 @@ ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
 
 # Add inset showing short-lag autocorrelation
-axins = ax.inset_axes([0.35, 0.57, 0.4, 0.4])
+axins = ax.inset_axes([0.35, 0.59, 0.4, 0.38])
+
+# Plot the zero line 
+axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
 
 # Plot the autocorrelation of each window
 for iseg in range(nseg):
@@ -541,7 +547,7 @@ ax.plot(time_lag_pos, autocorr_mean[2,zero_lag_index:], color='tab:blue', linewi
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.45, 1.05)
+ax.set_ylim(-0.45, 1.1)
 ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.set_yticklabels([])
@@ -549,7 +555,10 @@ ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
 
 # Add inset showing short-lag autocorrelation
-axins = ax.inset_axes([0.35, 0.57, 0.4, 0.4])
+axins = ax.inset_axes([0.35, 0.59, 0.4, 0.38])
+
+# Plot the zero line 
+axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
 
 # Plot the autocorrelation of each window
 for iseg in range(nseg):
