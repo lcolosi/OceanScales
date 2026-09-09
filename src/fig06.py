@@ -1,5 +1,5 @@
 # =============================================================================
-# Figure 05
+# Figure 06
 # =============================================================================
 #
 # Caption:
@@ -256,7 +256,7 @@ ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "fig05.png",
+    PATH_figs / "fig06.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

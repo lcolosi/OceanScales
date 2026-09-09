@@ -1,19 +1,16 @@
 # =============================================================================
-# Figure 05
+# Figure 04
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale in the study domain at 9.6 meter water depth. 
-#   Black contour lines are the ocean topography with 200 and 2000 meter
-#   isobaths highlighted as solid black lines. Decorrelation scales that differ
-#   from the regional spatial mean by less than or equal to one standard error
-#   are considered not statistically significant and are indicated by hatching.
+#   Advection time scale in the study domain. Black contour lines are the ocean
+#   topography with 200 and 2000 meter isobaths highlighted as solid black lines. 
 #
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-08-18
+#   2026-09-08
 # =============================================================================
 
 # Import libraries 
@@ -44,38 +41,25 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 # Set processing and plotting parameters
 # -----------------------------------------------------------------------------
 
-# ------------#
-# --- Note ---#
+# ------------# 
+# --- Note ---# 
 # ------------#
 #
-# - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
-# - option_depth: Depth at which the decorrelation time scale is computed
-#                 (units: meters). Not used for SSH.
-# - option_interannual: Specifies the model of the interannual variability. 
-#                       Options include: 'linear' or 'gaussian'
-# - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
-# - segment_months : Specifies the window duration. 
-# - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
-#                  criteria. Represents the number of standard deviation a
-#                  decorrelation scale estimate is away from the regional spatial
-#                  median. 
+# - option_depth_avg: Depth averaging option for the velocity fields. Options are:
+#                     "full" for full-water-column depth average, or "upper" for 
+#                     upper-ocean depth average to a specified depth.
+# - option_rms: RMS velocity calculation option. Options are:
+#               "with_mean" for RMS velocity including the mean flow, or
+#               "without_mean" for RMS velocity excluding the mean flow.
+# - depth_avg_threshold: Specifies the maximum depth at which the depth-average
+#                        velocity is computed to.  
 #
-# ------------#
+# ------------# 
 
 # Set processing parameters
-option_data        = 'density'    
-option_depth       = 9   
-option_interannual = 'linear' 
-option_detrend_seg = True
-segment_months     = 6
-
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
-
-# Set uncertainty estimate parameters
-sn_threshold = 1
+option_depth_avg    = 'upper'    
+depth_avg_threshold = 200  
+option_rms          = 'with_mean' 
 
 # Set font and fontsize using LaTeX 
 fontsize=18
@@ -86,17 +70,18 @@ plt.rcParams.update({
     "text.latex.preamble": r"\usepackage{amsmath}" 
 })
 
+
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scales, bathymetry, CCE, and CalCOFI data
+# Load MITgcm advective time scale, bathymetry, CCE, and CalCOFI data
 # -----------------------------------------------------------------------------
 
-# --- Decorrelation Time Scales --- # 
+# --- Advective Time Scales --- # 
 
 # Set path to processed regional MITgcm data
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -104,9 +89,7 @@ nc = Dataset(filename_mitgcm, 'r')
 # Extract data variables
 lon     = nc.variables['lon'][:]
 lat     = nc.variables['lat'][:]
-Lt      = nc.variables['decor_scale'][:]
-Lt_stdm = nc.variables['decor_scale_stdm'][:]
-Lt_std  = nc.variables['decor_scale_std'][:]
+T_adv   = nc.variables['T_ADV_full'][:]
 
 # --- Bathymetry --- # 
 
@@ -147,29 +130,7 @@ calCOFI_lat   = calCOFI_line80[:, 1]
 calCOFI_lon   = calCOFI_line80[:, 2]
 
 # -----------------------------------------------------------------------------
-# Compute the relative uncertainty of the decorrelation scale
-# -----------------------------------------------------------------------------
-
-# Compute spatial mean
-Lt_reg_mean = np.ma.median(Lt)
-
-# Compute the signal-to-noise ratio (with respect to the regional mean)
-Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm
-
-# Mask not statistically significant grid points
-Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))
-
-# Get land mask from Lt
-land_mask = np.ma.getmaskarray(Lt)
-
-# Combine statistical significance and land masks
-Lt_mask = Lt_mask & ~land_mask
-
-# Create a mask array where non-significant ocean points = 1, others = NaN
-data_mask = np.where(Lt_mask, 1, np.nan)
-
-# -----------------------------------------------------------------------------
-# Plot regional decorrelation time scales  
+# Plot regional advective time scales  
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters

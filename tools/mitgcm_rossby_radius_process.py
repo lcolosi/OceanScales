@@ -57,6 +57,9 @@ status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis...")
 # - option_rms: RMS velocity calculation option. Options are:
 #               "with_mean" for RMS velocity including the mean flow, or
 #               "without_mean" for RMS velocity excluding the mean flow.
+# - option_froude: Froude number calculation method. Options are:
+#                  "eigenvalue" for Froude number based on the first baroclinic Rossby wave phase speed, or
+#                  "dispersion" for Froude number based on the long-wave limit of the Rossby wave dispersion relation.
 # - depth_avg_threshold: Specifies the maximum depth at which the depth-average
 #                        velocity is computed to.  
 # - nmode : Specifies the number of vertical modes to compute in the Rossby
@@ -76,6 +79,7 @@ status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis...")
 # Set processing parameters
 option_depth_avg    = 'upper'  
 option_rms          = 'with_mean'
+option_froude       = 'eigenvalue'
 depth_avg_threshold = 200 
 nmode               = 4
 nz_mode             = 512 
@@ -506,28 +510,39 @@ T_adv_season = Rd1_season / U_rms_season_kmday
 # -----------------------------------------------------------------------------
 status("Computing full-record and seasonal Froude number...")
 
-# Convert first-baroclinic deformation radius from km to m
-Rd1_m = Rd1 * 1000.0
-Rd1_season_m = Rd1_season * 1000.0
+if option_froude == 'eigenvalue':
 
-# Convert latitude to radians
-phi = np.deg2rad(lat)[:, None]
+    # Set the First-baroclinic internal gravity-wave phase speed (m/s)
+    c1 = phase_speed_mean_m[1, :, :]
+    c1_season = phase_speed_season_m[:, 1, :, :]
 
-# Compute the beta parameter (m^-1 s^-1)
-beta = 2.0 * Omega * np.cos(phi) / Re
+    # Compute the Froude number
+    Fr = U_rms / c1
+    Fr_season = U_rms_season / c1_season
 
-# Compute the long-wave limit of the Rossby wave phase speed (m/s)
-rossby_phase_velocity = -beta * Rd1_m**2
-rossby_phase_velocity_season = -beta[None, :, :] * Rd1_season_m**2
+elif option_froude == 'dispersion':
 
-# Convert phase speed magnitude from m/s to km/day
-c_p_kmday = np.ma.abs(rossby_phase_velocity) * 86400.0 / 1000.0
-c_p_season_kmday = np.ma.abs(rossby_phase_velocity_season) * 86400.0 / 1000.0
+    # Convert first-baroclinic deformation radius from km to m
+    Rd1_m = Rd1 * 1000.0
+    Rd1_season_m = Rd1_season * 1000.0
 
-# Compute the Froude number (Ratio of RMS flow speed to first-baroclinic
-# Rossby-wave phase speed)
-Fr_rossby = U_rms_kmday / c_p_kmday
-Fr_rossby_season = U_rms_season_kmday / c_p_season_kmday
+    # Convert latitude to radians
+    phi = np.deg2rad(lat)[:, None]
+
+    # Compute the beta parameter (m^-1 s^-1)
+    beta = 2.0 * Omega * np.cos(phi) / Re
+
+    # Compute the long-wave limit of the Rossby wave phase speed (m/s)
+    rossby_phase_velocity = -beta * Rd1_m**2
+    rossby_phase_velocity_season = -beta[None, :, :] * Rd1_season_m**2
+
+    # Convert phase speed magnitude from m/s to km/day
+    c_p_kmday = np.ma.abs(rossby_phase_velocity) * 86400.0 / 1000.0
+    c_p_season_kmday = np.ma.abs(rossby_phase_velocity_season) * 86400.0 / 1000.0
+
+    # Compute the Froude number 
+    Fr = U_rms_kmday / c_p_kmday
+    Fr_season = U_rms_season_kmday / c_p_season_kmday
 
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
@@ -645,7 +660,7 @@ T_ADV_season = xr.DataArray(data=T_adv_season,
 )
 
 # --- Froude Number --- # 
-Fr_ROSSBY_full = xr.DataArray(data=Fr_rossby,
+Fr_full = xr.DataArray(data=Fr,
                         dims=['lat','lon'],
                         coords=dict(lat=lat, lon=lon),
                         attrs=dict(
@@ -654,7 +669,7 @@ Fr_ROSSBY_full = xr.DataArray(data=Fr_rossby,
                         )
 )
 
-Fr_ROSSBY_season = xr.DataArray(data=Fr_rossby_season,
+Fr_season = xr.DataArray(data=Fr_season,
                         dims=['season','lat','lon'],
                         coords=dict(season=season, lat=lat, lon=lon),
                         attrs=dict(
@@ -664,13 +679,14 @@ Fr_ROSSBY_season = xr.DataArray(data=Fr_rossby_season,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'ROSSBY_RADIUS_full':ROSSBY_RADIUS_full,'ROSSBY_RADIUS_season':ROSSBY_RADIUS_season, 'PHASE_SPEED_full':PHASE_SPEED_full, 'PHASE_SPEED_season':PHASE_SPEED_season, 'U_RMS_full':U_RMS_full, 'U_RMS_season':U_RMS_season, 'UVEL_full':UVEL_full, 'VVEL_full':VVEL_full, 'UVEL_season':UVEL_season, 'VVEL_season':VVEL_season, 'T_ADV_full':T_ADV_full, 'T_ADV_season':T_ADV_season, 'Fr_ROSSBY_full':Fr_ROSSBY_full, 'Fr_ROSSBY_season':Fr_ROSSBY_season})
+data = xr.Dataset({'ROSSBY_RADIUS_full':ROSSBY_RADIUS_full,'ROSSBY_RADIUS_season':ROSSBY_RADIUS_season, 'PHASE_SPEED_full':PHASE_SPEED_full, 'PHASE_SPEED_season':PHASE_SPEED_season, 'U_RMS_full':U_RMS_full, 'U_RMS_season':U_RMS_season, 'UVEL_full':UVEL_full, 'VVEL_full':VVEL_full, 'UVEL_season':UVEL_season, 'VVEL_season':VVEL_season, 'T_ADV_full':T_ADV_full, 'T_ADV_season':T_ADV_season, 'Fr_full':Fr_full, 'Fr_season':Fr_season})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
     "Depth_average_range": option_depth_avg,
     "Depth_average_threshold": depth_avg_threshold,
     "RMS_mean_inclusion": option_rms,
+    "Froude_number_computation": option_froude,
     "Number_of_Rossby_modes": nmode,
     "Mode_solver_vertical_points": nz_mode,
 })
@@ -678,7 +694,7 @@ data.attrs.update({
 # Set file path for saving the netcdf file
 file_path = (
     PATH_preproc
-    / "processed" / f"mitgcm_advection_time_scale_reg.nc"
+    / "processed" / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}.nc"
 )
 
 # Check if file exists, then delete it
