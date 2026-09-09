@@ -247,7 +247,7 @@ q75 = np.zeros(len(segment_months))
 fig, axes = plt.subplots(
     2,
     4,
-    figsize=(18, 9),
+    figsize=(18, 8),
     subplot_kw={"projection": projection},
     constrained_layout=True,
 )
@@ -514,7 +514,7 @@ ax.remove()
 
 ax_med = fig.add_axes([
     position.x0 + 0.065, 
-    position.y0,
+    position.y0 + 0.025,
     position.width,
     position.height - 0.05,
 ])

@@ -1,0 +1,330 @@
+# =============================================================================
+# Figure S04
+# =============================================================================
+#
+# Caption:
+#   (a) Winter (DJF), (b) Spring (MAM), (c) Summer (JJA), (d) Fall (SON) 
+#   Advection time scale in the study domain. Black contour lines are the ocean
+#   topography with 200 and 2000 meter isobaths highlighted as solid black lines. 
+#
+# Author:
+#   Luke Colosi
+#
+# Created:
+#   2026-09-09
+# =============================================================================
+
+# Import libraries 
+import sys
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt 
+from netCDF4 import Dataset
+import cartopy.crs as ccrs
+import cmocean.cm as cmo
+
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_data = ROOT / "data"
+PATH_figs = ROOT / "figs"
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import plotting toolbox 
+from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar, add_corner_label
+
+# -----------------------------------------------------------------------------
+# Set processing and plotting parameters
+# -----------------------------------------------------------------------------
+
+# ------------# 
+# --- Note ---# 
+# ------------#
+#
+# - option_depth_avg: Depth averaging option for the velocity fields. Options are:
+#                     "full" for full-water-column depth average, or "upper" for 
+#                     upper-ocean depth average to a specified depth.
+# - option_rms: RMS velocity calculation option. Options are:
+#               "with_mean" for RMS velocity including the mean flow, or
+#               "without_mean" for RMS velocity excluding the mean flow.
+# - depth_avg_threshold: Specifies the maximum depth at which the depth-average
+#                        velocity is computed to.  
+#
+# ------------# 
+
+# Set processing parameters
+option_depth_avg    = 'upper'    
+depth_avg_threshold = 200  
+option_rms          = 'with_mean' 
+
+# Set font and fontsize using LaTeX 
+fontsize=18
+plt.rcParams.update({
+    "font.size": fontsize,         
+    "text.usetex": True,           
+    "font.family": "serif",       
+    "text.latex.preamble": r"\usepackage{amsmath}" 
+})
+
+# -----------------------------------------------------------------------------
+# Load MITgcm advective time scale, bathymetry, CCE, and CalCOFI data
+# -----------------------------------------------------------------------------
+
+# --- Advective Time Scales --- # 
+
+# Set path to processed regional MITgcm data
+PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
+
+# Obtain filename paths
+filename_mitgcm = PATH_processed / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}.nc"
+
+# Generate the nc data structure
+nc = Dataset(filename_mitgcm, 'r')
+
+# Extract data variables
+lon     = nc.variables['lon'][:]
+lat     = nc.variables['lat'][:]
+T_adv   = nc.variables['T_ADV_season'][:]
+
+# --- Bathymetry --- # 
+
+# Obtain filename path
+filename_bathy = PATH_data / "bathymetry" / "etopo1_point_conception.nc"
+
+# Generate the nc data structure
+nc_bathy = Dataset(filename_bathy, 'r')
+
+# Extract data variables
+lon_b  = nc_bathy.variables['lon'][:]
+lat_b  = nc_bathy.variables['lat'][:]
+bathy  = nc_bathy.variables['BATHY'][:]
+
+# --- CCE Mooring Locations --- # 
+lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
+lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
+
+# --- CalCOFI Line 80.0 Positions --- # 
+
+# Obtain filename path
+filename = PATH_data / "calcofi" / "CalCOFIStationOrder.csv"
+
+# Load csv file 
+calCOFI_data = np.genfromtxt(
+    filename,
+    delimiter=",",
+    skip_header=1,
+    usecols=(1, 3, 7, 11),
+    invalid_raise=False
+)
+
+# Grab stations on line 80.0
+calCOFI_line80 = calCOFI_data[calCOFI_data[:, 0] == 80.0] 
+
+# Parse data into separate arrays
+calCOFI_lat   = calCOFI_line80[:, 1]
+calCOFI_lon   = calCOFI_line80[:, 2]
+
+# -----------------------------------------------------------------------------
+# Plot regional advective time scales  
+# -----------------------------------------------------------------------------
+
+# Set plotting parameters
+projection = ccrs.PlateCarree(central_longitude=0.0)
+resolution = "10m"
+xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
+yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
+lon_min, lon_max = -123, -120
+lat_min, lat_max = 33, 35
+levels = np.arange(0,3.5+0.05,0.05) 
+ticks  = np.arange(0,3.5+0.5,0.5) 
+levels_is = np.arange(100,300+100,100)
+levels_ms = np.arange(1000,3000+500,500)
+fontsize_g = 18
+fontsize_c = 10
+cmap = cmo.tempo
+
+# Create figure
+fig, axes = plt.subplots(2,2, figsize=(20, 13), subplot_kw={"projection": projection})
+
+# Flatten axes array 
+ax_flat = axes.flatten()
+
+# Loop through seasons
+for i, season in enumerate(['DJF', 'MAM', 'JJA', 'SON']):
+
+    # --- Subplot 1 --- #  
+    ax = ax_flat[i]
+
+    # Plot coastlines and land 
+    set_coastlines(
+        ax, 
+        projection, 
+        resolution, 
+        lon_min=lon_min, 
+        lon_max=lon_max, 
+        lat_min=lat_min, 
+        lat_max=lat_max
+    ) 
+
+    # Plot decorrelation time scales
+    ct = ax.contourf(
+        lon, 
+        lat, 
+        T_adv[i,:,:], 
+        levels=levels,
+        transform=ccrs.PlateCarree(),
+        cmap=cmap, 
+        extend='both'
+    )
+
+    # Plot the CCE1 mooring point
+    ax.scatter(
+        lon1, 
+        lat1, 
+        color='w',
+        edgecolor='black', 
+        marker='^', 
+        s=40, 
+        transform=ccrs.PlateCarree(),
+        zorder=10, 
+        label='CCE1'
+    )
+
+    # Plot the CCE2 mooring point
+    ax.scatter(
+        lon2, 
+        lat2, 
+        color='w',  
+        edgecolor='black', 
+        marker='s', 
+        s=40,  
+        transform=ccrs.PlateCarree(),
+        zorder=10, 
+        label='CCE2'
+    )
+
+    # Plot the CCE3 mooring point
+    ax.scatter(
+        lon3, 
+        lat3, 
+        color= 'w',  
+        edgecolor='black', 
+        marker='o', 
+        s=40,  
+        transform=ccrs.PlateCarree(),
+        zorder=10, 
+        label='CCE3'
+    )
+
+    # Plot depth contour lines
+    ct1 = ax.contour(
+        lon_b, 
+        lat_b, 
+        -1*(bathy),
+        levels=levels_ms, 
+        colors='black', 
+        linewidths=0.5, 
+        linestyles='dashed'
+    )
+    ct2 = ax.contour(
+        lon_b, 
+        lat_b, 
+        -1*(bathy),
+        levels=[2000], 
+        colors='black', 
+        linewidths=1, 
+        linestyles='solid'
+    )
+    ct3 = ax.contour(
+        lon_b, 
+        lat_b, 
+        -1*(bathy),
+        levels=levels_is, 
+        colors='black', 
+        linewidths=0.5, 
+        linestyles='dashed'
+    )
+    ct4 = ax.contour(
+        lon_b, 
+        lat_b, 
+        -1*(bathy),
+        levels=[200], 
+        colors='black', 
+        linewidths=1, 
+        linestyles='solid'
+    )
+
+    # Plot Line 80 CalCOFI Stations
+    ax.plot(
+        calCOFI_lon % 360, 
+        calCOFI_lat,
+        color='k',
+        linestyle=(0, (5, 3)),  
+        linewidth=1.5,
+        transform=ccrs.PlateCarree(),
+    )
+
+    # Set grid ticks 
+    set_grid_ticks(
+        ax,
+        xticks=xticks,
+        yticks=yticks,
+        xlabels=True,
+        ylabels=True,
+        grid=True,
+        fontsize=fontsize_g,
+        color='k',
+        lw=1,
+        ls='--',
+        alpha=0.1
+    )
+
+    # Set title 
+    ax.set_title(f"{season}", fontsize=20)
+
+    if i == 0:
+
+        # Create colormap
+        cax = plt.axes([0.92, 0.29, 0.02, 0.4])
+        set_cbar(
+            ct,
+            cax,
+            fig,
+            orientation="vertical",
+            extend="both",
+            label='Advective Time Scale (days)',
+            fontsize=fontsize_g,
+            ticks=ticks, 
+            invert = False
+        )
+        
+        # Add a 20-km scale bar
+        add_scalebar(
+            ax, 
+            length_km=20, 
+            location=(0.925, 0.78),
+            linewidth=1, 
+            text_kwargs=dict(fontsize=14, color='white', weight='bold')
+        )
+
+# Label each subplot
+pos = [0.96, 0.94]
+add_corner_label(ax_flat[0], pos, 'A', fontsize = 18)
+add_corner_label(ax_flat[1], pos, 'B', fontsize = 18)
+add_corner_label(ax_flat[2], pos, 'C', fontsize = 18)
+add_corner_label(ax_flat[3], pos, 'D', fontsize = 18)
+
+# Save figure in high resolution 
+fig.savefig(
+    PATH_figs / "figS04.png",
+    dpi=300,
+    facecolor='white',
+    bbox_inches='tight',
+    pad_inches=0.1,
+    transparent=False
+)
+
