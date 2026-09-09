@@ -1,5 +1,5 @@
 # =============================================================================
-# Figure S02
+# Figure S05
 # =============================================================================
 #
 # Caption:
@@ -587,7 +587,7 @@ fig.get_layout_engine().set(
 
 # Save figure
 fig.savefig(
-    PATH_figs / "figS02.png",
+    PATH_figs / "figS05.png",
     dpi=300,
     facecolor="white",
     bbox_inches="tight",
