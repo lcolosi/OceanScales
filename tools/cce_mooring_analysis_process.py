@@ -51,7 +51,7 @@ from tqdm import tqdm
 # ------------ # 
 
 # Set processing parameters
-option_mooring = "cce1"   
+option_mooring = "cce2"   
 
 # Set mooring-specific parameters
 if option_mooring == "cce1":
