@@ -26,6 +26,7 @@ import xarray as xr
 import numpy as np
 from netCDF4 import Dataset, num2date
 import gsw
+from tqdm import tqdm
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -109,11 +110,8 @@ else:
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
 
-# Set path to project data directory
-PATH_data = ROOT / "data" / "cce" 
-
-# Set path to selected CCE mooring
-PATH_mooring = PATH_data / option_mooring
+# Set path to data
+PATH_data = ROOT / "data" / "cce" /option_mooring
 
 # -----------------------------------------------------------------------------
 # Process CCE Mooring Data 
@@ -160,8 +158,8 @@ for m in range(depl_start, depl_end + 1):
     # ------------------------------------------ # 
 
     # Collect CTD and CAT file names for the ith deployment
-    ctd_files = list(PATH_mooring.glob(f"OS_{option_mooring.upper()}_{depl}_*_CTD.nc"))
-    cat_files = list(PATH_mooring.glob(f"OS_{option_mooring.upper()}_{depl}_*_*CAT*.nc"))
+    ctd_files = list(PATH_data.glob(f"OS_{option_mooring.upper()}_{depl}_*_CTD.nc"))
+    cat_files = list(PATH_data.glob(f"OS_{option_mooring.upper()}_{depl}_*_*CAT*.nc"))
 
     # Combine and sort file lists
     nc_files = sorted(set(ctd_files + cat_files))
@@ -347,7 +345,7 @@ for m in range(depl_start, depl_end + 1):
     S_avg = np.full((len(depth), len(time_avg)),np.nan)
 
     # Loop through hourly time steps
-    for n in range(len(time_avg)):
+    for n in tqdm(range(len(time_avg)), desc="Computing hourly averages", unit="time"):
 
         # Find observations within the current hour
         idx_time = time_hour == time_avg[n]
@@ -410,7 +408,7 @@ for m in range(depl_start, depl_end + 1):
     sai = np.full((len(z_grid), len(time_avg)), np.nan)
 
     # Loop through hourly time steps
-    for n in range(len(time_avg)):
+    for n in tqdm(range(len(time_avg)), desc="Interpolating onto uniform depth grid", unit="time"):
 
         # --- Temperature --- #
 
