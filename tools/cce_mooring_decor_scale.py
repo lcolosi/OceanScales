@@ -67,7 +67,7 @@ from filter import gaussian_low_pass_filter
 # ------------#
 
 # Set processing parameters
-option_mooring     = 'cce1'
+option_mooring     = 'cce2'
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_harmonics   = 2      
@@ -114,14 +114,13 @@ variable_names = {
 if option_data in ("temp", "sal", "density"):
     filename = (
         PATH_processed
-        / f"mitgcm_proc_density_hrly_mooring.nc"
+        / f"{option_mooring}_proc_density_hrly_mooring.nc"
     )
 else:
     raise ValueError(f"Invalid option_data: {option_data}")
 
 # Load NetCDF data
 with Dataset(filename, "r") as nc:
-    site  = nc.variables["site"][:]
     depth = nc.variables["depth"][:]
 
     time = num2date(
@@ -182,7 +181,7 @@ t0 = time[0]
 time_elapsed = np.array([(t - t0).total_seconds() for t in time])
 
 # Obtain the dimensions of the longitude and latitude 
-nsite,ntime,ndepth = np.shape(data)
+ntime,ndepth = np.shape(data)
 
 # Initialize arrays 
 fit      = np.ma.masked_all((ntime,ndepth))
@@ -325,11 +324,11 @@ for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="d
 
     # Compute the standard error of the decorrelation scale
     Lt_stdm[idepth], Lt_std[idepth], Lt_stds[idepth]  = compute_decor_scale_unc_masked(autocorr_mean, 
-                                                                                autocorr_seg, 
-                                                                                M_lag, 
-                                                                                dt, 
-                                                                                segment_overlap,
-                                                                                )
+                                                                                        autocorr_seg, 
+                                                                                        M_lag, 
+                                                                                        dt, 
+                                                                                        segment_overlap,
+                                                                                        )
 
 # Convert time scale to units of days
 Lt_days      = Lt/(24*60*60) 
