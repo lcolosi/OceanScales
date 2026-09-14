@@ -69,7 +69,7 @@ from filter import gaussian_low_pass_filter
 # Set processing parameters
 option_mooring     = 'cce2'
 option_data        = 'density'    
-option_interannual = 'linear' 
+option_interannual = 'gaussian' 
 option_harmonics   = 2      
 option_detrend_seg = True
 

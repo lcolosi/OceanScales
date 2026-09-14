@@ -60,7 +60,7 @@ from plotting import add_corner_label
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'linear' 
+option_interannual = 'gaussian' 
 option_detrend_seg = True
 segment_months     = 6
 
@@ -96,7 +96,6 @@ site    = nc.variables['site'][:]
 depth_m = nc.variables['depth'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
-Lt_std  = nc.variables['decor_scale_std'][:]
 
 # --- Mixed Layer Depth ---# 
 
@@ -111,6 +110,27 @@ mld = nc.variables['MLD'][:]
 
 # --- CCE Data --- # 
 
+# Set path to processed regional MITgcm data
+PATH_processed_cce1 = PATH_data / "cce" / "cce1" / "processed"
+PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
+
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
+
+# Extract data variables
+depth_cce1   = nc_cce1.variables['depth'][:]
+Lt_cce1      = nc_cce1.variables['decor_scale'][:]
+Lt_stdm_cce1 = nc_cce1.variables['decor_scale_stdm'][:]
+
+depth_cce2   = nc_cce2.variables['depth'][:]
+Lt_cce2      = nc_cce2.variables['decor_scale'][:]
+Lt_stdm_cce2 = nc_cce2.variables['decor_scale_stdm'][:]
+
 # -----------------------------------------------------------------------------
 # Compute the time mean and standard deviation mixed layer depth 
 # -----------------------------------------------------------------------------
@@ -123,12 +143,14 @@ mld_std = np.ma.std(mld,axis=1,ddof=1)
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters 
-depth_pos_m = abs(depth_m)
-depth_lim = [0,200]
-cce1_sensor_depth = np.array([9, 19, 29, 39, 60, 75, 150])
-cce2_sensor_depth = np.array([6, 14, 25, 44, 74])
-x_max = 25
-dx = 5
+depth_pos_m       = abs(depth_m)
+depth_pos_cce1    = abs(depth_cce1)
+depth_pos_cce2    = abs(depth_cce2)
+depth_lim         = [0,200]
+cce1_sensor_depth = np.array([10, 20, 30, 40, 60, 75, 150])
+cce2_sensor_depth = np.array([7, 15, 25, 45, 75])
+x_max             = 25
+dx                = 5
 
 # Create figure
 fig, axes = plt.subplots(2,3,figsize=(15, 10))
@@ -279,8 +301,14 @@ ax.grid(True,linestyle='--',alpha=0.3)
 #--- Subplot 4 ---# 
 ax = ax_flat[3]
 
+# Plot CCE1 observed potential density decor scale
+ax.plot(Lt_cce1,depth_pos_cce1,'.-', color='tab:green')
+
+# Plot standard error of the mean
+ax.fill_betweenx(depth_pos_cce1, Lt_cce1 - Lt_stdm_cce1, Lt_cce1 + Lt_stdm_cce1, color='tab:green', alpha=0.5)
+
 # Set left edge x-position 
-x_left = ax.get_xlim()[0]
+x_left = ax.get_xlim()[0] - 11
 
 # Plot the sensor depths 
 ax.plot(
@@ -315,8 +343,14 @@ ax.grid(True,linestyle='--',alpha=0.3)
 #--- Subplot 5 ---# 
 ax = ax_flat[4]
 
+# Plot CCE2 observed potential density decor scale
+ax.plot(Lt_cce2,depth_pos_cce2,'.-', color='tab:red')
+
+# Plot standard error of the mean
+ax.fill_betweenx(depth_pos_cce2, Lt_cce2 - Lt_stdm_cce2, Lt_cce2 + Lt_stdm_cce2, color='tab:red', alpha=0.5)
+
 # Set left edge x-position 
-x_left = ax.get_xlim()[0] 
+x_left = ax.get_xlim()[0] - 5
 
 # Plot the sensor depths 
 ax.plot(

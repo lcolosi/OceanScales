@@ -538,6 +538,8 @@ S = np.full((len(z_grid), len(t)),np.nan)
 # to justify. Removing duplicated overlap times provides a conservative way to
 # avoid introducing additional artifacts associated with combining the two
 # deployment records.
+# 
+# Look at the average value and what is lost. 
 #
 # ------------ # 
 

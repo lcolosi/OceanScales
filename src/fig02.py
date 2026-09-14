@@ -52,6 +52,7 @@ from filter import gaussian_low_pass_filter
 # --- Note --- # 
 # ------------ #
 #
+# - option_depth: Specifies the depth to analyze. 
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_depth: Specifies the water depth which the time series is extracted from 
