@@ -226,12 +226,15 @@ if option_interannual == 'gaussian':
             # Set the time series 
             data_ts = np.ma.masked_invalid(data[isite,:,idepth])
 
+            # Remove the time mean
+            data_anomaly = data_ts - np.ma.mean(data_ts)
+
             # Skip grid points containing only masked data
-            if np.ma.getmaskarray(data_ts).all():
+            if np.ma.getmaskarray(data_anomaly).all():
                 continue
 
             # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-            data_interannual[isite,:,idepth] = gaussian_low_pass_filter(data_ts,
+            data_interannual[isite,:,idepth] = gaussian_low_pass_filter(data_anomaly,
                                                                        fwhm_days=365,
                                                                        dt_hours=1,
                                                                        mode='constant',

@@ -19,10 +19,8 @@
 
 # Import libraries 
 import sys
-import os
 from pathlib import Path
 import numpy as np
-import xarray as xr
 from netCDF4 import Dataset, num2date
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -44,7 +42,7 @@ sys.path.append(str(PATH_tools))
 from autocorr import compute_autocorr_biased_masked, compute_decor_scale_masked, compute_decor_scale_unc_masked, segment_time_series
 from lsf import unweighted_lsf, detrend, compute_fve
 from filter import gaussian_low_pass_filter
-from plotting import month_fmt, add_corner_label
+from plotting import add_corner_label
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -67,7 +65,6 @@ from plotting import month_fmt, add_corner_label
 # - segment_overlap: Specifies the fractional overlap between segments 
 #                    (e.g., 0.75 for 75% overlap).
 # - segment_duration: Specifies the length of each segment in years.
-# - depth_lim: Specifies the deepest depth to preform analysis. 
 # - norm: Specifies the method used to normalize the autocovariance when 
 #         observations are missing.
 #
@@ -85,8 +82,7 @@ dt               = 3600
 T_annual         = 365.25*(24)*(60)*(60)    
 segment_overlap  = 0.5                                        
 segment_duration = 0.5   
-depth_lim        = -220 
-norm             = "corrected"
+norm             = "standard"
 
 # Set font and fontsize
 fontsize=16
@@ -108,6 +104,10 @@ if option_interannual not in ("linear", "gaussian"):
     raise ValueError(
         f"Invalid option_interannual: {option_interannual}. "
         "Choose 'linear' or 'gaussian'."
+    )
+if norm not in ("standard", "corrected"):
+    raise ValueError(
+        "norm must be 'standard' or 'corrected'."
     )
 
 # Label segment processing 
@@ -213,6 +213,10 @@ depth2_index =  np.abs(np.abs(depth2) - option_depth).argmin()
 data1_depth = data1[:, depth1_index]
 data2_depth = data2[:, depth2_index]
 
+# Print actual depths
+print("CCE1 depth:", depth1[depth1_index])
+print("CCE2 depth:", depth2[depth2_index])
+
 # -----------------------------------------------------------------------------
 # Remove seasonal and interannual variability from time series
 # -----------------------------------------------------------------------------
@@ -242,21 +246,15 @@ time2_elapsed = np.array([(t - time2[0]).total_seconds() for t in time2])
 ntime1 = len(data1_depth)
 ntime2 = len(data2_depth)
 
-# Initialize arrays 
-fit1      = np.ma.masked_all(ntime1)
-data1_res = np.ma.masked_all(ntime1)
-fit2      = np.ma.masked_all(ntime2)
-data2_res = np.ma.masked_all(ntime2)
-
 # Compute seasonal harmonic fit
-fit1, *_ = unweighted_lsf(data1, 
+fit1, *_ = unweighted_lsf(data1_depth, 
                           time1_elapsed, 
                           parameters=option_harmonics, 
                           freqs=w, 
                           sigma=None, 
                           linear_trend=linear_trend,
                           )
-fit2, *_ = unweighted_lsf(data2, 
+fit2, *_ = unweighted_lsf(data2_depth, 
                           time2_elapsed, 
                           parameters=option_harmonics, 
                           freqs=w, 
@@ -265,20 +263,24 @@ fit2, *_ = unweighted_lsf(data2,
                           )
 
 # Compute the residual time series 
-data1_res = data1 - fit1
-data2_res = data2 - fit2
+data1_res = data1_depth - fit1
+data2_res = data2_depth - fit2
+
+# Compute the time mean 
+data1_mean = np.ma.mean(data1_depth)
+data2_mean = np.ma.mean(data2_depth)
 
 # Apply Gaussian low-pass filtering when selected
 if option_interannual == 'gaussian': 
 
     # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-    data1_interannual = gaussian_low_pass_filter(data1,
+    data1_interannual = gaussian_low_pass_filter(data1_depth - data1_mean,
                                                  fwhm_days=365,
                                                  dt_hours=1,
                                                  mode='constant',
                                                  truncate=4,
                                                 )
-    data2_interannual = gaussian_low_pass_filter(data2,
+    data2_interannual = gaussian_low_pass_filter(data2_depth - data2_mean,
                                                  fwhm_days=365,
                                                  dt_hours=1,
                                                  mode='constant',
@@ -286,8 +288,8 @@ if option_interannual == 'gaussian':
                                                 )
 
     # Remove seasonal and interannual variability
-    data1_res = data1 - fit1 - data1_interannual
-    data2_res = data2 - fit2 - data2_interannual
+    data1_res = data1_depth - fit1 - data1_interannual
+    data2_res = data2_depth - fit2 - data2_interannual
 
 # Set the model for the interannual and seasonal cycles 
 if option_interannual == 'gaussian': 
@@ -298,8 +300,8 @@ else:
     model2 = fit2 
 
 # Compute the fraction of variance explained by the interannual and season model
-fve1 = compute_fve(data1, model1)
-fve2 = compute_fve(data2, model2)
+fve1 = compute_fve(data1_depth, model1)
+fve2 = compute_fve(data2_depth, model2)
 
 # -----------------------------------------------------------------------------
 # Compute autocorrelation and the decorrelation time scales 
@@ -307,14 +309,14 @@ fve2 = compute_fve(data2, model2)
 
 # Segment the time series 
 segments1 = segment_time_series(time1_dt, 
-                               data1_res, 
-                               duration=segment_duration, 
-                               overlap=segment_overlap,
+                                data1_res, 
+                                duration=segment_duration, 
+                                overlap=segment_overlap,
                                )
 segments2 = segment_time_series(time2_dt, 
-                               data2_res, 
-                               duration=segment_duration, 
-                               overlap=segment_overlap,
+                                data2_res, 
+                                duration=segment_duration, 
+                                overlap=segment_overlap,
                                )
 
 # Obtain the dimensions of the segmented time series
@@ -352,12 +354,12 @@ for iseg, (tseg, dseg) in enumerate(segments1):
 autocorr1_mean = np.ma.mean(autocorr1_seg, axis=0)
 
 # Compute the decorrelation scale of the mean autocorrelation 
-Lt1, M_lag = compute_decor_scale_masked(autocorr1_mean,time1_lag) 
+Lt1, M_lag1 = compute_decor_scale_masked(autocorr1_mean,time1_lag) 
 
 # Compute the standard error of the decorrelation scale
 Lt1_stdm, Lt1_std, Lt1_stds  = compute_decor_scale_unc_masked(autocorr1_mean, 
-                                                              autocorr2_seg, 
-                                                              M_lag, 
+                                                              autocorr1_seg, 
+                                                              M_lag1, 
                                                               dt, 
                                                               segment_overlap,
                                                              )
@@ -394,12 +396,12 @@ for iseg, (tseg, dseg) in enumerate(segments2):
 autocorr2_mean = np.ma.mean(autocorr2_seg, axis=0)
 
 # Compute the decorrelation scale of the mean autocorrelation 
-Lt2, M_lag = compute_decor_scale_masked(autocorr1_mean,time2_lag) 
+Lt2, M_lag2 = compute_decor_scale_masked(autocorr2_mean,time2_lag) 
 
 # Compute the standard error of the decorrelation scale
 Lt2_stdm, Lt2_std, Lt2_stds  = compute_decor_scale_unc_masked(autocorr2_mean, 
                                                               autocorr2_seg, 
-                                                              M_lag, 
+                                                              M_lag2, 
                                                               dt, 
                                                               segment_overlap,
                                                              )
@@ -432,7 +434,7 @@ x_max = 182.5
 dx = 20
 
 # Create figure and axis objects 
-fig, axes = plt.subplots(3,2,figsize=(20, 12))
+fig, axes = plt.subplots(3,2,figsize=(18, 12))
 
 #--- Subplot 1 ---# 
 ax = axes[0,0]
@@ -445,10 +447,10 @@ ax.plot(time1_dt, model1, color='k', ls='--', linewidth=1.5, label='Least-Square
 
 # Set axis attributes
 ax.set_title('CCE1')
-ax.set_ylim(23.4, 26.0)
+ax.set_ylim(22.75, 26.0)
 ax.set_ylabel('Potential Density (kg/m$^3$)')
-ax.xaxis.set_major_locator(mdates.MonthLocator())
-ax.xaxis.set_major_formatter(FuncFormatter(month_fmt))
+ax.xaxis.set_major_locator(mdates.YearLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
 ax.set_xticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
@@ -465,9 +467,9 @@ ax.plot(time2_dt, model2, color='k', ls='--', linewidth=1.5, label='Least-Square
 
 # Set axis attributes
 ax.set_title('CCE2')
-ax.set_ylim(23.4, 26.0)
-ax.xaxis.set_major_locator(mdates.MonthLocator())
-ax.xaxis.set_major_formatter(FuncFormatter(month_fmt))
+ax.set_ylim(22.75, 26.0)
+ax.xaxis.set_major_locator(mdates.YearLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
 ax.set_xticklabels([])
 ax.set_yticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
@@ -480,10 +482,10 @@ ax = axes[1,0]
 ax.plot(time1_dt, data1_res, color='tab:green', label='CCE1', linewidth=1.5)
 
 # Set axis attributes
-ax.set_ylim(-1.0, 1.0)
+ax.set_ylim(-1.25, 1.25)
 ax.set_ylabel('Potential Density (kg/m$^3$)')
-ax.xaxis.set_major_locator(mdates.MonthLocator())
-ax.xaxis.set_major_formatter(FuncFormatter(month_fmt))
+ax.xaxis.set_major_locator(mdates.YearLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=True, right=True, left=True, bottom=True, length=5)
 
@@ -494,9 +496,9 @@ ax = axes[1,1]
 ax.plot(time2_dt, data2_res, color='tab:red', linewidth=1.5)
 
 # Set axis attributes
-ax.set_ylim(-1.0, 1.0)
-ax.xaxis.set_major_locator(mdates.MonthLocator())
-ax.xaxis.set_major_formatter(FuncFormatter(month_fmt))
+ax.set_ylim(-1.25, 1.25)
+ax.xaxis.set_major_locator(mdates.YearLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
 ax.set_yticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=True, right=True, left=True, bottom=True, length=5)
@@ -527,7 +529,7 @@ ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
 
 # Add inset showing short-lag autocorrelation
-axins = ax.inset_axes([0.35, 0.59, 0.4, 0.38])
+axins = ax.inset_axes([0.38, 0.59, 0.3, 0.38])
 
 # Plot the zero line 
 axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
@@ -596,7 +598,7 @@ ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
 
 # Add inset showing short-lag autocorrelation
-axins = ax.inset_axes([0.35, 0.59, 0.4, 0.38])
+axins = ax.inset_axes([0.38, 0.59, 0.3, 0.38])
 
 # Plot the zero line 
 axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
@@ -641,12 +643,12 @@ axins.tick_params(
 
 # Label each subplot
 pos = [0.95, 0.91] 
-add_corner_label(axes[0,0], pos, 'A', fontsize = fontsize)
-add_corner_label(axes[0,1], pos, 'B', fontsize = fontsize)
-add_corner_label(axes[0,2], pos, 'C', fontsize = fontsize)
-add_corner_label(axes[1,0], pos, 'D', fontsize = fontsize)
-add_corner_label(axes[1,1], pos, 'E', fontsize = fontsize)
-add_corner_label(axes[1,2], pos, 'F', fontsize = fontsize)
+add_corner_label(axes[0,0], pos, 'A', fontsize=fontsize)
+add_corner_label(axes[0,1], pos, 'B', fontsize=fontsize)
+add_corner_label(axes[1,0], pos, 'C', fontsize=fontsize)
+add_corner_label(axes[1,1], pos, 'D', fontsize=fontsize)
+add_corner_label(axes[2,0], pos, 'E', fontsize=fontsize)
+add_corner_label(axes[2,1], pos, 'F', fontsize=fontsize)
 
 # Adjust spacing 
 plt.subplots_adjust(hspace=0.21, wspace=0.1)
@@ -660,6 +662,36 @@ fig.savefig(
     pad_inches=0.1,
     transparent=False
 )
+
+# -----------------------------------------------------------------------------
+# Print decorrelation scale statistics
+# -----------------------------------------------------------------------------
+
+print("\n" + "=" * 60)
+print("Decorrelation Scale Statistics")
+print("=" * 60)
+
+print(
+    f"CCE1:\n"
+    f"  Decorrelation scale       : {Lt1_days:.2f} days\n"
+    f"  Standard error            : {Lt1_stdm_days:.2f} days\n"
+    f"  Standard deviation        : {Lt1_std_days:.2f} days\n"
+    f"  Std. error of std. dev.   : {Lt1_stds_days:.2f} days\n"
+    f"  Number of segments        : {nseg1}"
+)
+
+print()
+
+print(
+    f"CCE2:\n"
+    f"  Decorrelation scale       : {Lt2_days:.2f} days\n"
+    f"  Standard error            : {Lt2_stdm_days:.2f} days\n"
+    f"  Standard deviation        : {Lt2_std_days:.2f} days\n"
+    f"  Std. error of std. dev.   : {Lt2_stds_days:.2f} days\n"
+    f"  Number of segments        : {nseg2}"
+)
+
+print("=" * 60)
 
 
 

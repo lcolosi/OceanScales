@@ -182,11 +182,14 @@ if option_interannual == 'gaussian':
     # Loop through mooring sites
     for isite in range(nsite):
 
-        # Residual after removing seasonal cycle
+        # Set the ith time series 
         data_ts = np.ma.masked_invalid(sig_depth[isite, :])
 
+        # Remove the time mean
+        data_anomaly = data_ts - np.ma.mean(data_ts)
+
         # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-        sig_interannual[isite, :] = gaussian_low_pass_filter(data_ts,
+        sig_interannual[isite, :] = gaussian_low_pass_filter(data_anomaly,
                                                              fwhm_days=365,
                                                              dt_hours=1,
                                                              mode='constant',

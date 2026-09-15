@@ -218,15 +218,18 @@ if option_interannual == 'gaussian':
     # Loop over each depth
     for idepth in tqdm(range(ndepth), desc="Low-pass Filtering Time Series", unit="depth"):
 
-        # Set the time series 
+        # Set the ith time series 
         data_ts = np.ma.masked_invalid(data[:,idepth])
 
+        # Remove the time mean
+        data_anomaly = data_ts - np.ma.mean(data_ts)
+
         # Skip grid points containing only masked data
-        if np.ma.getmaskarray(data_ts).all():
+        if np.ma.getmaskarray(data_anomaly).all():
             continue
 
         # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-        data_interannual[:,idepth] = gaussian_low_pass_filter(data_ts,
+        data_interannual[:,idepth] = gaussian_low_pass_filter(data_anomaly,
                                                               fwhm_days=365,
                                                               dt_hours=1,
                                                               mode='constant',
