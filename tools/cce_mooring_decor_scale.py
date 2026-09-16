@@ -324,10 +324,10 @@ for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="d
     autocorr_mean[idepth,:] = np.ma.mean(autocorr_seg, axis=0)
 
     # Compute the decorrelation scale of the mean autocorrelation 
-    Lt[idepth], M_lag = compute_decor_scale_masked(autocorr_mean,time_lag) 
+    Lt[idepth], M_lag = compute_decor_scale_masked(autocorr_mean[idepth,:],time_lag) 
 
     # Compute the standard error of the decorrelation scale
-    Lt_stdm[idepth], Lt_std[idepth], Lt_stds[idepth]  = compute_decor_scale_unc_masked(autocorr_mean, 
+    Lt_stdm[idepth], Lt_std[idepth], Lt_stds[idepth]  = compute_decor_scale_unc_masked(autocorr_mean[idepth,:], 
                                                                                         autocorr_seg, 
                                                                                         M_lag, 
                                                                                         dt, 

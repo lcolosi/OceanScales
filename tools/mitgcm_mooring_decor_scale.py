@@ -64,7 +64,7 @@ from filter import gaussian_low_pass_filter
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'gaussian' 
+option_interannual = 'linear' 
 option_harmonics   = 2      
 option_detrend_seg = True
 
@@ -342,10 +342,10 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
         autocorr_mean[isite,idepth,:] = np.ma.mean(autocorr_seg, axis=0)
 
         # Compute the decorrelation scale of the mean autocorrelation 
-        Lt[isite,idepth], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
+        Lt[isite,idepth], M_lag = compute_decor_scale(autocorr_mean[isite,idepth,:],time_lag) 
     
         # Compute the standard error of the decorrelation scale
-        Lt_stdm[isite,idepth], Lt_std[isite,idepth], Lt_stds[isite,idepth]  = compute_decor_scale_unc(autocorr_mean, 
+        Lt_stdm[isite,idepth], Lt_std[isite,idepth], Lt_stds[isite,idepth]  = compute_decor_scale_unc(autocorr_mean[isite,idepth,:], 
                                                                                                       autocorr_seg, 
                                                                                                       M_lag, 
                                                                                                       dt, 
