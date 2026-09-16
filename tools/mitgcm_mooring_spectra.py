@@ -1,16 +1,16 @@
 # =============================================================================
-# Compute decorrelation time scales at mooring locations from MITgcm data 
+# Compute spectrograms at mooring locations from MITgcm data 
 # =============================================================================
 #
 # Description:
-#   Computes decorrelation time scales and their uncertainty at mooring locations from
+#   Computes spectrograms at mooring locations from
 #   MITgcm data and saves the results to a NetCDF file.
 #
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-08-19
+#   2026-09-15
 # =============================================================================
 
 # Import libraries 
@@ -34,8 +34,9 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import analysis functions 
-from autocorr import compute_autocorr_biased, compute_decor_scale, compute_decor_scale_unc, segment_time_series
-from lsf import unweighted_lsf, detrend, compute_fve
+from spectra import compute_spectrum1D, spectral_slope, spectral_diags, spectral_uncertainty
+from autocorr import segment_time_series
+from lsf import unweighted_lsf
 from filter import gaussian_low_pass_filter  
 
 # -----------------------------------------------------------------------------
@@ -47,33 +48,42 @@ from filter import gaussian_low_pass_filter
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", or "vvel".
+#                Options: "temp", "salt", "density", "uvel", or "vvel".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
+# - seconds_per_day: Number of seconds in a day. 
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
-#                    (e.g., 0.75 for 75% overlap).
+#                    (e.g., 0.75 for 75% overlap). NOTE: The confidence interval 
+#                    calculation assumes 50% overlap, so if this is changed from 0.5, 
+#                    the CI calculation must be adjusted accordingly.
 # - segment_duration: Specifies the length of each segment in years.
 # - depth_lim : Specifies the deepest depth to preform analysis. 
+# - f_cut: Specifies the cutoff frequency in units of cpd for the Fraction of
+#          variance explained.
 #
 # ------------#
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'gaussian' 
+option_interannual = 'linear' 
 option_harmonics   = 2      
 option_detrend_seg = True
 
 # Set time and space parameters
+seconds_per_day  = 24 * 60 * 60
 dt               = 3600    
 T_annual         = 365.25*(24)*(60)*(60)    
 segment_overlap  = 0.5                                        
 segment_duration = 0.5   
 depth_lim        = -220 
+f_cut            = 1 / (14 * seconds_per_day)
+fmin_slope       = 0.03 / seconds_per_day
+fmax_slope       = 0.8 / seconds_per_day 
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density", "uvel", "vvel"):
@@ -244,56 +254,50 @@ if option_interannual == 'gaussian':
     # Remove seasonal and interannual variability
     data_res = data - fit - data_interannual
 
-# Set the model for the interannual and seasonal cycles 
-if option_interannual == 'gaussian': 
-    model = fit + data_interannual 
-else: 
-    model = fit 
-
-# Initialize arrays 
-fve = np.ma.masked_all((nsite,ndepth))
-
-# Loop over each site
-for isite in tqdm(range(nsite), desc="Computing Fraction of Variance Explained", unit="mooring site"):
-
-    # Loop over each depth
-    for idepth in range(ndepth):
-
-        # Set the data and model time series 
-        data_ts  = data[isite,:,idepth]
-        model_ts = model[isite,:,idepth]
-
-        # Skip grid points containing only masked data
-        if np.ma.getmaskarray(data_ts).all():
-            continue
-
-        # Compute the fraction of variance explained by the interannual and season model
-        fve[isite,idepth] = compute_fve(data_ts, model_ts)
-
 # -----------------------------------------------------------------------------
-# Compute decorrelation time scales and their uncertainty
+# Compute spectrogram and their spectral slopes
 # -----------------------------------------------------------------------------
 
-# Segment a single time series 
-segments = segment_time_series(time_dt, 
-                               data_res[0,:,0], 
-                               duration=segment_duration, 
-                               overlap=segment_overlap,
-                               )
+# Create reference segments to determine the segment length
+segments_ref = segment_time_series(time_dt, 
+                                   np.zeros(ntime), 
+                                   duration=segment_duration, 
+                                   overlap=segment_overlap,
+                                   )
+
+# Check if no segments were generated
+if len(segments_ref) == 0:
+    raise ValueError("No segments were generated.")
+
+# Check that all segments have the same number of samples
+segment_lengths = {len(dseg) for _, dseg in segments_ref}
+
+if len(segment_lengths) != 1:
+    raise ValueError(
+        "All segments must contain the same number of samples."
+    )
 
 # Obtain the dimensions of the segmented time series
-nseg = len(segments)
-ntime_seg = len(segments[0][0])
+nseg = len(segments_ref)
+ntime_seg = segment_lengths.pop()
+
+# Compute expected cyclic frequency vector for each segment
+f = np.fft.rfftfreq(ntime_seg, d=dt)
+
+# Set number of non-negative frequency bins
+nfreq = len(f)
 
 # Initialize arrays 
-autocorr_mean = np.ma.masked_all((nsite,ndepth,2*ntime_seg-1))
-Lt            = np.ma.masked_all((nsite,ndepth))
-Lt_stdm       = np.ma.masked_all((nsite,ndepth))
-Lt_std        = np.ma.masked_all((nsite,ndepth))
-Lt_stds       = np.ma.masked_all((nsite,ndepth))
+psd_mean        = np.ma.masked_all((nsite,ndepth,nfreq))
+psd_CI          = np.ma.masked_all((nsite,ndepth,nfreq,2))
+spec_slope      = np.ma.masked_all((nsite,ndepth))
+spec_slope_stde = np.ma.masked_all((nsite,ndepth))
+moments         = np.ma.masked_all((nsite,ndepth,4))
+fve             = np.ma.masked_all((nsite,ndepth,2))
+mean_period     = np.ma.masked_all((nsite,ndepth))
 
 # Loop over each site
-for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="mooring site"):
+for isite in tqdm(range(nsite), desc="Computing power spectra", unit="mooring site"):
 
     # Loop over each depth
     for idepth in range(ndepth):
@@ -320,122 +324,147 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
                                         )
 
         # Initialize arrays
-        autocorr_seg = np.ma.masked_all((nseg,2*ntime_seg-1))
+        psd_seg = np.ma.masked_all((nseg,nfreq),dtype=float)
 
         # Loop through segments
         for iseg, (tseg, dseg) in enumerate(segments):
 
-            # Compute the elapsed time from beginning of segmented time series
-            t0 = tseg[0]
-            time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
-            
-            # Remove segment-wise mean or linear trend
-            if option_detrend_seg: 
-                data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-            else: 
-                data_dt = dseg - np.ma.mean(dseg)
+            # Check segment length
+            if len(dseg) != ntime_seg:
+                raise ValueError(
+                    "Segment length differs from the reference segment length."
+                )
 
-            # Compute autocorrelation function
-            autocorr_seg[iseg,:], time_lag = compute_autocorr_biased(data_dt, time_elapsed_seg)
+            # Compute the hanning-windowed power spectrum 
+            psd_seg[iseg,:], f_i, *_  = compute_spectrum1D(dseg, 
+                                                         dt, 
+                                                         1, 
+                                                         'cyclic', 
+                                                         segment_preprocess = seg_proc
+                                                         ) 
 
-        # Compute the mean autocorrelation function 
-        autocorr_mean[isite,idepth,:] = np.ma.mean(autocorr_seg, axis=0)
+            # Check frequency grid
+            if not np.array_equal(f_i, f):
+                raise ValueError(
+                    "Frequency grid differs between segments."
+                )
 
-        # Compute the decorrelation scale of the mean autocorrelation 
-        Lt[isite,idepth], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
-    
-        # Compute the standard error of the decorrelation scale
-        Lt_stdm[isite,idepth], Lt_std[isite,idepth], Lt_stds[isite,idepth]  = compute_decor_scale_unc(autocorr_mean, 
-                                                                                                      autocorr_seg, 
-                                                                                                      M_lag, 
-                                                                                                      dt, 
-                                                                                                      segment_overlap,
-                                                                                                     )
+        # Compute the mean power spectral density function 
+        psd_mean[isite,idepth,:] = np.ma.mean(psd_seg, axis=0)
 
-# Convert time scale to units of days
-Lt_days      = Lt/(24*60*60) 
-Lt_stdm_days = Lt_stdm/(24*60*60) 
-Lt_std_days  = Lt_std/(24*60*60) 
-Lt_stds_days = Lt_stds/(24*60*60)   
-     
+        # Compute the 95% confidence interval 
+        psd_CI[isite,idepth,:,:] = spectral_uncertainty(alpha=0.05,
+                                                        psd=psd_mean[isite,idepth,:],
+                                                        estimator="fft",
+                                                        nseg=nseg,
+                                                        )
+
+        # Compute the spectral slope 
+        spec_slope[isite,idepth], spec_slope_stde[isite,idepth], *_ = spectral_slope(f,
+                                                                                     psd_mean[isite,idepth,:], 
+                                                                                     fmin_slope, 
+                                                                                     fmax_slope,
+                                                                                     )
+
+        # Compute spectral moments, FVE and mean period
+        moments[isite,idepth,:], fve[isite,idepth,:], mean_period[isite,idepth] = spectral_diags(psd_mean[isite,idepth,:], 
+                                                                                                 f, 
+                                                                                                 f_cutoff=f_cut
+                                                                                                 )
+
+# Convert mean period to units of days
+mean_period_days = mean_period/(24*60*60) 
+
+# Convert frequency and psd to units of cycles per day 
+f_cpd      = f * seconds_per_day
+psd_cpd    = psd_mean / seconds_per_day 
+psd_CI_cpd = psd_CI / seconds_per_day 
+
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
 # -----------------------------------------------------------------------------
 
-# --- Autocorrelation --- # 
-autocorr = xr.DataArray(data=autocorr_mean,
-                           dims=['site','depth','lag'],
-                           coords=dict(site=site,depth=depth,lag=time_lag),
+# Set coordinates
+CI_coord      = ['lower', 'upper']
+moments_coord = ["m0", "m1", "m2", "m3"]
+fve_coord     = ['low_FVE', 'high_FVE']
+
+# --- Spectral analysis diagnostics --- # 
+PSD = xr.DataArray(data=psd_cpd,
+                           dims=['site','depth','freq'],
+                           coords=dict(site=site,depth=depth,freq=f_cpd),
                            attrs=dict(
-                               description=('Autocorrelation at the CCE ' +
+                               description=('Power Spectral Density depth spectrogram at the CCE ' +
                                             'mooring locations.'),
+                               units='variance/cycles/day'
+                           )
+)
+
+PSD_CI = xr.DataArray(data=psd_CI_cpd,
+                           dims=['site','depth','freq','CI_coord'],
+                           coords=dict(site=site,depth=depth,freq=f_cpd,CI_coord=CI_coord),
+                           attrs=dict(
+                               description=('95% confidence interval for the power spectral ' +
+                                            'density depth spectrogram at CCE mooring ' + 
+                                            'locations.'),
+                               units='variance/cycles/day'
+                           )
+)
+
+SPEC_slope = xr.DataArray(data=spec_slope,
+                           dims=['site','depth'],
+                           coords=dict(site=site,depth=depth),
+                           attrs=dict(
+                               description=('Spectral Slope for the power spectral ' +
+                                            'density depth spectrogram at CCE mooring ' + 
+                                            'locations.'),
                                units='unitless'
                            )
 )
 
-# --- Decorrelation Time Scales --- # 
-decor_scale = xr.DataArray(data=Lt_days,
-                           dims=['site','depth'],
-                           coords=dict(site=site,depth=depth),
-                           attrs=dict(
-                               description=('Decorrelation time scale at the CCE ' +
-                                            'mooring locations.'),
-                               units='days'
-                           )
-)
-
-decor_scale_stdm = xr.DataArray(data=Lt_stdm_days,
-                           dims=['site','depth'],
-                           coords=dict(site=site,depth=depth),
-                           attrs=dict(
-                               description=('Standard error of the decorrelation time ' +
-                                            'scale computed from the mean ' + 
-                                            'autocorrelation at CCE mooring locations, ' +
-                                            'accounting approximately ' +
-                                            'for dependence between overlapping segments.'),
-                               units='days'
-                           )
-)
-
-decor_scale_std = xr.DataArray(data=Lt_std_days,
-                           dims=['site','depth'],
-                           coords=dict(site=site,depth=depth),
-                           attrs=dict(
-                               description=('Standard deviation of the decorrelation time ' +
-                                            'scale for individual realizations, ' + 
-                                            'at the CCE mooring locations, ' +
-                                            'accounting approximately ' +
-                                            'for dependence between overlapping segments.'),
-                               units='days'
-                           )
-)
-
-decor_scale_stds = xr.DataArray(data=Lt_stds_days,
+SPEC_slope_stde = xr.DataArray(data=spec_slope_stde,
                         dims=['site','depth'],
                         coords=dict(site=site,depth=depth),
                         attrs=dict(
-                            description=('Standard error of the standard deviatio of the decorrelation time ' +
-                                         'scale computed from the mean ' + 
-                                         'autocorrelation at the CCE mooring locations, ' + 
-                                         'accounting approximately ' +
-                                         'for dependence between overlapping segments.'),
+                            description=('Standard error of the Spectral Slope ' +
+                                         'for the power spectral density depth spectrogram' + 
+                                         'at the CCE mooring locations.'),
+                            units='unitless'
+                        )
+)
+
+MOMENTS = xr.DataArray(data=moments,
+                   dims=['site','depth','moments_coord'],
+                   coords=dict(site=site,depth=depth,moments_coord=moments_coord),
+                   attrs=dict(
+                       description=('First 4 moments (zeroth to third) of the ' +
+                                    'power spectral density depth spectrogram.')
+                    )
+)
+
+FVE = xr.DataArray(data=fve,
+                   dims=['site','depth','fve_coord'],
+                   coords=dict(site=site,depth=depth,fve_coord=fve_coord),
+                   attrs=dict(
+                       description=('Fraction of variance explained by the ' +
+                                    'low and high frequency bands.'),
+                       units='precent'
+                    )
+)
+
+MEAN_PERIOD_days = xr.DataArray(data=mean_period_days,
+                        dims=['site','depth'],
+                        coords=dict(site=site,depth=depth),
+                        attrs=dict(
+                            description=('Mean Period in units days ' +
+                                         'for the power spectral density depth spectrogram' + 
+                                         'at the CCE mooring locations.'),
                             units='days'
                         )
 )
 
-# --- Model Diagnostics --- # 
-FVE = xr.DataArray(data=fve,
-                   dims=['site','depth'],
-                   coords=dict(site=site,depth=depth),
-                   attrs=dict(
-                       description=('Fraction of variance explained by the ' +
-                                    'interannual and seasonal variability.'),
-                       units='fractional'
-                    )
-)
-
 # Create data set from data arrays 
-data = xr.Dataset({'autocorr':autocorr,'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
+data = xr.Dataset({'PSD':PSD,'PSD_CI':PSD_CI,'SPEC_slope':SPEC_slope,'SPEC_slope_stde':SPEC_slope_stde,'MOMENTS':MOMENTS,'FVE':FVE,'MEAN_PERIOD_days':MEAN_PERIOD_days})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
@@ -452,7 +481,7 @@ data.attrs.update({
 segment_months = int(round(segment_duration * 12))
 
 # Set file path for saving the netcdf file
-file_path = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+file_path = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

@@ -278,10 +278,11 @@ nseg = len(segments)
 ntime_seg = len(segments[0][0])
 
 # Initialize arrays 
-Lt      = np.ma.masked_all(ndepth)
-Lt_stdm = np.ma.masked_all(ndepth)
-Lt_std  = np.ma.masked_all(ndepth)
-Lt_stds = np.ma.masked_all(ndepth)
+autocorr_mean = np.ma.masked_all((ndepth,2*ntime_seg-1))
+Lt            = np.ma.masked_all(ndepth)
+Lt_stdm       = np.ma.masked_all(ndepth)
+Lt_std        = np.ma.masked_all(ndepth)
+Lt_stds       = np.ma.masked_all(ndepth)
 
 # Loop over each depth
 for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="depth"):
@@ -320,7 +321,7 @@ for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="d
         autocorr_seg[iseg,:], time_lag = compute_autocorr_biased_masked(data_dt, time_elapsed_seg, normalization=norm)
 
     # Compute the mean autocorrelation function 
-    autocorr_mean = np.ma.mean(autocorr_seg, axis=0)
+    autocorr_mean[idepth,:] = np.ma.mean(autocorr_seg, axis=0)
 
     # Compute the decorrelation scale of the mean autocorrelation 
     Lt[idepth], M_lag = compute_decor_scale_masked(autocorr_mean,time_lag) 
@@ -343,6 +344,17 @@ Lt_stds_days = Lt_stds/(24*60*60)
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
 # -----------------------------------------------------------------------------
+
+# --- Autocorrelation --- # 
+autocorr = xr.DataArray(data=autocorr_mean,
+                           dims=['depth','lag'],
+                           coords=dict(depth=depth,lag=time_lag),
+                           attrs=dict(
+                               description=(f'Autocorrelation at the {option_mooring.upper()} ' +
+                                            'mooring location.'),
+                               units='days'
+                           )
+)
 
 # --- Decorrelation Time Scales --- # 
 decor_scale = xr.DataArray(data=Lt_days,
@@ -406,7 +418,7 @@ FVE = xr.DataArray(data=fve,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
+data = xr.Dataset({'autocorr':autocorr,'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
