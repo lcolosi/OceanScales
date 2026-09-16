@@ -77,7 +77,7 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scales, bathymetry, CCE, and CalCOFI data
+# Load MITgcm and CCE decorrelation scales data
 # -----------------------------------------------------------------------------
 
 # --- MITgcm Data --- # 
