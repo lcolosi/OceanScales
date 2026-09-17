@@ -257,7 +257,7 @@ if option_interannual == 'gaussian':
     data_res = data - fit - data_interannual
 
 # -----------------------------------------------------------------------------
-# Compute spectrogram and their spectral slopes
+# Compute depth spectrogram and their diagnostics
 # -----------------------------------------------------------------------------
 
 # Create reference segments to determine the segment length

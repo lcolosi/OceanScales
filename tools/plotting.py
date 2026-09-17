@@ -465,6 +465,82 @@ def add_x_axis_marker(
         zorder=10,
     )
 
+def plot_spectral_slope(
+    ax,
+    fmin,
+    fmax,
+    y_ref,
+    slope,
+    color='k',
+    linestyle='--',
+    linewidth=1.25,
+    fontsize=10,
+):
+    """
+    Plot a reference power-law slope on a log-log power spectrum.
+
+    The reference line follows
+
+        PSD(f) = y_ref * (f / fmin)**slope
+
+    such that ``y_ref`` specifies the vertical position of the line at
+    the minimum frequency ``fmin``.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes on which to plot the reference slope.
+    fmin : float
+        Minimum frequency of the reference line.
+    fmax : float
+        Maximum frequency of the reference line.
+    y_ref : float
+        PSD value of the reference line at ``fmin``. This controls the
+        vertical placement of the line.
+    slope : float
+        Power-law exponent of the reference line. For example,
+        ``slope=-1`` plots an f^-1 slope and ``slope=-2`` plots an
+        f^-2 slope.
+    color : str, optional
+        Line and text color. Default is ``'k'``.
+    linestyle : str, optional
+        Matplotlib line style. Default is ``'--'``.
+    linewidth : float, optional
+        Width of the reference line. Default is 1.25.
+    fontsize : float, optional
+        Font size of the slope label. Default is 10.
+
+    Returns
+    -------
+    None
+    """
+
+    # Define frequency vector for the reference line
+    f = np.logspace(np.log10(fmin), np.log10(fmax), 100)
+
+    # Compute the power-law reference slope
+    psd_ref = y_ref * (f / fmin)**slope
+
+    # Plot reference line
+    ax.loglog(
+        f,
+        psd_ref,
+        linestyle=linestyle,
+        color=color,
+        linewidth=linewidth,
+    )
+
+    # Add slope label at the high-frequency end of the line
+    ax.text(
+        f[-1],
+        psd_ref[-1],
+        rf'$f^{{{slope:g}}}$',
+        color=color,
+        fontsize=fontsize,
+        ha='left',
+        va='center',
+    )
+
 
 # --- Status Message --- # 
 def status(message):

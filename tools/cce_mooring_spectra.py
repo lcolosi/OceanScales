@@ -251,7 +251,7 @@ if option_interannual == 'gaussian':
     data_res = data - fit - data_interannual
 
 # -----------------------------------------------------------------------------
-# Compute decorrelation time scales and their uncertainty
+# Compute depth spectrogram and its diagnostics 
 # -----------------------------------------------------------------------------
 
 # Create reference segments to determine the segment length

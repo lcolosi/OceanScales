@@ -31,7 +31,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_corner_label
+from plotting import add_corner_label, plot_spectral_slope
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -209,6 +209,8 @@ f_coriolis = 2 * omega * np.sin(np.deg2rad(cce_lat)) / (2 * np.pi) * 86400
 # Set plotting parameters 
 x_max = 182.5
 dx = 20
+fmin_slope = 1e-2
+fmax_slope = 2e-1
 fontsize_ins = 10
 
 # Create figure
@@ -321,6 +323,10 @@ ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1
 # Plot the 95% confidence interval of the mean power spectrum 
 ax.fill_between(freq_m[1:], psd_CI_m_depth[0,1:,0], psd_CI_m_depth[0,1:,1], color='dimgray', alpha=0.25)
 ax.fill_between(freq_cce1[1:], psd_CI_cce1_depth[1:,0], psd_CI_cce1_depth[1:,1], color='tab:green', alpha=0.25)
+
+# Plot the reference spectral slopes lines
+plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=1e-2, slope=-1)
+plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=1e-1, slope=-2)
 
 # Set axis attributes
 ax.set_xlabel('Frequency (cpd)')
