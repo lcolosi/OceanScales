@@ -67,7 +67,7 @@ from filter import gaussian_low_pass_filter
 # ------------#
 
 # Set processing parameters
-option_mooring     = 'cce2'
+option_mooring     = 'cce1'
 option_data        = 'density'    
 option_interannual = 'gaussian' 
 option_harmonics   = 2      
@@ -335,10 +335,11 @@ for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="d
                                                                                         )
 
 # Convert time scale to units of days
-Lt_days      = Lt/(24*60*60) 
-Lt_stdm_days = Lt_stdm/(24*60*60) 
-Lt_std_days  = Lt_std/(24*60*60) 
-Lt_stds_days = Lt_stds/(24*60*60)   
+time_lag_days = time_lag/(24*60*60) 
+Lt_days       = Lt/(24*60*60) 
+Lt_stdm_days  = Lt_stdm/(24*60*60) 
+Lt_std_days   = Lt_std/(24*60*60) 
+Lt_stds_days  = Lt_stds/(24*60*60)   
 
 
 # -----------------------------------------------------------------------------
@@ -348,7 +349,7 @@ Lt_stds_days = Lt_stds/(24*60*60)
 # --- Autocorrelation --- # 
 autocorr = xr.DataArray(data=autocorr_mean,
                            dims=['depth','lag'],
-                           coords=dict(depth=depth,lag=time_lag),
+                           coords=dict(depth=depth,lag=time_lag_days),
                            attrs=dict(
                                description=(f'Autocorrelation at the {option_mooring.upper()} ' +
                                             'mooring location.'),

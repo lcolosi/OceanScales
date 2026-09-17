@@ -1,16 +1,16 @@
 # =============================================================================
-# Compute spectrograms at mooring locations from MITgcm data 
+# Compute decorrelation time scales from CCE mooring observation 
 # =============================================================================
 #
 # Description:
-#   Computes spectrograms at mooring locations from
-#   MITgcm data and saves the results to a NetCDF file.
+#   Computes decorrelation time scales and their uncertainty from CCE mooring 
+# observations and saves the results to a NetCDF file.
 #
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-09-15
+#   2026-09-10
 # =============================================================================
 
 # Import libraries 
@@ -37,7 +37,8 @@ sys.path.append(str(PATH_tools))
 from spectra import compute_spectrum1D, spectral_slope, spectral_diags, spectral_uncertainty
 from autocorr import segment_time_series
 from lsf import unweighted_lsf
-from filter import gaussian_low_pass_filter  
+from filter import gaussian_low_pass_filter
+from processing_utils import longest_masked_gap
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -47,8 +48,10 @@ from filter import gaussian_low_pass_filter
 # --- Note ---#
 # ------------#
 #
+# - option_mooring: Specifies which cce mooring will be processed. 
+#                   Options include: "cce1" or "cce2"
 # - option_data: Data variable to analyze.
-#                Options: "temp", "salt", "density", "uvel", or "vvel".
+#                Options: "temp", "sal", "density".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
@@ -58,11 +61,11 @@ from filter import gaussian_low_pass_filter
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
-#                    (e.g., 0.75 for 75% overlap). NOTE: The confidence interval 
-#                    calculation assumes 50% overlap, so if this is changed from 0.5, 
-#                    the CI calculation must be adjusted accordingly.
+#                    (e.g., 0.75 for 75% overlap).
 # - segment_duration: Specifies the length of each segment in years.
-# - depth_lim : Specifies the deepest depth to preform analysis. 
+# - depth_lim: Specifies the deepest depth to preform analysis. 
+# - max_gap_duration: Specifies the maximum missing data gap within a segment in 
+#                     units of seconds. 
 # - f_cut: Specifies the cutoff frequency in units of cpd for the Fraction of
 #          variance explained.
 # - fmin_slope: Lower frequency limit for the spectral slope calculation.  
@@ -71,27 +74,29 @@ from filter import gaussian_low_pass_filter
 # ------------#
 
 # Set processing parameters
+option_mooring     = 'cce2'
 option_data        = 'density'    
-option_interannual = 'linear' 
+option_interannual = 'gaussian' 
 option_harmonics   = 2      
 option_detrend_seg = True
 
 # Set time and space parameters
 seconds_per_day  = 24 * 60 * 60
 dt               = 3600    
-T_annual         = 365.25 * seconds_per_day  
+T_annual         = 365.25 * seconds_per_day    
 segment_overlap  = 0.5                                        
 segment_duration = 0.5   
 depth_lim        = -220 
+max_gap_duration = (24) * 60 * 60
 f_cut            = 1 / (14 * seconds_per_day)
 fmin_slope       = (1/30) / seconds_per_day
 fmax_slope       = (1/14) / seconds_per_day 
 
 # Parameter verification
-if option_data not in ("temp", "salt", "density", "uvel", "vvel"):
+if option_data not in ("temp", "salt", "density"):
     raise ValueError(
         f"Invalid option_data: {option_data}. "
-        "Choose 'temp', 'salt', 'density', 'uvel', or 'vvel'."
+        "Choose 'temp', 'salt', or 'density'."
     )
 if option_interannual not in ("linear", "gaussian"):
     raise ValueError(
@@ -103,38 +108,30 @@ if option_interannual not in ("linear", "gaussian"):
 seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # -----------------------------------------------------------------------------
-# Load MITgcm data
+# Load cce data
 # -----------------------------------------------------------------------------
 
 # Set path to processed regional MITgcm data
-PATH_processed = PATH_data / "mitgcm" / "mooring" / "processed"
+PATH_processed = PATH_data / "cce" / option_mooring / "processed"
 
 # Set NetCDF variable names
 variable_names = {
     "temp": "CTemp",
     "sal": "ASal",
     "density": "SIG",
-    "uvel": "u",
-    "vvel": "v",
 }
 
 # Set filename based on selected data type
 if option_data in ("temp", "sal", "density"):
     filename = (
         PATH_processed
-        / f"mitgcm_proc_density_hrly_mooring.nc"
-    )
-elif option_data in ("uvel", "vvel"):
-    filename = (
-        PATH_processed
-        / f"mitgcm_proc_vel_hrly_mooring.nc"
+        / f"{option_mooring}_proc_density_hrly_mooring.nc"
     )
 else:
     raise ValueError(f"Invalid option_data: {option_data}")
 
 # Load NetCDF data
 with Dataset(filename, "r") as nc:
-    site  = nc.variables["site"][:]
     depth = nc.variables["depth"][:]
 
     time = num2date(
@@ -159,12 +156,15 @@ time_dt = np.array(
     ]
 )
 
+# Mask data points previously set to NaN during processing
+data = np.ma.masked_invalid(data)
+
 # Select depth levels shallower than the depth limit 
 idx_depth = depth >= depth_lim
 
 # Extract depth and data from the specified depth levels
 depth = depth[idx_depth]
-data = data[:, :, idx_depth]
+data = data[:, idx_depth]
 
 # -----------------------------------------------------------------------------
 # Remove seasonal and interannual variability from time series
@@ -192,72 +192,66 @@ t0 = time[0]
 time_elapsed = np.array([(t - t0).total_seconds() for t in time])
 
 # Obtain the dimensions of the longitude and latitude 
-nsite,ntime,ndepth = np.shape(data)
+ntime,ndepth = np.shape(data)
 
 # Initialize arrays 
-fit      = np.ma.masked_all((nsite,ntime,ndepth))
-data_res = np.ma.masked_all((nsite,ntime,ndepth))
+fit      = np.ma.masked_all((ntime,ndepth))
+data_res = np.ma.masked_all((ntime,ndepth))
 
-# Loop over each site
-for isite in tqdm(range(nsite), desc="Computing Least-Squares Fit", unit="mooring site"):
+# Loop over each depth
+for idepth in tqdm(range(ndepth), desc="Computing Least-Squares Fit", unit="depth"):
 
-    # Loop over each depth
-    for idepth in range(ndepth):
+    # Set the time series 
+    data_ts = data[:,idepth]
 
-        # Set the time series 
-        data_ts = data[isite,:,idepth]
+    # Skip time series containing only masked data
+    if np.ma.getmaskarray(data_ts).all():
+        continue
 
-        # Skip time series containing only masked data
-        if np.ma.getmaskarray(data_ts).all():
-            continue
+    # Compute seasonal harmonic fit
+    fit[:,idepth], _, _, _ = unweighted_lsf(data_ts, 
+                                            time_elapsed, 
+                                            parameters=option_harmonics, 
+                                            freqs=w, 
+                                            sigma=None, 
+                                            linear_trend=linear_trend,
+                                           )
 
-        # Compute seasonal harmonic fit
-        fit[isite,:,idepth], _, _, _ = unweighted_lsf(data_ts, 
-                                                    time_elapsed, 
-                                                    parameters=option_harmonics, 
-                                                    freqs=w, 
-                                                    sigma=None, 
-                                                    linear_trend=linear_trend,
-                                                    )
-    
-        # Compute the residual time series 
-        data_res[isite,:,idepth] = data_ts - fit[isite,:,idepth]
+    # Compute the residual time series 
+    data_res[:,idepth] = data_ts - fit[:,idepth]
 
 # Apply Gaussian low-pass filtering when selected
 if option_interannual == 'gaussian': 
 
     # Initialize interannual variability array
-    data_interannual = np.ma.masked_all((nsite,ntime,ndepth))
+    data_interannual = np.ma.masked_all((ntime,ndepth))
 
-    # Loop over each site
-    for isite in tqdm(range(nsite), desc="Low-pass Filtering Time Series", unit="mooring site"):
+    # Loop over each depth
+    for idepth in tqdm(range(ndepth), desc="Low-pass Filtering Time Series", unit="depth"):
 
-        # Loop over each depth
-        for idepth in range(ndepth):
+        # Set the ith time series 
+        data_ts = np.ma.masked_invalid(data[:,idepth])
 
-            # Set the time series 
-            data_ts = np.ma.masked_invalid(data[isite,:,idepth])
+        # Remove the time mean
+        data_anomaly = data_ts - np.ma.mean(data_ts)
 
-            # Remove the time mean
-            data_anomaly = data_ts - np.ma.mean(data_ts)
+        # Skip grid points containing only masked data
+        if np.ma.getmaskarray(data_anomaly).all():
+            continue
 
-            # Skip grid points containing only masked data
-            if np.ma.getmaskarray(data_anomaly).all():
-                continue
-
-            # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-            data_interannual[isite,:,idepth] = gaussian_low_pass_filter(data_anomaly,
-                                                                       fwhm_days=365,
-                                                                       dt_hours=1,
-                                                                       mode='constant',
-                                                                       truncate=4,
-                                                                       )
+        # Estimate interannual variability using 365-day FWHM Gaussian low-pass
+        data_interannual[:,idepth] = gaussian_low_pass_filter(data_anomaly,
+                                                              fwhm_days=365,
+                                                              dt_hours=1,
+                                                              mode='constant',
+                                                              truncate=4,
+                                                             )
 
     # Remove seasonal and interannual variability
     data_res = data - fit - data_interannual
 
 # -----------------------------------------------------------------------------
-# Compute spectrogram and their spectral slopes
+# Compute decorrelation time scales and their uncertainty
 # -----------------------------------------------------------------------------
 
 # Create reference segments to determine the segment length
@@ -290,89 +284,127 @@ f = np.fft.rfftfreq(ntime_seg, d=dt)
 nfreq = len(f)
 
 # Initialize arrays 
-psd_mean        = np.ma.masked_all((nsite,ndepth,nfreq))
-psd_CI          = np.ma.masked_all((nsite,ndepth,nfreq,2))
-spec_slope      = np.ma.masked_all((nsite,ndepth))
-spec_slope_stde = np.ma.masked_all((nsite,ndepth))
-moments         = np.ma.masked_all((nsite,ndepth,4))
-fve             = np.ma.masked_all((nsite,ndepth,2))
-mean_period     = np.ma.masked_all((nsite,ndepth))
+psd_mean        = np.ma.masked_all((ndepth,nfreq))
+psd_CI          = np.ma.masked_all((ndepth,nfreq,2))
+spec_slope      = np.ma.masked_all((ndepth))
+spec_slope_stde = np.ma.masked_all((ndepth))
+moments         = np.ma.masked_all((ndepth,4))
+fve             = np.ma.masked_all((ndepth,2))
+mean_period     = np.ma.masked_all((ndepth))
+nseg_used       = np.zeros(ndepth, dtype=int)
+longest_gap     = np.zeros(ndepth, dtype=float)
 
-# Loop over each site
-for isite in tqdm(range(nsite), desc="Computing power spectra", unit="mooring site"):
+# Loop over each depth
+for idepth in tqdm(range(ndepth), desc="Computing power spectra", unit="depth"):
 
-    # Loop over each depth
-    for idepth in range(ndepth):
+    # Set the time series 
+    data_ts = data_res[:,idepth]
 
-        # Set the time series 
-        data_ts = data_res[isite,:,idepth]
+    # Skip grid points containing only masked data
+    if np.ma.getmaskarray(data_ts).all():
+        continue
 
-        # Skip grid points containing only masked data
-        if np.ma.getmaskarray(data_ts).all():
-            continue
+    # Segment the time series 
+    segments = segment_time_series(time_dt, 
+                                    data_ts, 
+                                    duration=segment_duration, 
+                                    overlap=segment_overlap,
+                                    )
 
-        # Error program if a partially masked time series is present. 
-        if np.ma.getmaskarray(data_ts).any():
+    # Initialize arrays
+    psd_seg = np.ma.masked_all((nseg,nfreq),dtype=float)
+
+    # Initialize number of usable segments
+    nseg_valid = 0
+
+    # Loop through segments
+    for iseg, (tseg, dseg) in enumerate(segments):
+
+        # Check segment length
+        if len(dseg) != ntime_seg:
             raise ValueError(
-                f"Partially masked time series at depth index {idepth}, "
-                f"site index {isite}."
+                "Segment length differs from the reference segment length."
             )
 
-        # Segment the time series 
-        segments = segment_time_series(time_dt, 
-                                        data_ts, 
-                                        duration=segment_duration, 
-                                        overlap=segment_overlap,
-                                        )
+        # Obtain mask array for the time series 
+        mask = np.ma.getmaskarray(dseg)
 
-        # Initialize arrays
-        psd_seg = np.ma.masked_all((nseg,nfreq),dtype=float)
+        # Skip segment if all data are missing
+        if mask.all():
+            continue
 
-        # Loop through segments
-        for iseg, (tseg, dseg) in enumerate(segments):
+        # Determine longest missing-data gap
+        gap_duration, _ = longest_masked_gap(mask, dt)
 
-            # Check segment length
-            if len(dseg) != ntime_seg:
-                raise ValueError(
-                    "Segment length differs from the reference segment length."
-                )
+        # Save longest gap encountered at this depth
+        longest_gap[idepth] = max(longest_gap[idepth], gap_duration)
 
-            # Compute the hanning-windowed power spectrum 
-            psd_seg[iseg,:], f_i, *_  = compute_spectrum1D(dseg, 
-                                                         dt, 
-                                                         1, 
-                                                         'cyclic', 
-                                                         segment_preprocess = seg_proc
-                                                         ) 
+        # Skip segment if gap exceeds threshold
+        if gap_duration > max_gap_duration:
+            continue
 
-            # Check frequency grid
-            if not np.array_equal(f_i, f):
-                raise ValueError(
-                    "Frequency grid differs between segments."
-                )
+        # Compute the elapsed time from beginning of segmented time series
+        t0 = tseg[0]
+        time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
 
-        # Compute the mean power spectral density function 
-        psd_mean[isite,idepth,:] = np.ma.mean(psd_seg, axis=0)
+        # Interpolate only if there are masked data points 
+        if np.any(mask): 
+            dseg_interp = np.interp(time_elapsed_seg, time_elapsed_seg[~mask], dseg[~mask])
 
-        # Compute the 95% confidence interval 
-        psd_CI[isite,idepth,:,:] = spectral_uncertainty(alpha=0.05,
-                                                        psd=psd_mean[isite,idepth,:],
-                                                        estimator="fft",
-                                                        nseg=nseg,
-                                                        )
+        # Do not interpolate if there no masked data points
+        else: 
+            dseg_interp = np.asarray(dseg)
 
-        # Compute the spectral slope 
-        spec_slope[isite,idepth], spec_slope_stde[isite,idepth], *_ = spectral_slope(f,
-                                                                                     psd_mean[isite,idepth,:], 
-                                                                                     fmin_slope, 
-                                                                                     fmax_slope,
-                                                                                     )
 
-        # Compute spectral moments, FVE and mean period
-        moments[isite,idepth,:], fve[isite,idepth,:], mean_period[isite,idepth] = spectral_diags(psd_mean[isite,idepth,:], 
-                                                                                                 f, 
-                                                                                                 f_cutoff=f_cut
-                                                                                                 )
+        # Interpolate masked data points 
+        dseg_interp = np.interp(time_elapsed_seg, time_elapsed_seg[~mask], dseg[~mask])
+        
+        # Compute the hanning-windowed power spectrum 
+        psd_seg[iseg,:], f_i, *_  = compute_spectrum1D(dseg_interp, 
+                                                       dt, 
+                                                       1, 
+                                                       'cyclic', 
+                                                       segment_preprocess = seg_proc
+                                                       ) 
+
+        # Check frequency grid
+        if not np.array_equal(f_i, f):
+            raise ValueError(
+                "Frequency grid differs between segments."
+            )
+
+        # Count accepted segment
+        nseg_valid += 1
+
+    # Skip depth if no usable segments remain
+    if nseg_valid == 0:
+        continue
+
+    # Compute the mean power spectral density function 
+    psd_mean[idepth,:] = np.ma.mean(psd_seg, axis=0)
+
+    # Compute the 95% confidence interval 
+    psd_CI[idepth,:,:] = spectral_uncertainty(alpha=0.05,
+                                              psd=psd_mean[idepth,:],
+                                              estimator="fft",
+                                              nseg=nseg_valid,
+                                              )
+
+    # Compute the spectral slope 
+    spec_slope[idepth], spec_slope_stde[idepth], *_ = spectral_slope(f,
+                                                                     psd_mean[idepth,:], 
+                                                                     fmin_slope, 
+                                                                     fmax_slope,
+                                                                     )
+
+    # Compute spectral moments, FVE and mean period
+    moments[idepth,:], fve[idepth,:], mean_period[idepth] = spectral_diags(psd_mean[idepth,:], 
+                                                                           f, 
+                                                                           f_cutoff=f_cut
+                                                                           )
+
+    # Save the number of used segments
+    nseg_used[idepth] = nseg_valid
 
 # Convert mean period to units of days
 mean_period_days = mean_period/(24*60*60) 
@@ -393,51 +425,51 @@ fve_coord     = ['low_FVE', 'high_FVE']
 
 # --- Spectral analysis diagnostics --- # 
 PSD = xr.DataArray(data=psd_cpd,
-                           dims=['site','depth','freq'],
-                           coords=dict(site=site,depth=depth,freq=f_cpd),
+                           dims=['depth','freq'],
+                           coords=dict(depth=depth,freq=f_cpd),
                            attrs=dict(
-                               description=('Power Spectral Density depth spectrogram at the CCE ' +
-                                            'mooring locations.'),
+                               description=(f'Power Spectral Density depth spectrogram at the {option_mooring} ' +
+                                            'mooring location.'),
                                units='variance/cycles/day'
                            )
 )
 
 PSD_CI = xr.DataArray(data=psd_CI_cpd,
-                           dims=['site','depth','freq','CI_coord'],
-                           coords=dict(site=site,depth=depth,freq=f_cpd,CI_coord=CI_coord),
+                           dims=['depth','freq','CI_coord'],
+                           coords=dict(depth=depth,freq=f_cpd,CI_coord=CI_coord),
                            attrs=dict(
                                description=('95% confidence interval for the power spectral ' +
-                                            'density depth spectrogram at CCE mooring ' + 
-                                            'locations.'),
+                                            f'density depth spectrogram at the {option_mooring} mooring ' + 
+                                            'location.'),
                                units='variance/cycles/day'
                            )
 )
 
 SPEC_slope = xr.DataArray(data=spec_slope,
-                           dims=['site','depth'],
-                           coords=dict(site=site,depth=depth),
+                           dims=['depth'],
+                           coords=dict(depth=depth),
                            attrs=dict(
                                description=('Spectral Slope for the power spectral ' +
-                                            'density depth spectrogram at CCE mooring ' + 
-                                            'locations.'),
+                                            f'density depth spectrogram at the {option_mooring} mooring ' + 
+                                            'location.'),
                                units='unitless'
                            )
 )
 
 SPEC_slope_stde = xr.DataArray(data=spec_slope_stde,
-                        dims=['site','depth'],
-                        coords=dict(site=site,depth=depth),
+                        dims=['depth'],
+                        coords=dict(depth=depth),
                         attrs=dict(
                             description=('Standard error of the Spectral Slope ' +
                                          'for the power spectral density depth spectrogram' + 
-                                         'at the CCE mooring locations.'),
+                                         f'at the {option_mooring} mooring location.'),
                             units='unitless'
                         )
 )
 
 MOMENTS = xr.DataArray(data=moments,
-                   dims=['site','depth','moments_coord'],
-                   coords=dict(site=site,depth=depth,moments_coord=moments_coord),
+                   dims=['depth','moments_coord'],
+                   coords=dict(depth=depth,moments_coord=moments_coord),
                    attrs=dict(
                        description=('First 4 moments (zeroth to third) of the ' +
                                     'power spectral density depth spectrogram.')
@@ -445,8 +477,8 @@ MOMENTS = xr.DataArray(data=moments,
 )
 
 FVE = xr.DataArray(data=fve,
-                   dims=['site','depth','fve_coord'],
-                   coords=dict(site=site,depth=depth,fve_coord=fve_coord),
+                   dims=['depth','fve_coord'],
+                   coords=dict(depth=depth,fve_coord=fve_coord),
                    attrs=dict(
                        description=('Fraction of variance explained by the ' +
                                     'low and high frequency bands.'),
@@ -455,12 +487,12 @@ FVE = xr.DataArray(data=fve,
 )
 
 MEAN_PERIOD_days = xr.DataArray(data=mean_period_days,
-                        dims=['site','depth'],
-                        coords=dict(site=site,depth=depth),
+                        dims=['depth'],
+                        coords=dict(depth=depth),
                         attrs=dict(
                             description=('Mean Period in units days ' +
                                          'for the power spectral density depth spectrogram' + 
-                                         'at the CCE mooring locations.'),
+                                         f'at the {option_mooring} mooring location.'),
                             units='days'
                         )
 )
@@ -483,7 +515,7 @@ data.attrs.update({
 segment_months = int(round(segment_duration * 12))
 
 # Set file path for saving the netcdf file
-file_path = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+file_path = PATH_processed / f"{option_mooring}_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):
@@ -491,6 +523,31 @@ if os.path.exists(file_path):
 
 # Create netcdf file
 data.to_netcdf(file_path,mode='w')
+
+# Print the number of segements used at each depth
+print("\nSpectral segment summary:")
+print("-" * 60)
+print(
+    f"{'Depth (m)':>12} "
+    f"{'Used':>8} "
+    f"{'Total':>8} "
+    f"{'Percent':>10} "
+    f"{'Max gap (hr)':>14}"
+)
+
+for idepth in range(ndepth):
+
+    percent_used = 100 * nseg_used[idepth] / nseg
+    longest_gap_hours = longest_gap[idepth] / 3600
+
+    print(
+        f"{depth[idepth]:12.1f} "
+        f"{nseg_used[idepth]:8d} "
+        f"{nseg:8d} "
+        f"{percent_used:9.1f}% "
+        f"{longest_gap_hours:14.1f}"
+    )
+
 
 
 

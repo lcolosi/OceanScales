@@ -64,7 +64,7 @@ from filter import gaussian_low_pass_filter
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'linear' 
+option_interannual = 'gaussian' 
 option_harmonics   = 2      
 option_detrend_seg = True
 
@@ -297,10 +297,11 @@ def run_analysis(segment_duration):
     ntime_seg = len(segments[0][0])
 
     # Initialize arrays 
-    Lt      = np.ma.masked_all((nsite,ndepth))
-    Lt_stdm = np.ma.masked_all((nsite,ndepth))
-    Lt_std  = np.ma.masked_all((nsite,ndepth))
-    Lt_stds = np.ma.masked_all((nsite,ndepth))
+    autocorr_mean = np.ma.masked_all((nsite,ndepth,2*ntime_seg-1))
+    Lt            = np.ma.masked_all((nsite,ndepth))
+    Lt_stdm       = np.ma.masked_all((nsite,ndepth))
+    Lt_std        = np.ma.masked_all((nsite,ndepth))
+    Lt_stds       = np.ma.masked_all((nsite,ndepth))
 
     # Loop over each site
     for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="mooring site"):
@@ -349,28 +350,40 @@ def run_analysis(segment_duration):
                 autocorr_seg[iseg,:], time_lag = compute_autocorr_biased(data_dt, time_elapsed_seg)
 
             # Compute the mean autocorrelation function 
-            autocorr_mean = np.ma.mean(autocorr_seg, axis=0)
+            autocorr_mean[isite,idepth,:] = np.ma.mean(autocorr_seg, axis=0)
 
             # Compute the decorrelation scale of the mean autocorrelation 
-            Lt[isite,idepth], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
+            Lt[isite,idepth], M_lag = compute_decor_scale( autocorr_mean[isite,idepth,:],time_lag) 
         
             # Compute the standard error of the decorrelation scale
-            Lt_stdm[isite,idepth], Lt_std[isite,idepth], Lt_stds[isite,idepth]  = compute_decor_scale_unc(autocorr_mean, 
-                                                                                                        autocorr_seg, 
-                                                                                                        M_lag, 
-                                                                                                        dt, 
-                                                                                                        segment_overlap,
-                                                                                                        )
+            Lt_stdm[isite,idepth], Lt_std[isite,idepth], Lt_stds[isite,idepth]  = compute_decor_scale_unc(autocorr_mean[isite,idepth,:], 
+                                                                                                          autocorr_seg, 
+                                                                                                          M_lag, 
+                                                                                                          dt, 
+                                                                                                          segment_overlap,
+                                                                                                          )
 
     # Convert time scale to units of days
-    Lt_days      = Lt/(24*60*60) 
-    Lt_stdm_days = Lt_stdm/(24*60*60) 
-    Lt_std_days  = Lt_std/(24*60*60) 
-    Lt_stds_days = Lt_stds/(24*60*60)   
+    time_lag_days = time_lag/(24*60*60) 
+    Lt_days       = Lt/(24*60*60) 
+    Lt_stdm_days  = Lt_stdm/(24*60*60) 
+    Lt_std_days   = Lt_std/(24*60*60) 
+    Lt_stds_days  = Lt_stds/(24*60*60)   
         
     # -----------------------------------------------------------------------------
     # Save data in a netcdf file
     # -----------------------------------------------------------------------------
+
+    # --- Autocorrelation --- # 
+    autocorr = xr.DataArray(data=autocorr_mean,
+                            dims=['site','depth','lag'],
+                            coords=dict(site=site,depth=depth,lag=time_lag_days),
+                            attrs=dict(
+                                description=('Autocorrelation at the CCE ' +
+                                                'mooring locations.'),
+                                units='unitless'
+                            )
+    )
 
     # --- Decorrelation Time Scales --- # 
     decor_scale = xr.DataArray(data=Lt_days,
@@ -434,7 +447,7 @@ def run_analysis(segment_duration):
     )
 
     # Create data set from data arrays 
-    data = xr.Dataset({'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
+    data = xr.Dataset({'autocorr':autocorr,'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std, 'decor_scale_stds':decor_scale_stds, 'FVE':FVE})
 
     # Set global variables to document the processing parameters used 
     data.attrs.update({

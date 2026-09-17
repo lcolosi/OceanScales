@@ -37,7 +37,7 @@ sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox for cartopy figures
 from plotting import status
-from process_mitgcm_data import compute_bearing_angle
+from processing_utils import compute_bearing_angle
 
 # Suppress the interpolation warning message from xgcm
 warnings.filterwarnings(

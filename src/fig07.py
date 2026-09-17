@@ -147,8 +147,8 @@ depth_pos_m       = abs(depth_m)
 depth_pos_cce1    = abs(depth_cce1)
 depth_pos_cce2    = abs(depth_cce2)
 depth_lim         = [0,200]
-cce1_sensor_depth = np.array([10, 20, 30, 40, 60, 75, 150])
-cce2_sensor_depth = np.array([7, 15, 25, 45, 75])
+cce1_standard_depth = np.array([10, 20, 30, 40, 60, 75, 150])
+cce2_standard_depth = np.array([7, 15, 25, 45, 75])
 x_max             = 25
 dx                = 5
 
@@ -312,8 +312,8 @@ x_left = ax.get_xlim()[0] - 11
 
 # Plot the sensor depths 
 ax.plot(
-    np.full_like(cce1_sensor_depth, x_left),
-    cce1_sensor_depth,
+    np.full_like(cce1_standard_depth, x_left),
+    cce1_standard_depth,
     marker='d', 
     linestyle='None',
     color='k', 
@@ -354,8 +354,8 @@ x_left = ax.get_xlim()[0] - 5
 
 # Plot the sensor depths 
 ax.plot(
-    np.full_like(cce2_sensor_depth, x_left),
-    cce2_sensor_depth,
+    np.full_like(cce2_standard_depth, x_left),
+    cce2_standard_depth,
     marker='d', 
     linestyle='None',
     color='k', 

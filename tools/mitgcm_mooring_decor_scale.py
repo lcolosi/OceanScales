@@ -64,7 +64,7 @@ from filter import gaussian_low_pass_filter
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'linear' 
+option_interannual = 'gaussian' 
 option_harmonics   = 2      
 option_detrend_seg = True
 
@@ -350,13 +350,14 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
                                                                                                       M_lag, 
                                                                                                       dt, 
                                                                                                       segment_overlap,
-                                                                                                     )
+                                                                                                      )
 
 # Convert time scale to units of days
-Lt_days      = Lt/(24*60*60) 
-Lt_stdm_days = Lt_stdm/(24*60*60) 
-Lt_std_days  = Lt_std/(24*60*60) 
-Lt_stds_days = Lt_stds/(24*60*60)   
+time_lag_days = time_lag/(24*60*60) 
+Lt_days       = Lt/(24*60*60) 
+Lt_stdm_days  = Lt_stdm/(24*60*60) 
+Lt_std_days   = Lt_std/(24*60*60) 
+Lt_stds_days  = Lt_stds/(24*60*60)   
      
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
@@ -365,7 +366,7 @@ Lt_stds_days = Lt_stds/(24*60*60)
 # --- Autocorrelation --- # 
 autocorr = xr.DataArray(data=autocorr_mean,
                            dims=['site','depth','lag'],
-                           coords=dict(site=site,depth=depth,lag=time_lag),
+                           coords=dict(site=site,depth=depth,lag=time_lag_days),
                            attrs=dict(
                                description=('Autocorrelation at the CCE ' +
                                             'mooring locations.'),
