@@ -193,7 +193,7 @@ elif option_var == 'std':
     }
 
 # -----------------------------------------------------------------------------
-# Load bathymetry, CCE, and CalCOFI data
+# Load bathymetry, CCE, and CalCOFI and analytic data
 # -----------------------------------------------------------------------------
 
 # Set path to processed regional MITgcm data
@@ -234,6 +234,28 @@ calCOFI_line80 = calCOFI_data[calCOFI_data[:, 0] == 80.0]
 calCOFI_lat = calCOFI_line80[:, 1]
 calCOFI_lon = calCOFI_line80[:, 2]
 
+# --- Analytic Data --- # 
+
+# Set path to analytic data
+PATH_analytic_processed = PATH_data / "analytic" 
+
+# Set filename to saved the netcdf file
+filename = PATH_analytic_processed / f"analytic_autocor_decor_scale.nc"
+
+# Load in data
+with Dataset(filename, "r") as nc:
+
+    # Load analytic autocorrelation and decorrelation scale
+    autocorr_analytic    = nc.variables["autocorr"][:]
+    decor_scale_analytic = nc.variables["decor_scale"][:]
+
+    # Load coordinates
+    lag_analytic = nc.variables["lag"][:]
+    duration_ac  = nc.variables["duration_ac"][:]
+    duration_ds  = nc.variables["duration_ds"][:]
+    slope_ac     = nc.variables["slope_ac"][:]
+    slope_ds     = nc.variables["slope_ds"][:]
+
 # -----------------------------------------------------------------------------
 # Plot regional decorrelation time scales
 # -----------------------------------------------------------------------------
@@ -242,6 +264,10 @@ calCOFI_lon = calCOFI_line80[:, 2]
 median = np.zeros(len(segment_months))
 q25 = np.zeros(len(segment_months))
 q75 = np.zeros(len(segment_months))
+
+# Set plotting parameters
+duration_ds = duration_ds * (12 / 365.25) 
+slope_p     = [1.25]
 
 # Create figure
 fig, axes = plt.subplots(
@@ -519,6 +545,26 @@ ax_med = fig.add_axes([
     position.height - 0.05,
 ])
 
+# Loop through a subset of alpha values 
+for k, ialpha in enumerate(slope_p): 
+
+    # Find index value
+    idx_alpha = np.argmin(np.abs(np.array(slope_ds) - ialpha))
+
+    # Plot the decorrelation scale as a function of window duration
+    ax_med.plot(duration_ds, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
+
+# Label cruves
+ax_med.annotate(
+    rf'$\alpha = {round(slope_ds[idx_alpha],1)}$',
+    xy=(0.81, 0.87),
+    xycoords='axes fraction',
+    fontsize=11,
+    color='k',
+    ha='left',
+    va='center',
+)
+
 # Plot interquartile range
 ax_med.fill_between(
     segment_months,
@@ -587,7 +633,7 @@ fig.get_layout_engine().set(
 
 # Save figure
 fig.savefig(
-    PATH_figs / "figS05.png",
+    PATH_figs / "figS06.png",
     dpi=300,
     facecolor="white",
     bbox_inches="tight",

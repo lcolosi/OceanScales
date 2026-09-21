@@ -519,7 +519,7 @@ plt.subplots_adjust(hspace=0.1, wspace=0.1)
 # -----------------------------------------------------------------------------
 
 fig.savefig(
-    PATH_figs / "figS07.png",
+    PATH_figs / "figS08.png",
     dpi=300,
     facecolor="white",
     bbox_inches="tight",

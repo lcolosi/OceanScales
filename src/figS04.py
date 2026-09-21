@@ -486,7 +486,7 @@ add_corner_label(axes[1], pos, 'B', fontsize = 16)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "figS03.png",
+    PATH_figs / "figS04.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
