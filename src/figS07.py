@@ -1,15 +1,23 @@
 # =============================================================================
-# Figure S07
+# Figure S06
 # =============================================================================
 #
 # Caption:
-#   
-#
+#   Decorrelation time scale along CalCOFI line 80 computed using (a) 1 month,
+#   (b) 2 month, (c) 3 month, (d) 4 month, (e) 6 month, (f) 8 month, and
+#   (g) 12 month window duration following the methodology for computing
+#   decorrelation time scale discussed in section 3 of the paper. Gray shading
+#   is the ocean bottom. Decorrelation scales that differ from the regional
+#   spatial mean by less than or equal to one standard error are considered 
+#   not statistically significant and are indicated by hatching. The regional 
+#   spatial median (solid blue) and the  25$^{textrm{th}}$ to
+#   75$^{textrm{th}}$ percentile range (blue shading) are shown in panel (h).
+# 
 # Author:
 #   Luke Colosi
 #
 # Created:
-#   2026-08-19
+#   2026-08-26
 # =============================================================================
 
 # Import libraries 
@@ -19,6 +27,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
 import cmocean.cm as cmo
+import matplotlib as mpl
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +40,7 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import plotting toolbox 
+# Import plotting toolbox
 from plotting import add_corner_label
 
 # -----------------------------------------------------------------------------
@@ -43,39 +52,50 @@ from plotting import add_corner_label
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", or "vvel".
+#                Options: "temp", "sal", "density", "u_along", or "v_cross".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
 #                        Options: True or False
-# - option_var : Specifies whether the mean or standard deviation will be plotted.
+# - option_var : Specifies whether to plot the mean or standard deviation of
+#                the decorrelation scale. 
+#                        Options: "mean" or "std" 
+# - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
+#                  criteria. Represents the number of standard deviation a
+#                  decorrelation scale estimate is away from the regional spatial
+#                  median.
 #
 # ------------#
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'gaussian' 
+option_interannual = 'linear' 
 option_detrend_seg = True
 option_var         = 'mean'
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
 
+# Set uncertainty estimate parameters
+sn_threshold = 1
+
 # -----------------------------------------------------------------------------
-# Set plotting parameters
+# Set segment durations, plotting limits and plotting parameters
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-seg_durations = [1, 2, 3, 4, 6, 8, 12]
-site_names = ["CCE1", "CCE2", "CCE3"]
+fontsize_l = 14
+pos = [0.075, 0.1]
+subplot_label = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+mpl.rcParams["hatch.linewidth"] = 0.2 
 
-# Path to processed data 
-PATH_processed = PATH_data / "mitgcm" / "mooring" / "processed"
-PATH_cce1_processed = PATH_data / "cce" / "cce1" / "processed"
-PATH_cce2_processed = PATH_data / "cce" / "cce2" / "processed"
+if option_var == 'mean': 
+    label = 'Decorrelation Scale (days)'
+elif option_var == 'std': 
+    label = 'Standard deviation (days)'
 
 # Set font and fontsize using LaTeX 
-fontsize=16
+fontsize=18
 plt.rcParams.update({
     "font.size": fontsize,         
     "text.usetex": True,           
@@ -83,452 +103,398 @@ plt.rcParams.update({
     "text.latex.preamble": r"\usepackage{amsmath}" 
 })
 
+# Segment durations to plot (months)
+segment_months = [1, 2, 3, 4, 6, 8, 12]
+
+if option_var == "mean":
+
+    # Set colorbar limits for each segment duration
+    scale_limits = {
+        1:  (2, 4),
+        2:  (3, 8),
+        3:  (4, 12),
+        4:  (4, 16),
+        6:  (6, 22),
+        8:  (8, 30),
+        12: (10, 40),
+    }
+
+    # Contour intervals steps
+    steps = {
+        1:  0.05,
+        2:  0.1,
+        3:  0.2,
+        4:  0.25,
+        6:  0.5,
+        8:  0.5,
+        12: 1,
+    }
+
+    # Colorbar tick steps
+    step_ticks = {
+        1:  0.5,
+        2:  1,
+        3:  1,
+        4:  2,
+        6:  2,
+        8:  5,
+        12: 5,
+    }
+
+elif option_var == "std":
+
+    # Set colorbar limits for each segment duration
+    scale_limits = {
+        1:  (1, 2),
+        2:  (1, 3),
+        3:  (1, 5),
+        4:  (1, 7),
+        6:  (1, 9),
+        8:  (1, 10),
+        12: (1, 10),
+    }
+
+    # Contour intervals steps
+    steps = {
+        1:  0.025,
+        2:  0.05,
+        3:  0.05,
+        4:  0.25,
+        6:  0.25,
+        8:  0.25,
+        12: 0.25,
+    }
+
+    # Colorbar tick steps
+    step_ticks = {
+        1:  0.25,
+        2:  0.25,
+        3:  0.5,
+        4:  1,
+        6:  1,
+        8:  1,
+        12: 1,
+    }
+
 # -----------------------------------------------------------------------------
-# Load MITgcm and CCE decorrelation-scale estimates
+# Load transect bathymetry
 # -----------------------------------------------------------------------------
 
-# --- MITgcm --- # 
+filename_depth = PATH_data / "mitgcm" / "transect" / "DEPTH_CCS_trans.nc"
 
-# Initialize array
-decor_scale_m = []
-decor_scale_stdm_m = []
+with Dataset(filename_depth, "r") as nc:
+    distance_wd = nc.variables["distance"][:]
+    bottom_depth = nc.variables["Depth"][:]
 
-# Loop through window durations
-for seg_duration in seg_durations:
+# -----------------------------------------------------------------------------
+# Plot regional decorrelation time scales
+# -----------------------------------------------------------------------------
 
-    filename = (
+# Initialize array for median decorrelation scales
+median = np.zeros(len(segment_months))
+q25 = np.zeros(len(segment_months))
+q75 = np.zeros(len(segment_months))
+
+# Define processed data path
+PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
+
+# Create figure
+fig, axes = plt.subplots(
+    2,
+    4,
+    figsize=(20, 9),
+    constrained_layout=True,
+)
+
+# Flatten axes 
+axes = axes.ravel()
+
+# Loop through segment durations
+for i, months in enumerate(segment_months):
+
+    # Set axis handle
+    ax = axes[i]
+
+    # Set panel-specific color scale
+    vmin, vmax = scale_limits[months]
+    step = steps[months]
+    levels = np.arange(vmin,vmax + step,step)
+
+    #------------------------------------------#
+    # Load decorrelation-scale data
+    #------------------------------------------#
+
+    filename_mitgcm = (
         PATH_processed
-        / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
-          f"seg_duration_{seg_duration}mo.nc"
+        / f"mitgcm_decor_scale_{option_data}_hrly_trans_"
+          f"{option_interannual}_{seg_proc}_"
+          f"seg_duration_{months}mo.nc"
     )
 
-    with Dataset(filename, "r") as nc:
+    with Dataset(filename_mitgcm, "r") as nc:
 
-        # Append decorrelation scale to list
-        decor_scale_m.append(nc.variables["decor_scale"][:])
-        decor_scale_stdm_m.append(nc.variables["decor_scale_stdm"][:])
+        distance = nc.variables["dist"][:]
+        depth = nc.variables["depth"][:]
 
-        # Save depth coordinate once
-        if seg_duration == seg_durations[0]:
-            depth_m = nc.variables["depth"][:]
+        if option_var == "mean":
+            data     = nc.variables["decor_scale"][:]
+            data_unc = nc.variables["decor_scale_stdm"][:]
+
+        elif option_var == "std":
+            data     = nc.variables["decor_scale_std"][:]
+            data_unc = nc.variables["decor_scale_stds"][:]
 
 
-# Stack window durations along a new first dimension
-decor_scale_m = np.ma.stack(decor_scale_m, axis=0)
-decor_scale_stdm_m = np.ma.stack(decor_scale_stdm_m, axis=0)
+    #------------------------------------------#
+    # Compute transect statistics
+    #------------------------------------------#
 
-# --- Mixed Layer Depth ---# 
+    median[i] = np.ma.median(data)
+    q25[i] = np.percentile(data.compressed(), 25)
+    q75[i] = np.percentile(data.compressed(), 75)
 
-# Obtain filename path
-filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_mooring.nc"
+    #------------------------------------------#
+    # Compute statistical significance mask
+    #------------------------------------------#
 
-# Generate the nc data structure
-nc = Dataset(filename_mld, 'r')
+    # Compute spatial median
+    trans_median = np.ma.median(data)
 
-# Extract data variables
-mld = nc.variables['MLD'][:]
+    # Compute the signal-to-noise ratio (with respect to the regional mean)
+    sn_ratio =  np.abs(data - trans_median) / data_unc
 
-# --- CCE Moorings --- # 
-
-# Initialize array
-decor_scale_cce1 = []
-decor_scale_stdm_cce1 = []
-decor_scale_cce2 = []
-decor_scale_stdm_cce2 = []
-
-# Loop through window durations
-for seg_duration in seg_durations:
-
-    # --- CCE 1 --- # 
-
-    filename1 = (
-        PATH_cce1_processed
-        / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
-          f"seg_duration_{seg_duration}mo.nc"
+    # Identify non-significant values
+    significance_mask = np.ma.getmask(
+        np.ma.masked_less_equal(sn_ratio, sn_threshold)
     )
 
-    with Dataset(filename1, "r") as nc:
+    # Get land mask
+    data_mask_array = np.ma.getmaskarray(data)
 
-        # Append decorrelation scale to list
-        decor_scale_cce1.append(nc.variables["decor_scale"][:])
-        decor_scale_stdm_cce1.append(nc.variables["decor_scale_stdm"][:])
+    # Keep only non-significant ocean points
+    significance_mask = significance_mask & ~data_mask_array
 
-        # Save depth coordinate once
-        if seg_duration == seg_durations[0]:
-            depth_cce1 = nc.variables["depth"][:]
+    # Non-significant ocean points = 1; everything else = NaN    
+    data_mask = np.where(significance_mask, 1, np.nan)
 
+    #------------------------------------------#
+    # Plot data
+    #------------------------------------------#
 
-    # --- CCE 2 --- # 
-
-    filename2 = (
-        PATH_cce2_processed
-        / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
-            f"seg_duration_{seg_duration}mo.nc"
+    # Plot decorrelation time scales
+    ct = ax.contourf(
+        distance,
+        abs(depth),
+        data.T,
+        levels=levels,
+        cmap=cmo.amp,
+        extend="both",
     )
 
-    with Dataset(filename2, "r") as nc:
-    
-        # Append decorrelation scale to list
-        decor_scale_cce2.append(nc.variables["decor_scale"][:])
-        decor_scale_stdm_cce2.append(nc.variables["decor_scale_stdm"][:])
+    # Overlay statistical-significance hatching
+    ax.contourf(
+        distance,
+        abs(depth),
+        data_mask.T,
+        levels=[0.5, 1.5],
+        hatches=["..."],
+        colors="none",
+    )
 
-        # Save depth coordinate once
-        if seg_duration == seg_durations[0]:
-            depth_cce2 = nc.variables["depth"][:]
+    # Plot bathymetry
+    ax.fill_between(
+        distance_wd,
+        bottom_depth,
+        abs(depth).max(),
+        color="0.5",
+    )
 
-    
-# Stack window durations along a new first dimension
-decor_scale_cce1 = np.ma.stack(decor_scale_cce1, axis=0)
-decor_scale_stdm_cce1 = np.ma.stack(decor_scale_stdm_cce1, axis=0)
-decor_scale_cce2 = np.ma.stack(decor_scale_cce2, axis=0)
-decor_scale_stdm_cce2 = np.ma.stack(decor_scale_stdm_cce2, axis=0)
+
+    #------------------------------------------#
+    # Set axis attributes
+    #------------------------------------------#
+
+    ax.set_ylim(
+        abs(depth).max(),
+        abs(depth).min(),
+    )
+
+    ax.set_xlim(
+        distance.min(),
+        distance.max(),
+    )
+
+    # Invert x axis
+    ax.invert_xaxis()
+
+    # Only show x labels on bottom row
+    if i < 4:
+        ax.tick_params(
+            axis="x",
+            labelbottom=False,
+        )
+
+    # Only show y labels on left column
+    if i not in (0, 4):
+        ax.tick_params(
+            axis="y",
+            labelleft=False,
+        )
+
+    if i in (0, 4):
+        ax.set_ylabel(
+            "Depth (m)",
+            fontsize=14,
+        )
+
+    if i >= 4:
+        ax.set_xlabel(
+            "Distance from shore (km)",
+            fontsize=14,
+        )
+
+    ax.tick_params(
+        axis="both",
+        labelsize=12,
+    )
+
+    ax.grid(
+        True,
+        linestyle="--",
+        alpha=0.15,
+    )
+
+    # Add Panel title
+    ax.set_title(
+        f"{months} month"
+        if months == 1
+        else f"{months} months",
+        fontsize=14,
+    )
+
+    # Add corner subplot label 
+    add_corner_label(ax, pos, subplot_label[i], fontsize = fontsize_l)
+
+    # Add individual colorbar
+    cbar = fig.colorbar(
+        ct,
+        ax=ax,
+        orientation="horizontal",
+        fraction=0.05,
+        pad=0.04,
+    )
+
+    cbar.set_label(
+        label,
+        fontsize=12,
+    )
+
+    cbar.ax.tick_params(
+        labelsize=11,
+    )
+
+    cbar.set_ticks(
+        np.arange(
+            vmin,
+            vmax + step_ticks[months],
+            step_ticks[months],
+        )
+    )
 
 # -----------------------------------------------------------------------------
-# Compute the time mean and standard deviation mixed layer depth 
+# Plot transect median decorrelation scale
 # -----------------------------------------------------------------------------
 
-mld_mean = np.ma.mean(mld,axis=1)
-mld_std = np.ma.std(mld,axis=1,ddof=1)
+# Set axis handle
+ax = axes[-1]
 
-# -----------------------------------------------------------------------------
-# Plot decorrelation time scales at mooring sites
-# -----------------------------------------------------------------------------
+# Remove previous axes and replace with a new one
+position = ax.get_position()
+ax.remove()
 
-# Set depth convention to positive downward
-depth_m_pos = np.abs(depth_m) 
-depth_cce1_pos = np.abs(depth_cce1) 
-depth_cce2_pos = np.abs(depth_cce2) 
+ax_med = fig.add_axes([
+    position.x0 + 0.07,
+    position.y0 + 0.06,
+    position.width,
+    position.height - 0.05,
+])
 
-# Set standard observational depths 
-cce1_standard_depth = np.array([10, 20, 30, 40, 60, 75, 150])
-cce2_standard_depth = np.array([7, 15, 25, 45, 75])
+# Plot interquartile range
+ax_med.fill_between(
+    segment_months,
+    q25,
+    q75,
+    alpha=0.2,
+    color='tab:blue',
+    label="25th–75th percentile",
+)
 
-# Use a discrete colormap for the seven window durations
-colors = cmo.haline_r(np.linspace(0.05, 0.95, len(seg_durations)))
 
-# Create figure 
-fig, axes = plt.subplots(2,3,figsize=(15, 10))
-axes_flat = axes.flatten()
+# Plot transect median
+ax_med.plot(
+    segment_months,
+    median,
+    marker="o",
+    linewidth=2,
+    markersize=7,
+    color='tab:blue',
+    label="Transect Median",
+)
 
-# --- Subplot 1 --- # 
-ax = axes_flat[0]
 
-# Loop through durations
-for j, seg_duration in enumerate(seg_durations):
+# Set labels
+ax_med.set_xlabel(
+    "Window duration (months)",
+    fontsize=14,
+)
 
-    # Extract decorrelation scale and uncertainty
-    Lt = decor_scale_m[j,0,:]
-    Lt_stdm = decor_scale_stdm_m[j,0,:]
+ax_med.set_ylabel(
+    label,
+    fontsize=14,
+)
 
-    # Plot mean decorrelation scale depth profile
-    ax.plot(
-        Lt,
-        depth_m_pos,
-        '.-',
-        color=colors[j],
-        linewidth=2,
-        markersize=5,
-        label=f"{seg_duration} month"
-    )
 
-    # Plot standard error of the mean 
-    ax.fill_betweenx(
-        depth_m_pos,
-        Lt - Lt_stdm,
-        Lt + Lt_stdm,
-        color=colors[j],
-        alpha=0.12,
-    )
+# Set ticks
+ax_med.set_xticks(segment_months)
 
-# Plot the mean mixed layer depth 
-ax.axhline(mld_mean[0], ls='--', lw=1.5, color='dimgray', alpha=1, label=r"$\overline{z}_{mld}$")
+ax_med.tick_params(
+    axis="both",
+    labelsize=12,
+)
 
-# Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='dimgray', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
 
-# Set left edge x-position
-x_right = ax.get_xlim()[0] + 2.25  
+# Add grid
+ax_med.grid(
+    True,
+    linestyle="--",
+    alpha=0.3,
+)
 
-# Plot model grid depth levels
-ax.plot(np.full_like(depth_m_pos[:-1], x_right), depth_m_pos[:-1], marker='.', linestyle='None', color='k', markersize=6, alpha=0.6,clip_on=False)
 
-# Set figure attributes
-ax.set_ylabel('Depth (m)')
-ax.set_xticks(np.arange(0,45+5,5))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xlim(0,45)
-ax.set_ylim(0,200)
-ax.set_xticklabels([])
-ax.grid(True, ls= '--', lw=0.5, alpha=0.1,color='k')
-ax.tick_params(top=False, 
-            bottom=True, 
-            left=True, 
-            right=True, 
-            labelleft=True,
-            direction='out', 
-            length=3.5)
-ax.invert_yaxis()
+# Add legend
+ax_med.legend(
+    loc="upper left",
+    fontsize=12,
+)
 
-# --- Subplot 2 --- # 
-ax = axes_flat[1]
+# Label subplot
+add_corner_label(ax_med, [0.9, 0.1], 'H', fontsize = fontsize_l)
 
-# Loop through durations
-for j, seg_duration in enumerate(seg_durations):
-
-    # Extract decorrelation scale and uncertainty
-    Lt = decor_scale_m[j,1,:]
-    Lt_stdm = decor_scale_stdm_m[j,1,:]
-
-    # Plot mean decorrelation scale depth profile
-    ax.plot(
-        Lt,
-        depth_m_pos,
-        '.-',
-        color=colors[j],
-        linewidth=2,
-        markersize=5,
-    )
-
-    # Plot standard error of the mean 
-    ax.fill_betweenx(
-        depth_m_pos,
-        Lt - Lt_stdm,
-        Lt + Lt_stdm,
-        color=colors[j],
-        alpha=0.12,
-    )
-
-# Plot the mean mixed layer depth 
-ax.axhline(mld_mean[1], ls='--', lw=1.5, color='dimgray', alpha=1)
-
-# Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[1] - mld_std[1], mld_mean[1] + mld_std[1], color='dimgray', alpha=0.15)
-
-# Set left edge x-position
-x_right = ax.get_xlim()[0] + 2.25  
-
-# Plot model grid depth levels
-ax.plot(np.full_like(depth_m_pos[:-1], x_right), depth_m_pos[:-1], marker='.', linestyle='None', color='k', markersize=6, alpha=0.6,clip_on=False)
-
-# Set figure attributes
-ax.set_xticks(np.arange(0,45+5,5))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xlim(0,45)
-ax.set_ylim(0,200)
-ax.set_xticklabels([])
-ax.set_yticklabels([])
-ax.grid(True, ls= '--', lw=0.5, alpha=0.1,color='k')
-ax.tick_params(top=False, 
-            bottom=True, 
-            left=True, 
-            right=True, 
-            labelleft=True,
-            direction='out', 
-            length=3.5)
-ax.invert_yaxis()
-
-# --- Subplot 3 --- # 
-ax = axes_flat[2]
-
-# Loop through durations
-for j, seg_duration in enumerate(seg_durations):
-
-    # Extract decorrelation scale and uncertainty
-    Lt = decor_scale_m[j,2,:]
-    Lt_stdm = decor_scale_stdm_m[j,2,:]
-
-    # Plot mean decorrelation scale depth profile
-    ax.plot(
-        Lt,
-        depth_m_pos,
-        '.-',
-        color=colors[j],
-        linewidth=2,
-        markersize=5,
-    )
-
-    # Plot standard error of the mean 
-    ax.fill_betweenx(
-        depth_m_pos,
-        Lt - Lt_stdm,
-        Lt + Lt_stdm,
-        color=colors[j],
-        alpha=0.12,
-    )
-
-# Plot the mean mixed layer depth 
-ax.axhline(mld_mean[2], ls='--', lw=1.5, color='dimgray', alpha=1)
-
-# Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='dimgray', alpha=0.15)
-
-# Set left edge x-position
-x_right = ax.get_xlim()[0] + 2.25  
-
-# Plot model grid depth levels
-ax.plot(np.full_like(depth_m_pos[:-1], x_right), depth_m_pos[:-1], marker='.', linestyle='None', color='k', markersize=6, alpha=0.6,clip_on=False, label='Model depths')
-
-# Set figure attributes
-ax.set_xlabel('Decorrelation Scale (days)')
-ax.set_xticks(np.arange(0,45+5,5))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xlim(0,45)
-ax.set_ylim(0,200)
-ax.set_yticklabels([])
-ax.grid(True, ls= '--', lw=0.5, alpha=0.1,color='k')
-ax.tick_params(top=False, 
-            bottom=True, 
-            left=True, 
-            right=True, 
-            labelleft=True,
-            direction='out', 
-            length=3.5)
-ax.invert_yaxis()
-
-# --- Subplot 4 --- # 
-ax = axes_flat[3]
-
-# Loop through durations
-for j, seg_duration in enumerate(seg_durations):
-
-    # Extract decorrelation scale and uncertainty
-    Lt = decor_scale_cce1[j,:]
-    Lt_stdm = decor_scale_stdm_cce1[j,:]
-
-    # Plot mean decorrelation scale depth profile
-    ax.plot(
-        Lt,
-        depth_cce1_pos,
-        '.-',
-        color=colors[j],
-        linewidth=2,
-        markersize=5,
-    )
-
-    # Plot standard error of the mean 
-    ax.fill_betweenx(
-        depth_cce1_pos,
-        Lt - Lt_stdm,
-        Lt + Lt_stdm,
-        color=colors[j],
-        alpha=0.12,
-    )
-
-# Set left edge x-position
-x_right = ax.get_xlim()[0]  
-
-# Plot model grid depth levels
-ax.plot(np.full_like(cce1_standard_depth, x_right), cce1_standard_depth, marker='d', linestyle='None', color='k', markersize=5, alpha=1, clip_on=False, label='Standard depths' )
-
-# Set figure attributes
-ax.set_xlabel('Decorrelation Scale (days)')
-ax.set_ylabel('Depth (m)')
-ax.set_xticks(np.arange(0,45+5,5))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xlim(0,45)
-ax.set_ylim(0,200)
-ax.grid(True, ls= '--', lw=0.5, alpha=0.1,color='k')
-ax.tick_params(top=True, 
-            bottom=True, 
-            left=True, 
-            right=True, 
-            labelleft=True,
-            direction='out', 
-            length=3.5)
-ax.invert_yaxis()
-
-# --- Subplot 5 --- # 
-ax = axes_flat[4]
-
-# Loop through durations
-for j, seg_duration in enumerate(seg_durations):
-
-    # Extract decorrelation scale and uncertainty
-    Lt = decor_scale_cce2[j,:]
-    Lt_stdm = decor_scale_stdm_cce2[j,:]
-
-    # Plot mean decorrelation scale depth profile
-    ax.plot(
-        Lt,
-        depth_cce2_pos,
-        '.-',
-        color=colors[j],
-        linewidth=2,
-        markersize=5
-    )
-
-    # Plot standard error of the mean 
-    ax.fill_betweenx(
-        depth_cce2_pos,
-        Lt - Lt_stdm,
-        Lt + Lt_stdm,
-        color=colors[j],
-        alpha=0.12,
-    )
-
-# Set left edge x-position
-x_right = ax.get_xlim()[0]  
-
-# Plot model grid depth levels
-ax.plot(np.full_like(cce2_standard_depth, x_right), cce2_standard_depth, marker='d', linestyle='None', color='k', markersize=5, alpha=1, clip_on=False)
-
-# Set figure attributes
-ax.set_xlabel('Decorrelation Scale (days)')
-ax.set_xticks(np.arange(0,45+5,5))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.set_xlim(0,45)
-ax.set_ylim(0,200)
-ax.set_yticklabels([])
-ax.grid(True, ls= '--', lw=0.5, alpha=0.1,color='k')
-ax.tick_params(top=True, 
-            bottom=True, 
-            left=True, 
-            right=True, 
-            labelleft=True,
-            direction='out', 
-            length=3.5)
-ax.invert_yaxis()
-
-#--- Subplot 6 ---# 
-ax = axes_flat[5]
-
-# Turn off axis
-ax.axis('off')
-
-# Obtain the handle for the legend 
-handles = []
-labels = []
-
-# Loop through axes that contain legend items
-for i in [0,1,2,3]:  
-    h, l = axes_flat[i].get_legend_handles_labels()
-    handles.extend(h)
-    labels.extend(l)
-
-# Display legend in the position of the 6th axis
-ax.legend(handles, labels, loc='center', fontsize=12)
-
-# Label each subplot
-pos = [0.94, 0.07]
-add_corner_label(axes_flat[0], pos, 'A', fontsize = 16)
-add_corner_label(axes_flat[1], pos, 'B', fontsize = 16)
-add_corner_label(axes_flat[2], pos, 'C', fontsize = 16)
-add_corner_label(axes_flat[3], pos, 'D', fontsize = 16)
-add_corner_label(axes_flat[4], pos, 'E', fontsize = 16)
-
-# Adjust figure spacing
-plt.subplots_adjust(hspace=0.1, wspace=0.1)
+# Adjust spacing
+fig.get_layout_engine().set(
+    wspace=0.05,
+    hspace=0.05,
+)
 
 # -----------------------------------------------------------------------------
 # Save figure
 # -----------------------------------------------------------------------------
 
 fig.savefig(
-    PATH_figs / "figS07.png",
+    PATH_figs / "figS06.png",
     dpi=300,
     facecolor="white",
     bbox_inches="tight",
     pad_inches=0.1,
     transparent=False,
 )
-

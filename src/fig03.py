@@ -24,16 +24,19 @@
 # =============================================================================
 
 # Import libraries 
+import os
 import sys
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import mpmath as mp
+import xarray as xr
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
 
 # Set paths to project directories
+PATH_data = ROOT / "data"
 PATH_figs = ROOT / "figs"
 PATH_tools = ROOT / "tools"
 
@@ -301,3 +304,50 @@ fig.savefig(
     pad_inches=0.1,
     transparent=False
 )
+
+# -----------------------------------------------------------------------------
+# Save data in a netcdf file 
+# -----------------------------------------------------------------------------
+
+# --- Autocorrelation --- # 
+autocorr = xr.DataArray(data=rho,
+                        dims=['lag','duration_ac','slope_ac'],
+                        coords=dict(lag=tau,duration_ac=T_ac,slope_ac=alpha_values_ac),
+                        attrs=dict(
+                            description=(f'Analytic autocorrelation solutions for ' + 
+                                        'a range of window durations and spectral slopes.'),
+                            units='unitless'
+                        )
+)
+
+# --- Decorrelation Scales --- #
+decor_scale = xr.DataArray(data=T_tilde,
+                            dims=['duration_ds','slope_ds'],
+                            coords=dict(duration_ds=T_ds,slope_ds=alpha_values_ds),
+                            attrs=dict(
+                                description=(f'Analytic decorrelation scale solutions for ' + 
+                                            'a range of window durations and spectral slopes.'),
+                                units='days'
+                            )
+)
+
+# Create data set from data arrays 
+data = xr.Dataset({'autocorr':autocorr,'decor_scale':decor_scale})
+
+# Set path to processed data 
+PATH_processed = PATH_data / 'analytic' 
+
+# Set file path for saving the netcdf file
+file_path = PATH_processed / f"analytic_autocor_decor_scale.nc"
+
+# Check if file exists, then delete it
+if os.path.exists(file_path):
+    os.remove(file_path)
+
+# Create netcdf file
+data.to_netcdf(file_path,mode='w')
+
+
+
+
+

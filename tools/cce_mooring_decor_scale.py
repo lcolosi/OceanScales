@@ -353,7 +353,7 @@ autocorr = xr.DataArray(data=autocorr_mean,
                            attrs=dict(
                                description=(f'Autocorrelation at the {option_mooring.upper()} ' +
                                             'mooring location.'),
-                               units='days'
+                               units='unitless'
                            )
 )
 

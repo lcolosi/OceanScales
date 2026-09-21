@@ -209,8 +209,8 @@ f_coriolis = 2 * omega * np.sin(np.deg2rad(cce_lat)) / (2 * np.pi) * 86400
 # Set plotting parameters 
 x_max = 182.5
 dx = 20
-fmin_slope = 1e-2
-fmax_slope = 2e-1
+fmin_slope = 4*10**(-3) 
+fmax_slope = 1.5*10**(1) 
 fontsize_ins = 10
 
 # Create figure
@@ -224,8 +224,8 @@ ax = ax_flat[0]
 ax.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=1)
 
 # Plot the mean autocorrelation at CCE1 for the model and observations
-ax.plot(time_lag_m_pos, autocorr_m_depth_pos[0,:], '-', color='dimgray', linewidth=1.5, label='model')
-ax.plot(time_lag_cce1_pos, autocorr_cce1_depth_pos, '-', color='tab:green', linewidth=1.5, label='obs')
+ax.plot(time_lag_m_pos, autocorr_m_depth_pos[0,:], '-', color='dimgray', linewidth=1.5)
+ax.plot(time_lag_cce1_pos, autocorr_cce1_depth_pos, '-', color='tab:green', linewidth=1.5)
 
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
@@ -236,7 +236,6 @@ ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
-ax.legend(loc='lower right')
 
 # Add inset showing short-lag autocorrelation
 axins = ax.inset_axes([0.35, 0.55, 0.45, 0.42])
@@ -307,34 +306,56 @@ ax.axvline(f_M2, color='k', linestyle=':', linewidth=1.0)
 ax.axvline(f_coriolis[0], color='k', linestyle='--', linewidth=1.0)
 
 # Add frequency labels
-ax.annotate(r'$\mathrm{K}_1$', xy=(f_K1, ax.get_ylim()[1]), xytext=(-8, 12), textcoords='offset points',
+ax.annotate(r'$\mathrm{K}_1$', xy=(f_K1, ax.get_ylim()[1]), xytext=(-8, 20), textcoords='offset points',
             rotation=0, ha='center', va='top', fontsize=10)
 
-ax.annotate(r'$f$', xy=(f_coriolis[0], ax.get_ylim()[1]), xytext=(5, 13), textcoords='offset points',
+ax.annotate(r'$f$', xy=(f_coriolis[0], ax.get_ylim()[1]), xytext=(5, 21), textcoords='offset points',
             rotation=0, ha='center', va='top', fontsize=10)
 
-ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 12), textcoords='offset points',
+ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 20), textcoords='offset points',
             rotation=0, ha='center', va='top', fontsize=10)
 
 # Plot the mean power spectrum at CCE1 for the model and observations
-ax.loglog(freq_m[1:], psd_m_depth[0,1:], '-', color='dimgray', linewidth=1.5)
-ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1.5, alpha=0.7)
+ax.loglog(freq_m[1:], psd_m_depth[0,1:], '-', color='dimgray', linewidth=1.5, label='model')
+ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1.5, alpha=0.7, label='obs')
 
 # Plot the 95% confidence interval of the mean power spectrum 
 ax.fill_between(freq_m[1:], psd_CI_m_depth[0,1:,0], psd_CI_m_depth[0,1:,1], color='dimgray', alpha=0.25)
 ax.fill_between(freq_cce1[1:], psd_CI_cce1_depth[1:,0], psd_CI_cce1_depth[1:,1], color='tab:green', alpha=0.25)
 
 # Plot the reference spectral slopes lines
-plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=1e-2, slope=-1)
-plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=1e-1, slope=-2)
+plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=2e0, slope=-1.5, color='gray', linestyle='--', linewidth=1, fontsize=11)
+plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=4e0, slope=-2, color='gray', linestyle='-.', linewidth=1, fontsize=11)
+
+# Label spectral slopes
+ax.annotate(
+    r'$f^{-\frac{3}{2}}$',
+    xy=(0.95, 0.37),
+    xycoords='axes fraction',
+    fontsize=11,
+    color='k',
+    ha='left',
+    va='center',
+)
+
+ax.annotate(
+    r'$f^{-2}$',
+    xy=(0.95, 0.23),
+    xycoords='axes fraction',
+    fontsize=11,
+    color='k',
+    ha='left',
+    va='center',
+)
 
 # Set axis attributes
 ax.set_xlabel('Frequency (cpd)')
 ax.set_ylabel(r'PSD ($\mathrm{kg}^2/\mathrm{m}^6/\mathrm{cycle}/\mathrm{day}$)')
 ax.set_xlim(4*10**(-3), 1.5*10**1)
-ax.set_ylim(10**(-10),5*10**0)
+ax.set_ylim(6*10**(-10),1*10**1)
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
+ax.legend(loc='lower left', fontsize=14)
 
 # --- Subplot 4 --- # 
 ax = ax_flat[3]
@@ -345,13 +366,13 @@ ax.axvline(f_M2, color='k', linestyle=':', linewidth=1.0)
 ax.axvline(f_coriolis[1], color='k', linestyle='--', linewidth=1.0)
 
 # Add frequency labels
-ax.annotate(r'$\mathrm{K}_1$', xy=(f_K1, ax.get_ylim()[1]), xytext=(-8, 12), textcoords='offset points',
+ax.annotate(r'$\mathrm{K}_1$', xy=(f_K1, ax.get_ylim()[1]), xytext=(-8, 20), textcoords='offset points',
             rotation=0, ha='center', va='top', fontsize=10)
 
-ax.annotate(r'$f$', xy=(f_coriolis[1], ax.get_ylim()[1]), xytext=(5, 13), textcoords='offset points',
+ax.annotate(r'$f$', xy=(f_coriolis[1], ax.get_ylim()[1]), xytext=(5, 21), textcoords='offset points',
             rotation=0, ha='center', va='top', fontsize=10)
 
-ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 12), textcoords='offset points',
+ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 20), textcoords='offset points',
             rotation=0, ha='center', va='top', fontsize=10)
 
 # Plot the mean power spectrum at CCE1 for the model and observations
@@ -362,10 +383,35 @@ ax.loglog(freq_cce2[1:], psd_cce2_depth[1:], '-', color='tab:red', linewidth=1.0
 ax.fill_between(freq_m[1:], psd_CI_m_depth[1,1:,0], psd_CI_m_depth[1,1:,1], color='dimgray', alpha=0.25)
 ax.fill_between(freq_cce2[1:], psd_CI_cce2_depth[1:,0], psd_CI_cce2_depth[1:,1], color='tab:red', alpha=0.25)
 
+# Plot the reference spectral slopes lines
+plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=3e0, slope=-1, color='gray', linestyle='--', linewidth=1, fontsize=11)
+plot_spectral_slope(ax, fmin=fmin_slope, fmax=fmax_slope, y_ref=2.5e1, slope=-1.75, color='gray', linestyle='-.', linewidth=1, fontsize=11)
+
+# Label spectral slopes
+ax.annotate(
+    r'$f^{-\frac{7}{4}}$',
+    xy=(0.95, 0.38),
+    xycoords='axes fraction',
+    fontsize=11,
+    color='k',
+    ha='left',
+    va='center',
+)
+
+ax.annotate(
+    r'$f^{-1}$',
+    xy=(0.95, 0.65),
+    xycoords='axes fraction',
+    fontsize=11,
+    color='k',
+    ha='left',
+    va='center',
+)
+
 # Set axis attributes
 ax.set_xlabel('Frequency (cpd)')
 ax.set_xlim(4*10**(-3), 1.5*10**1)
-ax.set_ylim(10**(-10),5*10**0)
+ax.set_ylim(6*10**(-10),1*10**1)
 ax.set_yticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)

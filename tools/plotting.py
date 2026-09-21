@@ -465,6 +465,7 @@ def add_x_axis_marker(
         zorder=10,
     )
 
+# --- Plotting Spectral Slope --- # 
 def plot_spectral_slope(
     ax,
     fmin,
@@ -475,6 +476,7 @@ def plot_spectral_slope(
     linestyle='--',
     linewidth=1.25,
     fontsize=10,
+    label_on=False,
 ):
     """
     Plot a reference power-law slope on a log-log power spectrum.
@@ -509,6 +511,9 @@ def plot_spectral_slope(
         Width of the reference line. Default is 1.25.
     fontsize : float, optional
         Font size of the slope label. Default is 10.
+    label_on : bool, optional
+        Specifies whether to plot the label or not. True means label is plotted. 
+        Default is False.
 
     Returns
     -------
@@ -531,15 +536,16 @@ def plot_spectral_slope(
     )
 
     # Add slope label at the high-frequency end of the line
-    ax.text(
-        f[-1],
-        psd_ref[-1],
-        rf'$f^{{{slope:g}}}$',
-        color=color,
-        fontsize=fontsize,
-        ha='left',
-        va='center',
-    )
+    if label_on:
+        ax.text(
+            f[-1],
+            psd_ref[-1],
+            rf'$f^{{{slope:g}}}$',
+            color=color,
+            fontsize=fontsize,
+            ha='left',
+            va='center',
+        )
 
 
 # --- Status Message --- # 

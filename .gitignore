@@ -6,6 +6,7 @@ data/bathymetry/
 data/cce/
 data/mitgcm/
 data/calcofi/
+data/analytic/
 
 # Figs directory
 

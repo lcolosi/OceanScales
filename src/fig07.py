@@ -160,10 +160,10 @@ ax_flat = axes.flatten()
 ax = ax_flat[0]
 
 # Plot the mean mixed layer depth 
-ax.axhline(mld_mean[0], ls='--', lw=1.5, color='tab:green', alpha=1, label=r"$\overline{z}_{mld}$")
+ax.axhline(mld_mean[0], ls='--', lw=1.5, color='k', alpha=1, label=r"$\overline{z}_{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='tab:green', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
+ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='k', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
 
 # Plot CCE1 potential density decor scale
 ax.plot(Lt[0,:],depth_pos_m,'.-', color='tab:green', label='CCE1')
@@ -207,10 +207,10 @@ ax.grid(True,linestyle='--',alpha=0.3)
 ax = ax_flat[1]
 
 # Plot CCE1 potential density decor scale
-ax.plot(Lt[1,:],depth_pos_m,'.-', color='tab:red', label='CCE2')
+ax.plot(Lt[1,:],depth_pos_m,'.-', color='k', label='CCE2')
 
 # Plot standard error of the mean
-ax.fill_betweenx(depth_pos_m, Lt[1,:] - Lt_stdm[1,:], Lt[1,:] + Lt_stdm[1,:], color='tab:red', alpha=0.5)
+ax.fill_betweenx(depth_pos_m, Lt[1,:] - Lt_stdm[1,:], Lt[1,:] + Lt_stdm[1,:], color='k', alpha=0.5)
 
 # Plot the mean mixed layer depth 
 ax.axhline(mld_mean[1], ls='--', lw=1.5, color='tab:red', alpha=1)
@@ -254,10 +254,10 @@ ax.grid(True,linestyle='--',alpha=0.3)
 ax = ax_flat[2]
 
 # Plot CCE1 potential density decor scale
-ax.plot(Lt[2,:],depth_pos_m,'.-', color='tab:blue', label='CCE3')
+ax.plot(Lt[2,:],depth_pos_m,'.-', color='k', label='CCE3')
 
 # Plot standard error of the mean
-ax.fill_betweenx(depth_pos_m, Lt[2,:] - Lt_stdm[2,:], Lt[2,:] + Lt_stdm[2,:], color='tab:blue', alpha=0.5)
+ax.fill_betweenx(depth_pos_m, Lt[2,:] - Lt_stdm[2,:], Lt[2,:] + Lt_stdm[2,:], color='k', alpha=0.5)
 
 # Plot the mean mixed layer depth 
 ax.axhline(mld_mean[2], ls='--', lw=1.5, color='tab:blue', alpha=1)

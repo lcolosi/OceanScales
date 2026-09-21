@@ -1,11 +1,12 @@
 # =============================================================================
-# Figure S04
+# Figure S03
 # =============================================================================
 #
 # Caption:
-#   (a) Winter (DJF), (b) Spring (MAM), (c) Summer (JJA), (d) Fall (SON) 
-#   Advection time scale in the study domain. Black contour lines are the ocean
-#   topography with 200 and 2000 meter isobaths highlighted as solid black lines. 
+#   (a) First baroclinic Rossby Radius of deformation and (b) Root-Mean-Square 
+#   velocity with time-mean velocity vectors in the study domain. Black contour 
+#   lines are the ocean topography with 200 and 2000 meter isobaths highlighted as
+#   solid black lines. 
 #
 # Author:
 #   Luke Colosi
@@ -71,10 +72,10 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm advective time scale, bathymetry, CCE, and CalCOFI data
+# Load MITgcm Rossby radius/RMS velocity, bathymetry, CCE, and CalCOFI data
 # -----------------------------------------------------------------------------
 
-# --- Advective Time Scales --- # 
+# --- Rossby Radius and RMS Velocity --- # 
 
 # Set path to processed regional MITgcm data
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
@@ -88,7 +89,10 @@ nc = Dataset(filename_mitgcm, 'r')
 # Extract data variables
 lon     = nc.variables['lon'][:]
 lat     = nc.variables['lat'][:]
-T_adv   = nc.variables['T_ADV_season'][:]
+Rd      = nc.variables['ROSSBY_RADIUS_full'][:]
+U_rms   = nc.variables['U_RMS_full'][:]
+u_mean  = nc.variables['UVEL_full'][:]
+v_mean  = nc.variables['VVEL_full'][:]
 
 # --- Bathymetry --- # 
 
@@ -129,7 +133,7 @@ calCOFI_lat   = calCOFI_line80[:, 1]
 calCOFI_lon   = calCOFI_line80[:, 2]
 
 # -----------------------------------------------------------------------------
-# Plot regional advective time scales  
+# Plot regional Rossby Radius of Deformation and RMS velocity 
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
@@ -139,188 +143,350 @@ xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(0,3.5+0.05,0.05) 
-ticks  = np.arange(0,3.5+0.5,0.5) 
+levels_Rd = np.arange(0,30+0.5,0.5) 
+ticks_Rd  = np.arange(0,30+5,5) 
+levels_U_rms = np.arange(0.10,0.22+0.0025,0.0025)
+ticks_U_rms  = np.arange(0.10,0.22+0.02,0.02)
+skip = 2
 levels_is = np.arange(100,300+100,100)
 levels_ms = np.arange(1000,3000+500,500)
 fontsize_g = 18
 fontsize_c = 10
-cmap = cmo.tempo
+cmap_Rd = cmo.tempo
+cmap_U_rms = cmo.speed
 
 # Create figure
-fig, axes = plt.subplots(2,2, figsize=(20, 13), subplot_kw={"projection": projection})
+fig, axes = plt.subplots(1,2,figsize=(18, 12), subplot_kw={"projection": projection})
 
-# Flatten axes array 
-ax_flat = axes.flatten()
+# --- Subplot 1 --- # 
+ax = axes[0]
 
-# Loop through seasons
-for i, season in enumerate(['DJF', 'MAM', 'JJA', 'SON']):
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
 
-    # --- Subplot 1 --- #  
-    ax = ax_flat[i]
+# Plot First Baroclinic Rossby Radius of deformation 
+ct = ax.contourf(
+    lon, 
+    lat, 
+    Rd[1,:,:], 
+    levels=levels_Rd,
+    transform=ccrs.PlateCarree(),
+    cmap=cmap_Rd, 
+    extend='max'
+)
 
-    # Plot coastlines and land 
-    set_coastlines(
-        ax, 
-        projection, 
-        resolution, 
-        lon_min=lon_min, 
-        lon_max=lon_max, 
-        lat_min=lat_min, 
-        lat_max=lat_max
-    ) 
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
 
-    # Plot decorrelation time scales
-    ct = ax.contourf(
-        lon, 
-        lat, 
-        T_adv[i,:,:], 
-        levels=levels,
-        transform=ccrs.PlateCarree(),
-        cmap=cmap, 
-        extend='both'
-    )
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
 
-    # Plot the CCE1 mooring point
-    ax.scatter(
-        lon1, 
-        lat1, 
-        color='w',
-        edgecolor='black', 
-        marker='^', 
-        s=40, 
-        transform=ccrs.PlateCarree(),
-        zorder=10, 
-        label='CCE1'
-    )
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
 
-    # Plot the CCE2 mooring point
-    ax.scatter(
-        lon2, 
-        lat2, 
-        color='w',  
-        edgecolor='black', 
-        marker='s', 
-        s=40,  
-        transform=ccrs.PlateCarree(),
-        zorder=10, 
-        label='CCE2'
-    )
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
 
-    # Plot the CCE3 mooring point
-    ax.scatter(
-        lon3, 
-        lat3, 
-        color= 'w',  
-        edgecolor='black', 
-        marker='o', 
-        s=40,  
-        transform=ccrs.PlateCarree(),
-        zorder=10, 
-        label='CCE3'
-    )
+# Plot Line 80 CalCOFI Stations
+ax.plot(
+    calCOFI_lon % 360, 
+    calCOFI_lat,
+    color='k',
+    linestyle=(0, (5, 3)),  
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+)
 
-    # Plot depth contour lines
-    ct1 = ax.contour(
-        lon_b, 
-        lat_b, 
-        -1*(bathy),
-        levels=levels_ms, 
-        colors='black', 
-        linewidths=0.5, 
-        linestyles='dashed'
-    )
-    ct2 = ax.contour(
-        lon_b, 
-        lat_b, 
-        -1*(bathy),
-        levels=[2000], 
-        colors='black', 
-        linewidths=1, 
-        linestyles='solid'
-    )
-    ct3 = ax.contour(
-        lon_b, 
-        lat_b, 
-        -1*(bathy),
-        levels=levels_is, 
-        colors='black', 
-        linewidths=0.5, 
-        linestyles='dashed'
-    )
-    ct4 = ax.contour(
-        lon_b, 
-        lat_b, 
-        -1*(bathy),
-        levels=[200], 
-        colors='black', 
-        linewidths=1, 
-        linestyles='solid'
-    )
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
+    xlabels=True,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
 
-    # Plot Line 80 CalCOFI Stations
-    ax.plot(
-        calCOFI_lon % 360, 
-        calCOFI_lat,
-        color='k',
-        linestyle=(0, (5, 3)),  
-        linewidth=1.5,
-        transform=ccrs.PlateCarree(),
-    )
+# Create colormap
+cax = plt.axes([0.18, 0.685, 0.25, 0.02])
+cbar = set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="horizontal",
+    extend="max",
+    label='Rossby Deformation Radius (km)',
+    fontsize=fontsize_g,
+    ticks=ticks_Rd, 
+    invert = False
+)
+cbar.ax.xaxis.set_ticks_position("top")
+cbar.ax.xaxis.set_label_position("top")
 
-    # Set grid ticks 
-    set_grid_ticks(
-        ax,
-        xticks=xticks,
-        yticks=yticks,
-        xlabels=True,
-        ylabels=True,
-        grid=True,
-        fontsize=fontsize_g,
-        color='k',
-        lw=1,
-        ls='--',
-        alpha=0.1
-    )
+# Add a 20-km scale bar
+add_scalebar(
+    ax, 
+    length_km=20, 
+    location=(0.925, 0.78),
+    linewidth=1, 
+    text_kwargs=dict(fontsize=12, color='white', weight='bold')
+)
 
-    # Set title 
-    ax.set_title(f"{season}", fontsize=20)
+# --- Subplot 2 --- # 
+ax = axes[1]
 
-    if i == 0:
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
 
-        # Create colormap
-        cax = plt.axes([0.92, 0.29, 0.02, 0.4])
-        set_cbar(
-            ct,
-            cax,
-            fig,
-            orientation="vertical",
-            extend="both",
-            label='Advective Time Scale (days)',
-            fontsize=fontsize_g,
-            ticks=ticks, 
-            invert = False
-        )
-        
-        # Add a 20-km scale bar
-        add_scalebar(
-            ax, 
-            length_km=20, 
-            location=(0.925, 0.78),
-            linewidth=1, 
-            text_kwargs=dict(fontsize=14, color='white', weight='bold')
-        )
+# Plot Root-Mean-Square Velocity 
+ct = ax.contourf(
+    lon, 
+    lat, 
+    U_rms, 
+    levels=levels_U_rms,
+    transform=ccrs.PlateCarree(),
+    cmap=cmap_U_rms, 
+    extend='both'
+)
+
+# Plot the Root-Mean-Square velocity vectors 
+q = ax.quiver(
+    lon[::skip], 
+    lat[::skip], 
+    u_mean[::skip, ::skip], 
+    v_mean[::skip, ::skip],
+    transform=ccrs.PlateCarree(), 
+    linewidth=0.5, 
+    scale=5, 
+    width=0.001, 
+    color='k', 
+    zorder=5,
+)
+
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
+
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
+
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
+
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+
+# Plot Line 80 CalCOFI Stations
+ax.plot(
+    calCOFI_lon % 360, 
+    calCOFI_lat,
+    color='k',
+    linestyle=(0, (5, 3)),  
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+)
+
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
+    xlabels=True,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
+
+# Create colormap
+cax = plt.axes([0.6, 0.685, 0.25, 0.02])
+cbar = set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="horizontal",
+    extend="both",
+    label='Root-Mean-Square Velocity (m/s)',
+    fontsize=fontsize_g,
+    ticks=ticks_U_rms, 
+    invert = False
+)
+cbar.ax.xaxis.set_ticks_position("top")
+cbar.ax.xaxis.set_label_position("top")
+
+# Plot a quiver key for the velocity vectors
+ax.quiverkey(
+    q,
+    X=0.88,
+    Y=0.8,
+    U=0.1,
+    label=r"$0.1\ \mathrm{m}/\mathrm{s}$",
+    labelpos="E",
+    coordinates="axes",
+    fontproperties={"size": 12}
+)
 
 # Label each subplot
 pos = [0.96, 0.94]
-add_corner_label(ax_flat[0], pos, 'A', fontsize = 18)
-add_corner_label(ax_flat[1], pos, 'B', fontsize = 18)
-add_corner_label(ax_flat[2], pos, 'C', fontsize = 18)
-add_corner_label(ax_flat[3], pos, 'D', fontsize = 18)
+add_corner_label(axes[0], pos, 'A', fontsize = 16)
+add_corner_label(axes[1], pos, 'B', fontsize = 16)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "figS04.png",
+    PATH_figs / "figS03.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
