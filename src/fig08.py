@@ -316,8 +316,8 @@ ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 20), text
             rotation=0, ha='center', va='top', fontsize=10)
 
 # Plot the mean power spectrum at CCE1 for the model and observations
-ax.loglog(freq_m[1:], psd_m_depth[0,1:], '-', color='dimgray', linewidth=1.5, label='model')
-ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1.5, alpha=0.7, label='obs')
+ax.loglog(freq_m[1:], psd_m_depth[0,1:], '-', color='dimgray', linewidth=1.5, label='Model')
+ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1.5, alpha=0.7, label='Obs')
 
 # Plot the 95% confidence interval of the mean power spectrum 
 ax.fill_between(freq_m[1:], psd_CI_m_depth[0,1:,0], psd_CI_m_depth[0,1:,1], color='dimgray', alpha=0.25)

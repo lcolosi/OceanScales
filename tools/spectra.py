@@ -587,7 +587,11 @@ def spectral_slope(
 
 
 #--- Compute spectral diagnostics ---#
-def spectral_diags(psd, f, f_cutoff=None):
+def spectral_diags(
+    psd, 
+    f, 
+    f_cutoff=None,
+):
 
     """
     Compute spectral moments, partitioned variance ratios, and mean period.
@@ -725,3 +729,152 @@ def spectral_diags(psd, f, f_cutoff=None):
         mean_period = np.nan
 
     return moments, FVE, mean_period
+
+#--- Generate 1D data from a power law spectrum ---# 
+def generate_powerlaw_data(
+    N=2**12, 
+    alpha=2.0, 
+    random_state=None, 
+    dt=1.0,
+):
+    
+    """
+    Generate a synthetic data record with a power-law spectrum S(f) ~ f^(-alpha).
+    Normalized PSD so that the variance of the time series matches Parseval's theorem.
+
+    Parameters
+    ----------
+    N : int
+        Length of the time series (preferably a power of 2 for FFT efficiency).
+    alpha : float
+        Spectral slope (e.g., alpha=0 white noise, alpha=1 pink noise, alpha=2 red noise).
+    random_state : int or None
+        Seed for reproducibility.
+    dt : float
+        Sampling interval (arbitrary units).
+
+    Returns
+    -------
+    t : ndarray
+        Time or spatial array (0..N-1).
+    x : ndarray
+        Generated data record.
+    f : ndarray
+        Frequencies corresponding to PSD (cycles per unit)
+    psd : ndarray
+        Power spectral density of the generated series.
+    """
+
+    #-----------------------------------------------------------------------
+    # Set frequencies, amplitudes, and phases for Fourier Coefficients 
+    #-----------------------------------------------------------------------
+
+    # Create a new random number generator object for phases (for reproducable results)
+    rng = np.random.default_rng(random_state)
+
+    # Set frequencies for FFT (nonnegative with length N//2 + 1 from 0 to nyquist frequency)
+    freqs = np.fft.rfftfreq(N, d=dt)  # assume unit sampling interval
+
+    # Avoid divide-by-zero at f=0
+    freqs[0] = 1e-6  
+
+    # Power-law amplitude scaling 
+    amplitude = freqs**(-alpha / 2.0)
+
+    ###################
+    # Note
+    # ----
+    # We need scale the Fourier amplitudes so that when squared (for computing the power spectrum), 
+    # they follow the desired f^(-alpha) power law. Recall the power spectrum is square of the 
+    # Fourier coefficients
+    # 
+    # S(f) = |X(f)|^2
+    # 
+    # Therefore, in order for S(f) ~ f^(-alpha), we need: 
+    # 
+    # |X(f)|^2 = f^(-alpha)  ->  |X(f)| = (f^(-alpha))^1/2 = f^(-alpha/2)
+    ###################
+
+    # Generate random phases uniformly distributed [0, 2pi)
+    phases = rng.uniform(0, 2*np.pi, size=freqs.shape)
+
+    ###################
+    # Note
+    # ----
+    # The power spectrum S(f) tells us how much variance lives at each frequency but it does
+    # not tell us what the waveform looks like. To actually construct a time series, you need
+    # the complex Fourier coefficients: 
+    # 
+    # X(f) = |X(f)| e^(i phi(f)) = |X(f)| (cos(phi(f)) + i * sin(phi(f)))
+    # 
+    # where |X(f)| are the amplitudes of the Fourier coefficients and phi(f) are the phases. 
+    # The phases must be randomized to ensure that energy is spread out in time in a
+    # realistic, stochastic way. That is, to ensure create a statistically stationary time series
+    # that has no artificial coherence (e.g., if the phases were fixed at the same value, at 
+    # at the beginning of the record, there would be a perfectly aligned sum of sinusoids that
+    # might look like a standing wave). 
+    ###################
+
+    #-----------------------------------------------------------------------
+    # Compute Fourier Coefficients and build spectrum 
+    #-----------------------------------------------------------------------
+
+    # Complex Fourier coefficients
+    fourier_coeffs = amplitude * np.exp(1j * phases)
+
+    # Enforce reality conditions
+    fourier_coeffs[0] = amplitude[0]               # DC component real
+    if N % 2 == 0:
+        fourier_coeffs[-1] = amplitude[-1]         # Nyquist real
+
+    #-----------------------------------------------------------------------
+    # Compute data record
+    #-----------------------------------------------------------------------
+
+    # Generate time or space vector
+    t = np.arange(N)
+
+    # Inverse FFT to time or space domain
+    x = np.fft.irfft(fourier_coeffs, n=N)
+
+    # Normalize to unit variance and zero mean 
+    x = (x - np.mean(x)) / np.std(x)
+    
+    ###################
+    # Note
+    # ----
+    # We normalize to unit variance so the data record's realizations are comparable. 
+    # We can then rescale to whatever variance we need based on observations. 
+    ###################
+
+    #-----------------------------------------------------------------------
+    # Compute Variance preserving PSD
+    #-----------------------------------------------------------------------
+
+    # Set spectral parameters
+    df = 1 / (N * dt)
+    L = N // 2 + 1 if N % 2 == 0 else (N + 1) // 2
+
+    # Detrend time series
+    x_dt = x - np.mean(x) #detrend(x)
+    
+    # Compute FFT of the time series
+    fft_data = np.fft.fft(x_dt) 
+    
+    # Take squared modulus of the Fourier coefficients
+    amp = np.abs(fft_data) ** 2
+    
+    # Grab positive frequencies for single-sided PSD
+    amp_pos = amp[:L]
+    
+    # Double the amplitude for positive frequencies to conserve variance
+    if N % 2 == 0:
+        amp_pos[1:-1] *= 2
+    else:
+        amp_pos[1:] *= 2
+    
+    # Normalize power spectral density
+    psd = amp_pos / (N**2 * df)
+
+    return t, x, freqs, psd
+
