@@ -736,11 +736,16 @@ def generate_powerlaw_data(
     alpha=2.0, 
     random_state=None, 
     dt=1.0,
+    random_amplitudes=False,
+    normalization="sample",
+    target_variance=1.0,
 ):
     
     """
     Generate a synthetic data record with a power-law spectrum S(f) ~ f^(-alpha).
-    Normalized PSD so that the variance of the time series matches Parseval's theorem.
+
+    The record is normalized to zero mean and unit variance, and the returned
+    one-sided PSD is variance preserving (sum(psd) * df = var(x), Parseval's theorem).
 
     Parameters
     ----------
@@ -752,122 +757,327 @@ def generate_powerlaw_data(
         Seed for reproducibility.
     dt : float
         Sampling interval (arbitrary units).
+    random_amplitudes : bool
+        If False, use fixed Fourier amplitudes and random phases such that the
+        spectrum of every realization follows the target power law exactly.
+        If True, generate independent Gaussian real and imaginary Fourier
+        components such that the target power law is the ensemble-mean spectrum.
+    normalization : {"sample", "expected", None}
+        Method used to scale the variance of the generated record.
+        If "sample", each realization is normalized by its own sample
+        standard deviation so that its variance equals target_variance
+        exactly. If "expected", all realizations are scaled by the same
+        deterministic factor so that the ensemble-expected variance equals
+        target_variance while allowing finite-realization variance to
+        fluctuate naturally. If None, no variance normalization is applied.
+    target_variance : float
+        Desired variance of the generated process when normalization is
+        "sample" or "expected". For "sample", every realization has exactly
+        this variance. For "expected", this specifies the ensemble-expected
+        variance, while individual realizations may differ from it. Ignored
+        when normalization is None.
 
     Returns
     -------
     t : ndarray
-        Time or spatial array (0..N-1).
+        Time or spatial coordinate, from 0 to (N-1)*dt.
     x : ndarray
         Generated data record.
     f : ndarray
-        Frequencies corresponding to PSD (cycles per unit)
+        Frequencies corresponding to PSD (cycles per unit), from 0 to Nyquist.
     psd : ndarray
-        Power spectral density of the generated series.
+        One-sided power spectral density of the generated series.
+
+    Notes
+    -----
+    Two methods are available for generating the Fourier coefficients:
+
+    1. Fixed amplitudes with random phases (random_amplitudes=False)
+
+       Only the Fourier phases are random. The amplitudes are fixed at
+
+           |X(f)| = f^(-alpha/2),
+
+       so the periodogram of every realization follows the target power law
+       exactly, apart from the final normalization to unit variance.
+
+    2. Gaussian Fourier coefficients (random_amplitudes=True)
+
+       The real and imaginary parts of each Fourier coefficient are independent
+       Gaussian random variables. The coefficients are constructed as
+
+           X(f) = sqrt(S(f)/2) * (a + i*b),
+
+       where a and b are independent standard normal random variables and
+
+           S(f) = f^(-alpha).
+
+       This gives
+
+           E[|X(f)|^2] = S(f),
+
+       so the target power law represents the ensemble-mean spectrum rather
+       than the exact spectrum of each realization. Individual realizations
+       therefore contain the expected chi-squared sampling variability in
+       Fourier power.
+
+    In both cases, the spectrum is band-limited to
+    f = 1/(N*dt), ..., 1/(2*dt), with no power at f = 0. The resulting record
+    is periodic over its length and contains no unresolved variability at
+    periods longer than the record length.
+
     """
 
     #-----------------------------------------------------------------------
-    # Set frequencies, amplitudes, and phases for Fourier Coefficients 
+    # Set frequencies and target power-law spectrum
     #-----------------------------------------------------------------------
 
-    # Create a new random number generator object for phases (for reproducable results)
+    # Create a new random number generator object (for reproducible results)
     rng = np.random.default_rng(random_state)
 
-    # Set frequencies for FFT (nonnegative with length N//2 + 1 from 0 to nyquist frequency)
-    freqs = np.fft.rfftfreq(N, d=dt)  # assume unit sampling interval
+    # Set non-negative frequencies for FFT 
+    freqs = np.fft.rfftfreq(N, d=dt)
 
-    # Avoid divide-by-zero at f=0
-    freqs[0] = 1e-6  
+    # Initialize target power spectrum
+    spectrum = np.zeros_like(freqs)
 
-    # Power-law amplitude scaling 
-    amplitude = freqs**(-alpha / 2.0)
-
-    ###################
-    # Note
-    # ----
-    # We need scale the Fourier amplitudes so that when squared (for computing the power spectrum), 
-    # they follow the desired f^(-alpha) power law. Recall the power spectrum is square of the 
-    # Fourier coefficients
-    # 
-    # S(f) = |X(f)|^2
-    # 
-    # Therefore, in order for S(f) ~ f^(-alpha), we need: 
-    # 
-    # |X(f)|^2 = f^(-alpha)  ->  |X(f)| = (f^(-alpha))^1/2 = f^(-alpha/2)
-    ###################
-
-    # Generate random phases uniformly distributed [0, 2pi)
-    phases = rng.uniform(0, 2*np.pi, size=freqs.shape)
+    # Compute power-law spectrum (leaving zero-frequency with zero power)
+    spectrum[1:] = freqs[1:]**(-alpha)
 
     ###################
     # Note
     # ----
-    # The power spectrum S(f) tells us how much variance lives at each frequency but it does
-    # not tell us what the waveform looks like. To actually construct a time series, you need
-    # the complex Fourier coefficients: 
-    # 
-    # X(f) = |X(f)| e^(i phi(f)) = |X(f)| (cos(phi(f)) + i * sin(phi(f)))
-    # 
-    # where |X(f)| are the amplitudes of the Fourier coefficients and phi(f) are the phases. 
-    # The phases must be randomized to ensure that energy is spread out in time in a
-    # realistic, stochastic way. That is, to ensure create a statistically stationary time series
-    # that has no artificial coherence (e.g., if the phases were fixed at the same value, at 
-    # at the beginning of the record, there would be a perfectly aligned sum of sinusoids that
-    # might look like a standing wave). 
+    # The target power spectrum is
+    #
+    # S(f) ~ f^(-alpha).
+    #
+    # Because the power at a given Fourier frequency is proportional to the
+    # squared magnitude of the Fourier coefficient,
+    #
+    # S(f) = |X(f)|^2,
+    #
+    # the corresponding characteristic Fourier amplitude is
+    #
+    # |X(f)| = sqrt(S(f)) = f^(-alpha/2).
+    #
+    # For the fixed-amplitude method, this amplitude is imposed exactly at
+    # every frequency. For the Gaussian method, S(f) instead specifies the
+    # expected squared magnitude of the Fourier coefficient:
+    #
+    # E[|X(f)|^2] = S(f).
     ###################
 
     #-----------------------------------------------------------------------
     # Compute Fourier Coefficients and build spectrum 
     #-----------------------------------------------------------------------
 
-    # Complex Fourier coefficients
-    fourier_coeffs = amplitude * np.exp(1j * phases)
+    if random_amplitudes:
 
-    # Enforce reality conditions
-    fourier_coeffs[0] = amplitude[0]               # DC component real
-    if N % 2 == 0:
-        fourier_coeffs[-1] = amplitude[-1]         # Nyquist real
+        # Generate independent standard-normal real and imaginary components
+        a = rng.standard_normal(freqs.size)
+        b = rng.standard_normal(freqs.size)
+
+        ###################
+        # Note
+        # ----
+        # To generate Gaussian Fourier coefficients, let
+        #
+        # a, b ~ N(0, 1)
+        #
+        # be independent standard normal random variables and define
+        #
+        # X(f) = sqrt(S(f)/2) * (a + i*b).
+        #
+        # The standard normal variables provide the random Gaussian part,
+        # while sqrt(S(f)/2) sets the variance at each frequency according
+        # to the target spectrum.
+        #
+        # Since
+        #
+        # Re[X(f)] = sqrt(S(f)/2) * a
+        # Im[X(f)] = sqrt(S(f)/2) * b,
+        #
+        # each component has variance S(f)/2. Therefore,
+        #
+        # E[|X(f)|^2]
+        #     = E[Re(X)^2] + E[Im(X)^2]
+        #     = S(f)/2 + S(f)/2
+        #     = S(f).
+        #
+        # Both the amplitude and phase therefore vary among realizations.
+        # The phase is uniformly distributed from 0 to 2*pi, while the
+        # Fourier power fluctuates around S(f).
+        ###################
+
+        # Generate complex Gaussian Fourier coefficients
+        fourier_coeffs = np.sqrt(spectrum / 2.0) * (a + 1j * b)
+
+        # Enforce zero power at zero frequency
+        fourier_coeffs[0] = 0.0
+
+        # The Nyquist coefficient must be real for an even-length real-valued
+        # time series. Use variance S rather than S/2 because there is only
+        # one independent real component at this frequency.
+        if N % 2 == 0:
+            fourier_coeffs[-1] = np.sqrt(spectrum[-1]) * a[-1]
+
+    else:
+
+        # Compute fixed Fourier amplitudes
+        amplitude = np.sqrt(spectrum)
+
+        # Generate random phases uniformly distributed over [0, 2*pi)
+        phases = rng.uniform(0, 2*np.pi, size=freqs.shape)
+
+        ###################
+        # Note
+        # ----
+        # The power spectrum S(f) tells us how much variance lives at each
+        # frequency but does not determine the waveform in time. To construct
+        # a time series, we need complex Fourier coefficients:
+        #
+        # X(f) = |X(f)| exp(i*phi(f))
+        #      = |X(f)| [cos(phi(f)) + i*sin(phi(f))].
+        #
+        # Here the Fourier amplitudes are fixed:
+        #
+        # |X(f)| = sqrt(S(f)) = f^(-alpha/2),
+        #
+        # while the phases are independently randomized. Therefore,
+        #
+        # |X(f)|^2 = S(f)
+        #
+        # for every realization. Different realizations have different
+        # waveforms because their phases differ, but their Fourier powers
+        # are identical before normalization.
+        ###################
+
+        # Generate complex Fourier coefficients
+        fourier_coeffs = amplitude * np.exp(1j * phases)
+
+        # Enforce zero power at zero frequency
+        fourier_coeffs[0] = 0.0
+
+        # The Nyquist coefficient must be real for an even-length real-valued
+        # time series
+        if N % 2 == 0:
+            fourier_coeffs[-1] = amplitude[-1]
 
     #-----------------------------------------------------------------------
     # Compute data record
     #-----------------------------------------------------------------------
 
     # Generate time or space vector
-    t = np.arange(N)
+    t = np.arange(N) * dt
 
     # Inverse FFT to time or space domain
     x = np.fft.irfft(fourier_coeffs, n=N)
 
-    # Normalize to unit variance and zero mean 
-    x = (x - np.mean(x)) / np.std(x)
-    
-    ###################
-    # Note
-    # ----
-    # We normalize to unit variance so the data record's realizations are comparable. 
-    # We can then rescale to whatever variance we need based on observations. 
-    ###################
+    #-----------------------------------------------------------------------
+    # Normalize data record
+    #-----------------------------------------------------------------------
+
+    # Remove any residual numerical mean
+    x = x - np.mean(x)
+
+    if normalization == "sample":
+
+        # Normalize each realization by its own sample variance
+        x = x * np.sqrt(target_variance) / np.std(x)
+
+        ###################
+        # Note
+        # ----
+        # Sample normalization forces every realization to have exactly the
+        # specified target variance. This is useful when we are interested in
+        # differences in temporal or spectral structure rather than differences
+        # in the total variance among realizations.
+        #
+        # Because each realization is divided by its own standard deviation,
+        # realization-to-realization variability in the total variance is removed.
+        ###################
+
+
+    elif normalization == "expected":
+
+        # Compute expected variance from the target Fourier spectrum
+        if N % 2 == 0:
+
+            # Interior positive frequencies occur as positive/negative pairs,
+            # while the Nyquist frequency occurs only once.
+            variance_expected = (
+                2.0 * np.sum(spectrum[1:-1])
+                + spectrum[-1]
+            ) / N**2
+
+        else:
+
+            # For odd N, all positive frequencies have corresponding
+            # negative-frequency partners.
+            variance_expected = (
+                2.0 * np.sum(spectrum[1:])
+            ) / N**2
+
+        # Apply the same deterministic scaling to every realization
+        x *= np.sqrt(target_variance / variance_expected)
+
+        ###################
+        # Note
+        # ----
+        # Expected-variance normalization scales the process so that its
+        # ensemble-expected variance equals target_variance:
+        #
+        # E[var(x)] ~ target_variance.
+        #
+        # Importantly, the scaling factor is determined only from the prescribed
+        # target spectrum and is therefore the same for every realization.
+        # Individual finite realizations are NOT forced to have exactly the target
+        # variance.
+        #
+        # For random_amplitudes=True, this preserves the natural sampling
+        # variability in total variance among realizations while placing the
+        # ensemble on a physically meaningful variance scale.
+        ###################
+
+
+    elif normalization is None:
+
+        ###################
+        # Note
+        # ----
+        # No variance normalization is applied. The variance is determined
+        # directly by the numerical magnitude of the prescribed Fourier spectrum.
+        #
+        # Because S(f) = f^(-alpha) contains no physical normalization constant,
+        # the absolute variance in this case generally has arbitrary units and
+        # depends on N, dt, alpha, and the frequency range.
+        ###################
+
+        pass
+
+
+    else:
+        raise ValueError(
+            "normalization must be 'sample', 'expected', or None"
+        )
 
     #-----------------------------------------------------------------------
-    # Compute Variance preserving PSD
+    # Compute variance-preserving PSD
     #-----------------------------------------------------------------------
 
     # Set spectral parameters
     df = 1 / (N * dt)
-    L = N // 2 + 1 if N % 2 == 0 else (N + 1) // 2
 
-    # Detrend time series
-    x_dt = x - np.mean(x) #detrend(x)
+    # Demean time series
+    x_dt = x - np.mean(x)
     
-    # Compute FFT of the time series
-    fft_data = np.fft.fft(x_dt) 
+    # Compute one-sided FFT of the time series
+    fft_data = np.fft.rfft(x_dt) 
     
     # Take squared modulus of the Fourier coefficients
-    amp = np.abs(fft_data) ** 2
+    amp_pos = np.abs(fft_data)**2
     
-    # Grab positive frequencies for single-sided PSD
-    amp_pos = amp[:L]
-    
-    # Double the amplitude for positive frequencies to conserve variance
+    # Double power at positive frequencies to conserve variance
     if N % 2 == 0:
         amp_pos[1:-1] *= 2
     else:
@@ -877,4 +1087,3 @@ def generate_powerlaw_data(
     psd = amp_pos / (N**2 * df)
 
     return t, x, freqs, psd
-

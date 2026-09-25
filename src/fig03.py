@@ -24,13 +24,11 @@
 # =============================================================================
 
 # Import libraries 
-import os
 import sys
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-import mpmath as mp
-import xarray as xr
+from netCDF4 import Dataset
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,7 +43,6 @@ sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
 from plotting import add_corner_label
-from autocorr import autocorrelation_analytic, decorrelation_scale_analytic
 
 # -----------------------------------------------------------------------------
 # Set plotting parameters 
@@ -61,86 +58,30 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Set parameters for Autocorrelation calculation
+# Load Analytic autocorrelation and decorrelation-scale estimates
 # -----------------------------------------------------------------------------
 
-# Set sampling parameters (units: days)
-dt = 1/24                                         # Sampling interval 
-T_ac  = np.array([3/12, 6/12, 8/12, 1]) * (365)   # Record duration
+# Set filename to saved the netcdf file
+filename = PATH_data / "analytic" / f"analytic_decor_scale.nc"
 
-# Set maximum and minimum frequency in units of cpd
-fmax = 1/dt                                         
-fmin_values_ac = 1/T_ac               
+# Load in data
+with Dataset(filename, "r") as nc:
 
-# Set spectral slope values 
-alpha_values_ac = [1.5, 2.0, 3.0, 4.0, 5.0]
+    # Load analytic autocorrelation and decorrelation scale
+    rho     = nc.variables["autocorr"][:]
+    T_tilde = nc.variables["decor_scale"][:]
 
-# Convert time to units of months 
+    # Load coordinates
+    tau             = nc.variables["lag"][:]
+    T_ac            = nc.variables["duration_ac"][:]
+    T_ds            = nc.variables["duration_ds"][:]
+    alpha_values_ac = nc.variables["slope_ac"][:]
+    alpha_values_ds = nc.variables["slope_ds"][:]
+
+# Convert from days to months
 days_per_month = 365 / 12 
-T_months_ac = T_ac / days_per_month
-
-# Set time lag (units: days)
-tau = np.linspace(dt, max(T_ac), 200) 
-
-# Set precision for complex special functions
-mp.dps = 25
-
-# -----------------------------------------------------------------------------
-# Compute autocorrelation 
-# -----------------------------------------------------------------------------
-
-# Set dimension lengths
-nfmin, nalpha, ntau = len(fmin_values_ac), len(alpha_values_ac), len(tau)
-
-# Initialize array
-rho = np.zeros((ntau, nfmin, nalpha))
-
-# Loop through f_min 
-for i, fmin in enumerate(fmin_values_ac):
-
-    # Loop through spectral slope
-    for j, alpha in enumerate(alpha_values_ac):
-
-        # Compute the autocorrelation function 
-        _, rho[:,i,j], _ = autocorrelation_analytic(tau, fmin, fmax, alpha)
-
-# -----------------------------------------------------------------------------
-# Set parameters for decorrelation scale calculation
-# -----------------------------------------------------------------------------
-
-# Set sampling parameters (units: days) 
-dt = 1/24                                                     # Sampling interval
-T_ds = np.flipud(np.arange(0.025, 1 + 0.025, 0.025) * (365))  # Record duration 
-
-# Set maximum and minimum frequency in units of cpd
-fmax = 1/dt                                         
-fmin_values_ds = 1/T_ds               
-
-# Set spectral slope values 
-alpha_values_ds = np.arange(0.1,5+0.1,0.1)
-
-# Convert time to units of months 
-days_per_month = 365 / 12 
-T_months_ds = T_ds / days_per_month
-
-# -----------------------------------------------------------------------------
-# Compute decorrelation scale 
-# -----------------------------------------------------------------------------
-
-# Set parameters
-nfmin, nalpha = len(fmin_values_ds), len(alpha_values_ds)
-
-# Initialize array
-T_tilde = np.zeros((nfmin, nalpha))
-
-# Loop through f_min
-for i, fmin in enumerate(fmin_values_ds):
-
-    # Loop through spectral slope
-    for j, alpha in enumerate(alpha_values_ds):
-
-        # Compute the decorrelation scale (units: days)
-        T_tilde[i,j], _ = decorrelation_scale_analytic(fmin, fmax, alpha) 
+T_months_ac    = T_ac / days_per_month
+T_months_ds    = T_ds / days_per_month
 
 # -----------------------------------------------------------------------------
 # Plot Autocorrelation and Decorrelation Scale 
@@ -165,13 +106,18 @@ ax = axes[0,0]
 # Plot a horizontal line at rho equal to zero  
 ax.axhline(0, ls = '--', lw = 1.5, alpha = 0.7, color='k')
 
+# Find indices of alpha values to plot
+idx_alpha_p = [
+    np.where(np.isclose(alpha_values_ac, alpha))[0][0]
+    for alpha in alpha_p
+]
+
 # Loop through alpha values 
-for k in range(0,len(alpha_values_ac[:-1])): 
+for k, idx_alpha in enumerate(idx_alpha_p): 
 
     # Plot the autocorrelation for ith alpha value 
-    ax.plot(tau, rho[:,idx_T_ac,k], '-', lw = 2, 
-            label=rf"$\alpha =$ {np.round(alpha_values_ac[k],1)}",
-              color=colors_decor[k]) 
+    ax.plot(tau, rho[:,idx_T_ac,idx_alpha], '-', lw = 2,color=colors_decor[k], 
+            label=rf"$\alpha =$ {np.round(alpha_values_ac[idx_alpha],1)}") 
 
 # Set axis attributes 
 ax.set_ylabel('Autocorrelation')
@@ -197,7 +143,7 @@ ax.axhline(0, ls = '--', lw = 1.5, alpha = 0.7, color='k')
 for k in range(0,len(T_months_ac)): 
 
     # Plot the ith autocorrelation function for the ith T value 
-    ax.plot(tau, rho[:,k,idx_alpha_ac], '-', lw = 2, label=f"T = {int(T_months_ac[k])} months", color=colors_decor[k]) 
+    ax.plot(tau, rho[:,k,idx_alpha_ac], '-', lw = 2, label=f"T = {int(round(T_months_ac[k]))} months", color=colors_decor[k]) 
 
 # Set axis attributes 
 ax.set_xlabel(r'$\tau$ (days)')
@@ -223,7 +169,7 @@ for k, iT in enumerate(T_months_p):
     idx_T = np.argmin(np.abs(T_months_ds - iT))
 
     # Plot the decorrelation scale as a function of spectral slope
-    ax.plot(alpha_values_ds, T_tilde[idx_T,:], '.-', lw = 2, label=f"T = {int(T_months_ds[idx_T])} months", color=colors_decor[k]) 
+    ax.plot(alpha_values_ds[::2], T_tilde[idx_T,::2], '.-', lw = 2, label=f"T = {int(T_months_ds[idx_T])} months", color=colors_decor[k]) 
 
 # Plot markers for decorrelation scales for alpha = 1.5, 2, 3, 4 and T = 12 months
 idx_t = np.argmin(np.abs(T_months_ds - 12))
@@ -304,50 +250,3 @@ fig.savefig(
     pad_inches=0.1,
     transparent=False
 )
-
-# -----------------------------------------------------------------------------
-# Save data in a netcdf file 
-# -----------------------------------------------------------------------------
-
-# --- Autocorrelation --- # 
-autocorr = xr.DataArray(data=rho,
-                        dims=['lag','duration_ac','slope_ac'],
-                        coords=dict(lag=tau,duration_ac=T_ac,slope_ac=alpha_values_ac),
-                        attrs=dict(
-                            description=(f'Analytic autocorrelation solutions for ' + 
-                                        'a range of window durations and spectral slopes.'),
-                            units='unitless'
-                        )
-)
-
-# --- Decorrelation Scales --- #
-decor_scale = xr.DataArray(data=T_tilde,
-                            dims=['duration_ds','slope_ds'],
-                            coords=dict(duration_ds=T_ds,slope_ds=alpha_values_ds),
-                            attrs=dict(
-                                description=(f'Analytic decorrelation scale solutions for ' + 
-                                            'a range of window durations and spectral slopes.'),
-                                units='days'
-                            )
-)
-
-# Create data set from data arrays 
-data = xr.Dataset({'autocorr':autocorr,'decor_scale':decor_scale})
-
-# Set path to processed data 
-PATH_processed = PATH_data / 'analytic' 
-
-# Set file path for saving the netcdf file
-file_path = PATH_processed / f"analytic_autocor_decor_scale.nc"
-
-# Check if file exists, then delete it
-if os.path.exists(file_path):
-    os.remove(file_path)
-
-# Create netcdf file
-data.to_netcdf(file_path,mode='w')
-
-
-
-
-

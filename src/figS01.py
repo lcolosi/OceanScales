@@ -41,7 +41,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_corner_label, add_x_axis_marker, set_coastlines, set_grid_ticks, set_cbar, add_scalebar
+from plotting import add_corner_label, add_x_axis_marker, set_coastlines, set_grid_ticks
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -136,8 +136,8 @@ PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
 
 # Obtain filename paths
 filename_m    = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
-filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
-filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_gaussian_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_gaussian_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc_m    = Dataset(filename_m, 'r')
@@ -372,10 +372,10 @@ cf = ax.contourf(dist_t,depth_t_pos,fve_t.T, levels=levels_t, cmap=cmap, extend=
 ax.fill_between(dist_wd, water_depth, depth_t_pos[-1], color='0.4') 
 
 # Plot the time-mean mixed layer depth 
-ax.plot(dist_wd, mld_t_mean, '-', color='k', lw=2)
+ax.plot(dist_wd, mld_t_mean, '--', color='k', lw=1.2)
 
 # Plot the standard deviation of the mixed layer depth 
-ax.fill_between(dist_wd, mld_t_mean - mld_t_std, mld_t_mean + mld_t_std, color='k', alpha=0.15)
+ax.fill_between(dist_wd, mld_t_mean - mld_t_std, mld_t_mean + mld_t_std, color='k', alpha=0.1)
 
 # Set axis attributes
 ax.set_xlabel('Distance from shore (km)')
