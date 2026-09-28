@@ -79,7 +79,7 @@ status(f"Starting MITgcm pre-processing for the Rossby Radius Analysis...")
 # Set processing parameters
 option_depth_avg    = 'upper'  
 option_rms          = 'with_mean'
-option_froude       = 'eigenvalue'
+option_froude       = 'dispersion'
 depth_avg_threshold = 200 
 nmode               = 4
 nz_mode             = 512 
@@ -97,10 +97,14 @@ if option_depth_avg not in {"full", "upper"}:
         "option_depth_avg must be either 'full' or 'upper'"
     )
 
-# Validate processing parameters
 if option_rms not in {"with_mean", "without_mean"}:
     raise ValueError(
         "option_rms must be either 'with_mean' or 'without_mean'"
+    )
+
+if option_froude not in {"eigenvalue", "dispersion"}:
+    raise ValueError(
+        "option_froude must be either 'eigenvalue' or 'dispersion'"
     )
 
 # -----------------------------------------------------------------------------
@@ -694,7 +698,7 @@ data.attrs.update({
 # Set file path for saving the netcdf file
 file_path = (
     PATH_preproc
-    / "processed" / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}.nc"
+    / "processed" / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}_{option_froude}.nc"
 )
 
 # Check if file exists, then delete it
