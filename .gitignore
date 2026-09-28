@@ -16,6 +16,7 @@ docs/
 
 # Src directory
 src/__pycache__/
+src/fig_stats/
 
 # Tools directory
 tools/__pycache__/
