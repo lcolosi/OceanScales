@@ -59,6 +59,7 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 option_depth_avg    = 'upper'    
 depth_avg_threshold = 200  
 option_rms          = 'with_mean' 
+option_froude       = 'dispersion'
 
 # Set font and fontsize using LaTeX 
 fontsize=18
@@ -79,7 +80,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_advection_time_scale_reg_{option_depth_avg}_{depth_avg_threshold}m_{option_rms}_{option_froude}.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -160,7 +161,7 @@ set_coastlines(
     lat_max=lat_max
 ) 
 
-# Plot decorrelation time scales
+# Plot advective time scale
 ct = ax.contourf(
     lon, 
     lat, 
@@ -168,7 +169,7 @@ ct = ax.contourf(
     levels=levels,
     transform=ccrs.PlateCarree(),
     cmap=cmap, 
-    extend='both'
+    extend='max'
 )
 
 # Plot the CCE1 mooring point
@@ -280,7 +281,7 @@ set_cbar(
     cax,
     fig,
     orientation="vertical",
-    extend="both",
+    extend="max",
     label='Advective Time Scale (days)',
     fontsize=fontsize_g,
     ticks=ticks, 
