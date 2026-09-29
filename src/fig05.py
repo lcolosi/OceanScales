@@ -6,7 +6,7 @@
 #   Decorrelation time scale in the study domain at 9.6 meter water depth. 
 #   Black contour lines are the ocean topography with 200 and 2000 meter
 #   isobaths highlighted as solid black lines. Decorrelation scales that differ
-#   from the regional spatial mean by less than or equal to one standard error
+#   from the regional spatial medain by less than or equal to one standard error
 #   are considered not statistically significant and are indicated by hatching.
 #
 # Author:
@@ -150,11 +150,11 @@ calCOFI_lon   = calCOFI_line80[:, 2]
 # Compute the relative uncertainty of the decorrelation scale
 # -----------------------------------------------------------------------------
 
-# Compute spatial mean
-Lt_reg_mean = np.ma.median(Lt)
+# Compute spatial median
+Lt_reg_median = np.ma.median(Lt)
 
 # Compute the signal-to-noise ratio (with respect to the regional mean)
-Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm
+Lt_sn_ratio = np.abs(Lt - Lt_reg_median) / Lt_stdm
 
 # Mask not statistically significant grid points
 Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))

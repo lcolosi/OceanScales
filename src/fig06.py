@@ -4,10 +4,9 @@
 #
 # Caption:
 #   Decorrelation time scale along CalCOFI line 80. Gray shading is the ocean bottom.
-#   Decorrelation scales less than or equal to one standard error are considered
-#   not statistically significant and are indicated with a hatched overlay. Solid
-#   black curve is the seasonally averaged mixed-layer depth, and light black shading
-#   represents its standard deviation.
+#   Decorrelation scales that differ from the regional spatial medain by less than or
+#   equal to one standard error are considered not statistically significant and are
+#   indicated by hatching. 
 #
 # Author:
 #   Luke Colosi
@@ -146,11 +145,11 @@ mld_std = np.ma.std(mld,axis=1,ddof=1)
 # Compute the relative uncertainty of the decorrelation scale
 # -----------------------------------------------------------------------------
 
-# Compute spatial mean
-Lt_reg_mean = np.ma.median(Lt)
+# Compute spatial median
+Lt_reg_median = np.ma.median(Lt)
 
 # Compute the signal-to-noise ratio (with respect to the regional mean)
-Lt_sn_ratio = np.abs(Lt - Lt_reg_mean) / Lt_stdm 
+Lt_sn_ratio = np.abs(Lt - Lt_reg_median) / Lt_stdm 
 
 # Mask not statistically significant grid points
 Lt_mask = np.ma.getmask(np.ma.masked_less_equal(Lt_sn_ratio, sn_threshold))

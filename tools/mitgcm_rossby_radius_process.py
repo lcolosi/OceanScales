@@ -608,38 +608,38 @@ U_RMS_season = xr.DataArray(data=U_rms_season,
                         )
 )
 
-UVEL_full = xr.DataArray(data=u_mean,
+UVEL_rms_full = xr.DataArray(data=u_rms,
                         dims=['lat','lon'],
                         coords=dict(lat=lat, lon=lon),
                         attrs=dict(
-                            description=(f'Time-mean Zonal velocity component.'),
+                            description=(f'Root-mean-square (RMS) Zonal velocity component.'),
                             units='m/s'
                         )
 )
 
-VVEL_full = xr.DataArray(data=v_mean,
+VVEL_rms_full = xr.DataArray(data=v_rms,
                         dims=['lat','lon'],
                         coords=dict(lat=lat, lon=lon),
                         attrs=dict(
-                            description=(f'Time-mean Meridional velocity component.'),
+                            description=(f'Root-mean-square (RMS) Meridional velocity component.'),
                             units='m/s'
                         )
 )
 
-UVEL_season = xr.DataArray(data=u_mean_season,
+UVEL_rms_season = xr.DataArray(data=u_rms_season,
                         dims=['season','lat','lon'],
                         coords=dict(season=season, lat=lat, lon=lon),
                         attrs=dict(
-                            description=(f'Seasonal-mean Zonal velocity component.'),
+                            description=(f'Seasonal root-mean-square (RMS) Zonal velocity component.'),
                             units='m/s'
                         )
 )
 
-VVEL_season = xr.DataArray(data=v_mean_season,
+VVEL_rms_season = xr.DataArray(data=v_rms_season,
                         dims=['season','lat','lon'],
                         coords=dict(season=season, lat=lat, lon=lon),
                         attrs=dict(
-                            description=(f'Seasonal-mean Meridional velocity component.'),
+                            description=(f'Seasonal root-mean-square (RMS) Meridional velocity component.'),
                             units='m/s'
                         )
 )
@@ -683,7 +683,7 @@ Fr_season = xr.DataArray(data=Fr_season,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'ROSSBY_RADIUS_full':ROSSBY_RADIUS_full,'ROSSBY_RADIUS_season':ROSSBY_RADIUS_season, 'PHASE_SPEED_full':PHASE_SPEED_full, 'PHASE_SPEED_season':PHASE_SPEED_season, 'U_RMS_full':U_RMS_full, 'U_RMS_season':U_RMS_season, 'UVEL_full':UVEL_full, 'VVEL_full':VVEL_full, 'UVEL_season':UVEL_season, 'VVEL_season':VVEL_season, 'T_ADV_full':T_ADV_full, 'T_ADV_season':T_ADV_season, 'Fr_full':Fr_full, 'Fr_season':Fr_season})
+data = xr.Dataset({'ROSSBY_RADIUS_full':ROSSBY_RADIUS_full,'ROSSBY_RADIUS_season':ROSSBY_RADIUS_season, 'PHASE_SPEED_full':PHASE_SPEED_full, 'PHASE_SPEED_season':PHASE_SPEED_season, 'U_RMS_full':U_RMS_full, 'U_RMS_season':U_RMS_season, 'UVEL_rms_full':UVEL_rms_full, 'VVEL_rms_full':VVEL_rms_full, 'UVEL_rms_season':UVEL_rms_season, 'VVEL_season':VVEL_rms_season, 'T_ADV_full':T_ADV_full, 'T_ADV_season':T_ADV_season, 'Fr_full':Fr_full, 'Fr_season':Fr_season})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
