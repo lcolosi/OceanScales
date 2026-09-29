@@ -4,9 +4,9 @@
 #
 # Caption:
 #   (a) First baroclinic Rossby Radius of deformation and (b) Root-Mean-Square 
-#   velocity with time-mean velocity vectors in the study domain. Black contour 
-#   lines are the ocean topography with 200 and 2000 meter isobaths highlighted as
-#   solid black lines. 
+#   velocity $U_{\mathrm{rms}}$ with time-mean velocity vectors in the
+#   study domain. Black contour lines are the ocean topography with 200- and 
+#   2000-meter isobaths highlighted as solid black lines. 
 #
 # Author:
 #   Luke Colosi
@@ -92,8 +92,8 @@ lon     = nc.variables['lon'][:]
 lat     = nc.variables['lat'][:]
 Rd      = nc.variables['ROSSBY_RADIUS_full'][:]
 U_rms   = nc.variables['U_RMS_full'][:]
-u_mean  = nc.variables['UVEL_full'][:]
-v_mean  = nc.variables['VVEL_full'][:]
+u_mean  = nc.variables['UVEL_mean_full'][:]
+v_mean  = nc.variables['VVEL_mean_full'][:]
 
 # --- Bathymetry --- # 
 
@@ -344,7 +344,7 @@ q = ax.quiver(
     v_mean[::skip, ::skip],
     transform=ccrs.PlateCarree(), 
     linewidth=0.5, 
-    scale=5, 
+    scale=5,
     width=0.001, 
     color='k', 
     zorder=5,

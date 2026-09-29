@@ -3,8 +3,10 @@
 # =============================================================================
 #
 # Caption:
-#   Frozen-field criteria in the study domain. Black contour lines are the ocean
-#   topography with 200 and 2000 meter isobaths highlighted as solid black lines. 
+#   The ratio of the phase speed of the first baroclinic Rossby wave to the
+#   root-mean-square velocity $c_{\mathrm{R}}/U_{\mathrm{rms}}$ in the study
+#   domain. Black contour lines are the ocean topography with 200- and 
+#   2000-meter isobaths highlighted as solid black lines. 
 #
 # Author:
 #   Luke Colosi

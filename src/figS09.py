@@ -3,6 +3,17 @@
 # =============================================================================
 #
 # Caption:
+#   Decorrelation time scale of potential density (solid curve) as a function
+#  of depth from model data at (a) CCE1, (b) CCE2, and (c) CCE3, and observations
+#  at (d) CCE1 and (e) CCE2. Decorrelation time scales computed from 1-month,
+#  2-month, 3-month, 4-month, 6-month, 8-month, and 12-month window durations are
+#  shown for each mooring site for model data and observations. The standard
+#  error of the mean for the decorrelation scale is shown as the shaded regions.
+#  The seasonally averaged mixed-layer depth $\overline{z}_{mld}$ and its standard
+#  deviation are displayed as black horizontal dashed lines and light shaded 
+#  regions, respectively. For CCE1, CCE2, and CCE3 model data, solid black circles
+#  denote the vertical model grid. For CCE1 and CCE2 observations, solid black
+#  diamonds denote the standard depths of the CTD observations.
 #   
 #
 # Author:
