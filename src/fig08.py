@@ -435,3 +435,6 @@ fig.savefig(
     pad_inches=0.1,
     transparent=False
 )
+
+print(freq_m[1])
+print(freq_m[-1])

@@ -219,7 +219,7 @@ ax.contourf(
     lat,
     data_mask,
     levels=[0.5, 1.5],      
-    hatches=['..'],        
+    hatches=['.'],   
     colors='none',          
     zorder=10,              
     transform=ccrs.PlateCarree()

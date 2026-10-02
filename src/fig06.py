@@ -180,6 +180,10 @@ fig, ax = plt.subplots(figsize=(12,5))
 # Plot decorrelation time scale
 cf = ax.contourf(dist,abs(depth),Lt.T, levels=levels, cmap=cmap, extend='both')
 
+# Plot the seasonal mean mixed layer depth
+ax.plot(dist_wd, mld_mean, '--', color='k', linewidth=1.2, label=r"$\overline{z}_{mld}$")
+ax.fill_between(dist_wd, mld_mean - mld_std, mld_mean + mld_std, color='k', alpha=0.1, label=r"$\sigma_{\overline{z}_{mld}}$")
+
 # Overlay a contourf with hatching for the non-significant regions
 ax.contourf(
     dist,
