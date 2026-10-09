@@ -730,6 +730,7 @@ def spectral_diags(
 
     return moments, FVE, mean_period
 
+
 #--- Generate 1D data from a power law spectrum ---# 
 def generate_powerlaw_data(
     N=2**12, 
@@ -737,89 +738,172 @@ def generate_powerlaw_data(
     random_state=None, 
     dt=1.0,
     random_amplitudes=False,
+    demean = False,
     normalization="sample",
     target_variance=1.0,
+    frequency_oversample=1,
 ):
     
     """
-    Generate a synthetic data record with a power-law spectrum S(f) ~ f^(-alpha).
+    Generate a synthetic data record with a power-law spectrum
+    S(f) ~ f^(-alpha).
 
-    The record is normalized to zero mean and unit variance, and the returned
-    one-sided PSD is variance preserving (sum(psd) * df = var(x), Parseval's theorem).
+    The underlying process may be synthesized on a frequency grid finer
+    than that associated with the returned record. This allows a finite
+    record of duration T = N*dt to be sampled from a longer broadband
+    process while retaining the physical low-frequency cutoff
+
+        fmin = 1 / T.
+
+    When frequency_oversample = 1, the synthesis record and returned
+    record have the same duration. The process is therefore periodic
+    over the returned record and frequencies are spaced by 1/T.
+
+    When frequency_oversample > 1, a longer process of duration
+
+        T_synth = frequency_oversample * T
+
+    is generated, giving the finer frequency spacing
+
+        df_synth = 1 / T_synth.
+
+    Frequencies below 1/T are assigned zero power. An N-point subsection
+    is then extracted from the longer process. As frequency_oversample
+    increases, the discrete spectral representation approaches the
+    continuous band-limited power-law spectrum.
 
     Parameters
     ----------
     N : int
-        Length of the time series (preferably a power of 2 for FFT efficiency).
+        Number of samples in the returned analysis record.
+
     alpha : float
-        Spectral slope (e.g., alpha=0 white noise, alpha=1 pink noise, alpha=2 red noise).
+        Spectral slope. For example, alpha=0 gives white noise,
+        alpha=1 pink noise, and alpha=2 red noise.
+
     random_state : int or None
         Seed for reproducibility.
+
     dt : float
-        Sampling interval (arbitrary units).
+        Sampling interval.
+
     random_amplitudes : bool
-        If False, use fixed Fourier amplitudes and random phases such that the
-        spectrum of every realization follows the target power law exactly.
+        If False, use fixed Fourier amplitudes and random phases such that
+        the prescribed power law is represented exactly on the synthesis
+        frequency grid.
+
         If True, generate independent Gaussian real and imaginary Fourier
-        components such that the target power law is the ensemble-mean spectrum.
+        components such that the prescribed power law is the ensemble-mean
+        spectrum.
+
+    demean : bool, optional
+        If True, the mean of the time series is removed from the N-point record.
+        Default is False.
+
     normalization : {"sample", "expected", None}
         Method used to scale the variance of the generated record.
-        If "sample", each realization is normalized by its own sample
-        standard deviation so that its variance equals target_variance
-        exactly. If "expected", all realizations are scaled by the same
-        deterministic factor so that the ensemble-expected variance equals
-        target_variance while allowing finite-realization variance to
-        fluctuate naturally. If None, no variance normalization is applied.
+
+        "sample"
+            Normalize the extracted N-point record by its own sample
+            standard deviation so that its variance equals target_variance.
+
+        "expected"
+            Apply a deterministic scaling based on the expected variance
+            of the synthesized process. Individual finite records are
+            allowed to fluctuate in variance.
+
+        None
+            Apply no variance normalization.
+
     target_variance : float
-        Desired variance of the generated process when normalization is
-        "sample" or "expected". For "sample", every realization has exactly
-        this variance. For "expected", this specifies the ensemble-expected
-        variance, while individual realizations may differ from it. Ignored
-        when normalization is None.
+        Desired variance when normalization is "sample" or "expected".
+
+    frequency_oversample : int
+        Ratio of the synthesis duration to the returned record duration.
+
+        frequency_oversample = 1 gives the original discrete-frequency
+        construction, with
+
+            df = 1 / (N*dt).
+
+        Values greater than one synthesize a longer process with
+
+            M = frequency_oversample * N
+
+        samples and frequency spacing
+
+            df_synth = 1 / (M*dt),
+
+        while retaining the low-frequency cutoff
+
+            fmin = 1 / (N*dt).
+
+        Increasing frequency_oversample therefore provides a progressively
+        finer approximation to the continuous power-law spectrum.
 
     Returns
     -------
     t : ndarray
-        Time or spatial coordinate, from 0 to (N-1)*dt.
+        Time (or spatial) coordinate of the returned N-point record.
+
     x : ndarray
-        Generated data record.
+        Extracted N-point synthetic data record.
+
     f : ndarray
-        Frequencies corresponding to PSD (cycles per unit), from 0 to Nyquist.
+        Fourier frequencies of the returned N-point record (cycles per unit), 
+        from 0 to Nyquist.
+
     psd : ndarray
-        One-sided power spectral density of the generated series.
+        One-sided variance-preserving periodogram (power spectral density) of
+        the returned record.
 
     Notes
     -----
-    Two methods are available for generating the Fourier coefficients:
+    The synthesis frequency grid and the periodogram frequency grid are
+    generally different when frequency_oversample > 1.
 
+    The synthesis grid has spacing
+
+        df_synth = 1 / (frequency_oversample * N * dt),
+
+    whereas the returned finite-record periodogram has spacing
+
+        df = 1 / (N * dt).
+
+    This distinction is intentional. The former describes the underlying
+    broadband process used to generate the data, whereas the latter
+    describes the finite N-point record that is ultimately analyzed.
+
+    Additionally, two methods are available for generating the Fourier coefficients:
+    
     1. Fixed amplitudes with random phases (random_amplitudes=False)
 
-       Only the Fourier phases are random. The amplitudes are fixed at
+        Only the Fourier phases are random. The amplitudes are fixed at
 
-           |X(f)| = f^(-alpha/2),
+            |X(f)| = f^(-alpha/2),
 
-       so the periodogram of every realization follows the target power law
-       exactly, apart from the final normalization to unit variance.
+        so the periodogram of every realization follows the target power law
+        exactly, apart from the final normalization to unit variance.
 
     2. Gaussian Fourier coefficients (random_amplitudes=True)
 
-       The real and imaginary parts of each Fourier coefficient are independent
-       Gaussian random variables. The coefficients are constructed as
+        The real and imaginary parts of each Fourier coefficient are independent
+        Gaussian random variables. The coefficients are constructed as
 
-           X(f) = sqrt(S(f)/2) * (a + i*b),
+            X(f) = sqrt(S(f)/2) * (a + i*b),
 
-       where a and b are independent standard normal random variables and
+        where a and b are independent standard normal random variables and
 
-           S(f) = f^(-alpha).
+            S(f) = f^(-alpha).
 
-       This gives
+        This gives
 
-           E[|X(f)|^2] = S(f),
+            E[|X(f)|^2] = S(f),
 
-       so the target power law represents the ensemble-mean spectrum rather
-       than the exact spectrum of each realization. Individual realizations
-       therefore contain the expected chi-squared sampling variability in
-       Fourier power.
+        so the target power law represents the ensemble-mean spectrum rather
+        than the exact spectrum of each realization. Individual realizations
+        therefore contain the expected chi-squared sampling variability in
+        Fourier power.
 
     In both cases, the spectrum is band-limited to
     f = 1/(N*dt), ..., 1/(2*dt), with no power at f = 0. The resulting record
@@ -828,21 +912,67 @@ def generate_powerlaw_data(
 
     """
 
-    #-----------------------------------------------------------------------
-    # Set frequencies and target power-law spectrum
-    #-----------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Check inputs
+    # -------------------------------------------------------------------------
 
-    # Create a new random number generator object (for reproducible results)
+    if not isinstance(N, (int, np.integer)) or N < 2:
+        raise ValueError("N must be an integer greater than or equal to 2.")
+
+    if not np.isscalar(dt) or not np.isfinite(dt) or dt <= 0:
+        raise ValueError("dt must be a positive finite scalar.")
+
+    if (
+        not isinstance(frequency_oversample, (int, np.integer))
+        or frequency_oversample < 1
+    ):
+        raise ValueError(
+            "frequency_oversample must be a positive integer."
+        )
+
+    if normalization not in ("sample", "expected", None):
+        raise ValueError(
+            "normalization must be 'sample', 'expected', or None."
+        )
+
+    if target_variance <= 0:
+        raise ValueError("target_variance must be positive.")
+
+    # -------------------------------------------------------------------------
+    # Define analysis and synthesis record lengths
+    # -------------------------------------------------------------------------
+
+    # Number of points in the longer synthesis record
+    M = frequency_oversample * N
+
+    # Duration of the returned analysis record
+    T = N * dt
+
+    # Low-frequency cutoff associated with the analysis duration
+    fmin = 1 / T
+
+    # Create random number generator
     rng = np.random.default_rng(random_state)
 
-    # Set non-negative frequencies for FFT 
-    freqs = np.fft.rfftfreq(N, d=dt)
+    # -------------------------------------------------------------------------
+    # Set synthesis frequency grid and target power-law spectrum
+    # -------------------------------------------------------------------------
 
-    # Initialize target power spectrum
-    spectrum = np.zeros_like(freqs)
+    # Fine frequency grid associated with the longer synthesis record
+    freqs_synth = np.fft.rfftfreq(M, d=dt)
 
-    # Compute power-law spectrum (leaving zero-frequency with zero power)
-    spectrum[1:] = freqs[1:]**(-alpha)
+    # Frequency spacing of the synthesis grid
+    df_synth = 1 / (M * dt)
+
+    # Initialize target spectrum
+    spectrum = np.zeros_like(freqs_synth)
+
+    # Retain only frequencies greater than or equal to the low-frequency
+    # cutoff associated with the N-point analysis record.
+    valid = freqs_synth >= fmin
+
+    # Compute target power-law spectrum
+    spectrum[valid] = freqs_synth[valid]**(-alpha)
 
     ###################
     # Note
@@ -867,15 +997,15 @@ def generate_powerlaw_data(
     # E[|X(f)|^2] = S(f).
     ###################
 
-    #-----------------------------------------------------------------------
-    # Compute Fourier Coefficients and build spectrum 
-    #-----------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Compute Fourier coefficients
+    # -------------------------------------------------------------------------
 
     if random_amplitudes:
 
         # Generate independent standard-normal real and imaginary components
-        a = rng.standard_normal(freqs.size)
-        b = rng.standard_normal(freqs.size)
+        a = rng.standard_normal(freqs_synth.size)
+        b = rng.standard_normal(freqs_synth.size)
 
         ###################
         # Note
@@ -912,13 +1042,12 @@ def generate_powerlaw_data(
         # Generate complex Gaussian Fourier coefficients
         fourier_coeffs = np.sqrt(spectrum / 2.0) * (a + 1j * b)
 
-        # Enforce zero power at zero frequency
+        # Enforce zero power at zero frequency (setting the mean of the long
+        # synthetic time series to zero)
         fourier_coeffs[0] = 0.0
 
-        # The Nyquist coefficient must be real for an even-length real-valued
-        # time series. Use variance S rather than S/2 because there is only
-        # one independent real component at this frequency.
-        if N % 2 == 0:
+        # The Nyquist coefficient must be real for an even-length synthesis record
+        if M % 2 == 0:
             fourier_coeffs[-1] = np.sqrt(spectrum[-1]) * a[-1]
 
     else:
@@ -927,7 +1056,7 @@ def generate_powerlaw_data(
         amplitude = np.sqrt(spectrum)
 
         # Generate random phases uniformly distributed over [0, 2*pi)
-        phases = rng.uniform(0, 2*np.pi, size=freqs.shape)
+        phases = rng.uniform(0, 2 * np.pi, size=freqs_synth.shape)
 
         ###################
         # Note
@@ -952,38 +1081,60 @@ def generate_powerlaw_data(
         # are identical before normalization.
         ###################
 
-        # Generate complex Fourier coefficients
+        # Construct complex Fourier coefficients
         fourier_coeffs = amplitude * np.exp(1j * phases)
 
         # Enforce zero power at zero frequency
         fourier_coeffs[0] = 0.0
 
-        # The Nyquist coefficient must be real for an even-length real-valued
-        # time series
-        if N % 2 == 0:
+        # Nyquist coefficient must be real
+        if M % 2 == 0:
             fourier_coeffs[-1] = amplitude[-1]
 
-    #-----------------------------------------------------------------------
-    # Compute data record
-    #-----------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Generate N-point data record
+    # -------------------------------------------------------------------------
 
-    # Generate time or space vector
+    # Generate longer broadband process
+    x_long = np.fft.irfft(fourier_coeffs, n=M)
+
+    # Determine starting index for N-point analysis record
+    if M == N:
+
+        # Original construction: synthesis and analysis records are identical
+        start = 0
+
+    else:
+
+        # Randomly select an N-point subsection of the longer process
+        start = rng.integers(0,M - N + 1)
+
+    # Extract N-point analysis record
+    x = x_long[start:start + N].copy()
+
+    # Remove mean of finite analysis record
+    x = x - np.mean(x) if demean else x
+    
+    # Time coordinate of extracted analysis record
     t = np.arange(N) * dt
 
-    # Inverse FFT to time or space domain
-    x = np.fft.irfft(fourier_coeffs, n=N)
-
-    #-----------------------------------------------------------------------
-    # Normalize data record
-    #-----------------------------------------------------------------------
-
-    # Remove any residual numerical mean
-    x = x - np.mean(x)
+    # -------------------------------------------------------------------------
+    # Normalize extracted data record
+    # -------------------------------------------------------------------------
 
     if normalization == "sample":
 
-        # Normalize each realization by its own sample variance
-        x = x * np.sqrt(target_variance) / np.std(x)
+        # Compute sample standard deviation
+        sample_std = np.std(x)
+
+        # Check for zero variance before normalization
+        if sample_std == 0:
+            raise ValueError(
+                "Generated record has zero variance and cannot be normalized."
+            )
+
+        # Normalize extracted record to target variance
+        x *= np.sqrt(target_variance) / sample_std
 
         ###################
         # Note
@@ -997,28 +1148,33 @@ def generate_powerlaw_data(
         # realization-to-realization variability in the total variance is removed.
         ###################
 
-
     elif normalization == "expected":
 
-        # Compute expected variance from the target Fourier spectrum
-        if N % 2 == 0:
+        # Expected variance of the full synthesized process based on
+        # Parseval's theorem and the prescribed Fourier coefficient powers.
+        if M % 2 == 0:
 
+            # Integrate power spectrum
+            # 
             # Interior positive frequencies occur as positive/negative pairs,
             # while the Nyquist frequency occurs only once.
-            variance_expected = (
-                2.0 * np.sum(spectrum[1:-1])
-                + spectrum[-1]
-            ) / N**2
+            variance_expected = (2.0 * np.sum(spectrum[1:-1]) + spectrum[-1]) / M**2
 
         else:
 
+            # Integrate power spectrum
+            # 
             # For odd N, all positive frequencies have corresponding
             # negative-frequency partners.
-            variance_expected = (
-                2.0 * np.sum(spectrum[1:])
-            ) / N**2
+            variance_expected = (2.0 * np.sum(spectrum[1:])) / M**2
 
-        # Apply the same deterministic scaling to every realization
+        # Check for zero variance before normalization
+        if variance_expected <= 0:
+            raise ValueError(
+                "Expected variance must be positive."
+            )
+
+        # Normalize extracted record to target variance
         x *= np.sqrt(target_variance / variance_expected)
 
         ###################
@@ -1039,50 +1195,38 @@ def generate_powerlaw_data(
         # ensemble on a physically meaningful variance scale.
         ###################
 
-
     elif normalization is None:
 
-        ###################
-        # Note
-        # ----
-        # No variance normalization is applied. The variance is determined
-        # directly by the numerical magnitude of the prescribed Fourier spectrum.
-        #
-        # Because S(f) = f^(-alpha) contains no physical normalization constant,
-        # the absolute variance in this case generally has arbitrary units and
-        # depends on N, dt, alpha, and the frequency range.
-        ###################
-
+        # No normalization is applied; the extracted record retains its original variance.
         pass
 
+    # -------------------------------------------------------------------------
+    # Compute variance-preserving PSD of returned N-point record
+    # -------------------------------------------------------------------------
 
-    else:
-        raise ValueError(
-            "normalization must be 'sample', 'expected', or None"
-        )
+    # IMPORTANT:
+    # This is the frequency grid of the extracted N-point record, not the
+    # finer synthesis frequency grid.
+    freqs = np.fft.rfftfreq(N, d=dt)
 
-    #-----------------------------------------------------------------------
-    # Compute variance-preserving PSD
-    #-----------------------------------------------------------------------
-
-    # Set spectral parameters
+    # Set frequency spacing of finite analysis record
     df = 1 / (N * dt)
 
-    # Demean time series
+    # Demean extracted time series
     x_dt = x - np.mean(x)
-    
-    # Compute one-sided FFT of the time series
-    fft_data = np.fft.rfft(x_dt) 
-    
+
+    # Compute one-sided FFT
+    fft_data = np.fft.rfft(x_dt)
+
     # Take squared modulus of the Fourier coefficients
     amp_pos = np.abs(fft_data)**2
-    
-    # Double power at positive frequencies to conserve variance
+
+    # Convert two-sided power to one-sided power
     if N % 2 == 0:
         amp_pos[1:-1] *= 2
     else:
         amp_pos[1:] *= 2
-    
+
     # Normalize power spectral density
     psd = amp_pos / (N**2 * df)
 

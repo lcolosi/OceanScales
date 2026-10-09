@@ -59,6 +59,8 @@ option_interannual = 'gaussian'
 option_detrend_seg = True
 segment_months     = 6
 option_depth       = 10 
+option_analytic_slope = [1.0, 1.25, 1.5, 1.75, 2.0] 
+option_slope_range    = [182.5, 14.0]
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -98,7 +100,7 @@ Lt_stdm_m  = nc.variables['decor_scale_stdm'][:]
 # --- MITgcm Spectral Data --- # 
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_mooring_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -138,8 +140,8 @@ Lt_stdm_cce2  = nc_cce2.variables['decor_scale_stdm'][:]
 # --- CCE Spectral Data --- # 
 
 # Obtain filename paths
-filename_cce1 = PATH_processed_cce1 / f"cce1_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
-filename_cce2 = PATH_processed_cce2 / f"cce2_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce1 = PATH_processed_cce1 / f"cce1_spectra_{option_data}_hrly_mooring_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_spectra_{option_data}_hrly_mooring_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc_cce1 = Dataset(filename_cce1, 'r')
@@ -156,6 +158,30 @@ psd_CI_cce2   = nc_cce2.variables['PSD_CI'][:]
 
 # --- CCE Mooring latitudes --- #
 cce_lat  = np.array([33.457, 34.3075, 34.44825228022894])  
+
+# --- Analytic Autocorrelation --- # 
+
+# Set filename to saved the netcdf file
+filename = PATH_data / "analytic" / f"analytic_decor_scale.nc"
+
+# Load in data
+with Dataset(filename, "r") as nc:
+
+    # Load analytic autocorrelation and decorrelation scale
+    rho     = nc.variables["autocorr"][:]
+    T_tilde = nc.variables["decor_scale"][:]
+
+    # Load coordinates
+    tau             = nc.variables["lag"][:]
+    T_ac            = nc.variables["duration_ac"][:]
+    T_ds            = nc.variables["duration_ds"][:]
+    alpha_values_ac = nc.variables["slope_ac"][:]
+    alpha_values_ds = nc.variables["slope_ds"][:]
+
+# Convert from days to months
+days_per_month = 365 / 12 
+T_months_ac    = T_ac / days_per_month
+T_months_ds    = T_ds / days_per_month
 
 # -----------------------------------------------------------------------------
 # Obtain the time series at the specified depth for each mooring
@@ -178,6 +204,24 @@ psd_cce2_depth = psd_cce2[depth_cce2_index,:]
 psd_CI_m_depth     = psd_CI_m[:,depth_m_index,:,:]
 psd_CI_cce1_depth = psd_CI_cce1[depth_cce1_index,:,:]
 psd_CI_cce2_depth = psd_CI_cce2[depth_cce2_index,:,:]
+
+# -----------------------------------------------------------------------------
+# Obtain the analytic autocorrelation at a specified spectral slope and duration
+# -----------------------------------------------------------------------------
+
+# Convert duration from days to months
+T_months_ac    = T_ac / days_per_month
+T_months_ds    = T_ds / days_per_month
+
+# Obtain the indices for the specified slope and duration
+alpha_indices = np.isin(alpha_values_ac, option_analytic_slope)
+T_indices = np.isin(T_months_ac, segment_months)
+
+# Select the analytic autocorrelation for the specified slope and duration
+autocorr_analytic = rho[:,T_indices,alpha_indices]
+
+T_month_ac = T_months_ac[T_indices]
+alpha_values_ac = alpha_values_ac[alpha_indices]
 
 # -----------------------------------------------------------------------------
 # Plot decorrelation time scales at mooring locations 
@@ -227,6 +271,10 @@ ax.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=1)
 ax.plot(time_lag_m_pos, autocorr_m_depth_pos[0,:], '-', color='dimgray', linewidth=1.5)
 ax.plot(time_lag_cce1_pos, autocorr_cce1_depth_pos, '-', color='tab:green', linewidth=1.5)
 
+# Plot the analytic autocorrelation for the specified slope and duration
+idx_alpha = alpha_values_ac == 1.5
+ax.plot(tau, autocorr_analytic[:,idx_alpha], '--', color='k', linewidth=1.5)
+
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
 ax.set_ylabel('Autocorrelation')
@@ -246,6 +294,10 @@ axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
 # Plot the mean autocorrelation
 axins.plot(time_lag_m_pos, autocorr_m_depth_pos[0,:], '-', color='dimgray', linewidth=1.5)
 axins.plot(time_lag_cce1_pos, autocorr_cce1_depth_pos, '-', color='tab:green', linewidth=1.5)
+
+# Plot the analytic autocorrelation for the specified slope and duration
+idx_alpha = alpha_values_ac == 1.5
+axins.plot(tau, autocorr_analytic[:,idx_alpha], '--', color='k', linewidth=1.5)
 
 # Set inset axis attributes
 axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
@@ -267,6 +319,10 @@ ax.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=1)
 ax.plot(time_lag_m_pos, autocorr_m_depth_pos[1,:], '-', color='dimgray', linewidth=1.5)
 ax.plot(time_lag_cce2_pos, autocorr_cce2_depth_pos, '-', color='tab:red', linewidth=1.5)
 
+# Plot the analytic autocorrelation for the specified slope and duration
+idx_alpha = alpha_values_ac == 1.25
+ax.plot(tau, autocorr_analytic[:,idx_alpha], '--', color='k', linewidth=1.5)
+
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
 ax.set_xlim(-10,x_max)
@@ -285,7 +341,11 @@ axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
 
 # Plot the mean autocorrelation
 axins.plot(time_lag_m_pos, autocorr_m_depth_pos[1,:], '-', color='dimgray', linewidth=1.5)
-axins.plot(time_lag_cce1_pos, autocorr_cce2_depth_pos, '-', color='tab:red', linewidth=1.5)
+axins.plot(time_lag_cce2_pos, autocorr_cce2_depth_pos, '-', color='tab:red', linewidth=1.5)
+
+# Plot the analytic autocorrelation for the specified slope and duration
+idx_alpha = alpha_values_ac == 1.25
+axins.plot(tau, autocorr_analytic[:,idx_alpha], '--', color='k', linewidth=1.5)
 
 # Set inset axis attributes
 axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
@@ -436,5 +496,4 @@ fig.savefig(
     transparent=False
 )
 
-print(freq_m[1])
-print(freq_m[-1])
+print(1/freq_m[:20])

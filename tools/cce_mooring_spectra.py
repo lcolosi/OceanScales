@@ -74,7 +74,7 @@ from processing_utils import longest_masked_gap
 # ------------#
 
 # Set processing parameters
-option_mooring     = 'cce2'
+option_mooring     = 'cce1'
 option_data        = 'density'    
 option_interannual = 'gaussian' 
 option_harmonics   = 2      
@@ -89,8 +89,8 @@ segment_duration = 0.5
 depth_lim        = -220 
 max_gap_duration = (24) * 60 * 60
 f_cut            = 1 / (14 * seconds_per_day)
-fmin_slope       = (1/30) / seconds_per_day
-fmax_slope       = (1/14) / seconds_per_day 
+fmin_slope       = (1/92) / seconds_per_day
+fmax_slope       = (1/20) / seconds_per_day 
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density"):
@@ -514,8 +514,12 @@ data.attrs.update({
 # Set segment duration in months
 segment_months = int(round(segment_duration * 12))
 
+# Set the range of periods for the spectral slope calculation 
+Tmin_slope = 1 / (fmax_slope * seconds_per_day)
+Tmax_slope = 1 / (fmin_slope * seconds_per_day)
+
 # Set file path for saving the netcdf file
-file_path = PATH_processed / f"{option_mooring}_spectra_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+file_path = PATH_processed / f"{option_mooring}_spectra_{option_data}_hrly_mooring_{option_interannual}_slope_{Tmax_slope}_{Tmin_slope}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

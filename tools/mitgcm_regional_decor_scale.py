@@ -47,14 +47,18 @@ from filter import gaussian_low_pass_filter
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
+#                Options: "temp", "salt", "density", "uvel", "vvel", or "ssh".
 # - option_depth: Depth at which the decorrelation time scale is computed
 #                 (units: meters). Not used for SSH.
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
@@ -68,11 +72,13 @@ option_data        = 'density'
 option_depth       = 9   
 option_interannual = 'linear' 
 option_harmonics   = 2      
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging    = "unweighted" 
 
 # Set time and space parameters
+seconds_per_day  = 24 * 60 * 60
 dt               = 3600    
-T_annual         = 365.25*(24)*(60)*(60)    
+T_annual         = 365.25 * seconds_per_day 
 segment_overlap  = 0.5                                        
 segment_duration = 0.5    
 
@@ -88,8 +94,19 @@ if option_interannual not in ("linear", "gaussian"):
         "Choose 'linear' or 'gaussian'."
     )
 
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+if option_averaging not in ("weighted", "unweighted"):
+    raise ValueError(
+        f"Invalid option_averaging: {option_averaging}. "
+        "Choose 'weighted' or 'unweighted'."
+    )
+
+if option_detrend_seg not in ("detrend", "demean", None):
+    raise ValueError(
+        "option_detrend_seg must be 'detrend', 'demean', or None."
+    )
+
+# Label segment processing method 
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # -----------------------------------------------------------------------------
 # Load MITgcm data
@@ -321,6 +338,8 @@ for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon")
 
         # Initialize arrays
         autocorr_seg = np.ma.masked_all((nseg,2*ntime_seg-1))
+        autocov_seg  = np.ma.masked_all((nseg,2*ntime_seg-1))
+        var_seg      = np.ma.masked_all((nseg))
 
         # Loop through segments
         for iseg, (tseg, dseg) in enumerate(segments):
@@ -330,23 +349,48 @@ for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon")
             time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
             
             # Remove segment-wise mean or linear trend
-            if option_detrend_seg: 
+            if option_detrend_seg == 'detrend': 
                 data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-            else: 
+            elif option_detrend_seg == 'demean':
                 data_dt = dseg - np.ma.mean(dseg)
+            else: 
+                data_dt = dseg
 
             # Compute autocorrelation function
-            autocorr_seg[iseg,:], time_lag = compute_autocorr_biased(data_dt, time_elapsed_seg)
+            autocorr_seg[iseg,:], time_lag, autocov_seg[iseg,:], var_seg[iseg] = compute_autocorr_biased(data_dt, 
+                                                                                                         time_elapsed_seg, 
+                                                                                                         demean=False
+                                                                                                         )
 
-        # Compute the mean autocorrelation function 
-        autocorr_mean = np.ma.mean(autocorr_seg, axis=0)
+        if option_averaging == "weighted":
+
+            # Compute the ensemble-mean autocovariance and variance 
+            autocov_mean = np.ma.mean(autocov_seg, axis=0)
+            var_mean     = np.ma.mean(var_seg)
+
+            # Normalize after ensemble-averaging to compute the ensemble-mean autocorrelation
+            autocorr_mean = autocov_mean / var_mean
+
+            # Compute the delta-method segment deviations for ratio-of-means estimator
+            autocorr_delta_seg = (autocov_seg - var_seg[:, None] * autocorr_mean[None, :]) / var_mean 
+
+            # Compute the pseudo-segment ACFs 
+            autocorr_seg_unc = autocorr_mean[None, :] + autocorr_delta_seg
+
+        elif option_averaging == "unweighted":
+
+            # Compute the ensemble-mean autocorrelation
+            autocorr_mean = np.ma.mean(autocorr_seg, axis=0)
+
+            # Set the autocorrelation segments for uncertainty estimation
+            autocorr_seg_unc = autocorr_seg
 
         # Compute the decorrelation scale of the mean autocorrelation 
         Lt[ilat,ilon], M_lag = compute_decor_scale(autocorr_mean,time_lag) 
     
         # Compute the standard error of the decorrelation scale
         Lt_stdm[ilat,ilon], Lt_std[ilat,ilon], Lt_stds[ilat,ilon] = compute_decor_scale_unc(autocorr_mean, 
-                                                                                            autocorr_seg, 
+                                                                                            autocorr_seg_unc, 
                                                                                             M_lag, 
                                                                                             dt, 
                                                                                             segment_overlap,
@@ -452,14 +496,14 @@ segment_months = int(round(segment_duration * 12))
 if option_data == "ssh":
     file_path = (
         PATH_processed
-        / f"mitgcm_decor_scale_ssh_hrly_reg_{option_interannual}_{seg_proc}_"
+        / f"mitgcm_decor_scale_ssh_hrly_reg_{option_interannual}_{seg_proc}_{option_averaging}_"
           f"seg_duration_{segment_duration}.nc"
     )
 else:
     file_path = (
         PATH_processed
         / f"mitgcm_decor_scale_{option_data}_hrly_reg_"
-          f"depth_{option_depth}m_{option_interannual}_{seg_proc}_"
+          f"depth_{option_depth}m_{option_interannual}_{seg_proc}_{option_averaging}_"
           f"seg_duration_{segment_months}mo.nc"
     )
 

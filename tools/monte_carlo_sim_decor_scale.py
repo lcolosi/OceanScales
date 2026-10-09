@@ -83,7 +83,7 @@ hours_per_year = 365 * 24
 dt             = 1   
 
 # Set ensemble parameters
-n_realization = 10
+n_realization = 100
 
 # Set power-law parameters
 alpha   = np.arange(0,5+0.1,0.1) 
@@ -123,7 +123,6 @@ nlag_max = np.max(segment_duration)
 autocorr_ens_mean = np.ma.masked_all((n_duration, n_alpha, nlag_max))
 autocorr_ens_std  = np.ma.masked_all((n_duration, n_alpha, nlag_max))
 autocorr_ens_stdm = np.ma.masked_all((n_duration, n_alpha, nlag_max))
-autocorr_discrete = np.ma.masked_all((n_duration, n_alpha, nlag_max))
 Lt_mean           = np.ma.masked_all((n_duration, n_alpha))
 Lt_std            = np.ma.masked_all((n_duration, n_alpha))
 Lt_stdm           = np.ma.masked_all((n_duration, n_alpha))
@@ -140,29 +139,7 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
         # Obtain ith window duration
         iT = segment_duration[j]
 
-        # --- Compute the discrete theoretical autocorrelation --- #
-
-        # Set rFFT frequency grid
-        freq = np.fft.rfftfreq(iT, d=dt)
-
-        # Set power spectrum
-        S = np.zeros_like(freq)
-        S[1:] = freq[1:]**(-ialpha)
-
-        # Compute discrete theoretical autocovariance
-        #
-        # By the discrete Wiener-Khinchin theorem, the autocovariance
-        # is the inverse Fourier transform of the power spectrum.
-        C_discrete = np.fft.irfft(S, n=iT)
-
-        # Normalize by zero lag to obtain autocorrelation
-        rho_discrete = C_discrete / C_discrete[0]
-
-        # Set the number of nonnegative lags
-        nlag = len(rho_discrete)
-
-        # Save 
-        autocorr_discrete[j, i, :nlag] = rho_discrete
+        # --- Perform Monte Carlo Simulation --- #
 
         # Initialize array
         autocorr_realization = np.ma.masked_all((n_realization,2*iT-1))
@@ -181,6 +158,7 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
                                                 random_amplitudes=option_random_amplitudes,
                                                 normalization=option_normalization,
                                                 target_variance=1.0,
+                                                frequency_oversample = 20,
                                                 ) 
 
             # Convert to masked arrays
@@ -246,15 +224,12 @@ Lt_stdm_days = Lt_stdm / 24
 
 # Number of lag points in the padded autocorrelation arrays
 nlag_max = autocorr_ens_mean.shape[-1]
-nlag_max_d = autocorr_discrete.shape[-1]
 
 # Common positive-lag coordinate
 lag_positive_c = np.arange(nlag_max) * dt 
-lag_positive_cd = np.arange(nlag_max) * dt 
 
 # Convert hours to days
 lag_positive_c_days = lag_positive_c / 24
-lag_positive_cd_days = lag_positive_cd / 24
 
 # --- Autocorrelation  --- # 
 autocorr = xr.DataArray(data=autocorr_ens_mean,
@@ -286,16 +261,6 @@ autocorr_ens_std = xr.DataArray(data=autocorr_ens_std,
                     units='unitless'
                     )
 )
-
-autocorr_disc = xr.DataArray(data=autocorr_discrete,
-                dims=['duration','alpha','lag'],
-                coords=dict(duration=segment_duration_months,alpha=alpha,lag=lag_positive_c_days),
-                attrs=dict(
-                    description=('Discrete autocorrelation as a ' +
-                                 'function of record duration and spectral slope.'),
-                    units='unitless'
-                    )
-) 
 
 # --- Decorrelation Scale --- # 
 decor_scale = xr.DataArray(data=Lt_mean_days,
@@ -329,7 +294,7 @@ decor_scale_std = xr.DataArray(data=Lt_std_days,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'autocorr':autocorr,'autocorr_ens_stdm':autocorr_ens_stdm,'autocorr_ens_std':autocorr_ens_std, 'autocorr_disc':autocorr_disc, 'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std})
+data = xr.Dataset({'autocorr':autocorr,'autocorr_ens_stdm':autocorr_ens_stdm,'autocorr_ens_std':autocorr_ens_std, 'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({

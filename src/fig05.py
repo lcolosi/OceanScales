@@ -168,6 +168,10 @@ Lt_mask = Lt_mask & ~land_mask
 # Create a mask array where non-significant ocean points = 1, others = NaN
 data_mask = np.where(Lt_mask, 1, np.nan)
 
+# Binary array for boundary where significant ocean = 0, non-significant ocean = 1
+# and land = NaN
+data_boundary = np.where(land_mask, np.nan, Lt_mask.astype(float))
+
 # -----------------------------------------------------------------------------
 # Plot regional decorrelation time scales  
 # -----------------------------------------------------------------------------
@@ -179,8 +183,8 @@ xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(7,20+0.25,0.25) 
-ticks  = np.arange(8,20+2,2) 
+levels = np.arange(7,20+0.25,0.25) #np.arange(7,30+0.25,0.25) 
+ticks  = np.arange(8,20+2,2) #np.arange(8,30+4,4)
 levels_is = np.arange(100,300+100,100)
 levels_ms = np.arange(1000,3000+500,500)
 fontsize_g = 18
@@ -219,11 +223,23 @@ ax.contourf(
     lat,
     data_mask,
     levels=[0.5, 1.5],      
-    hatches=['.'],   
+    hatches=['....'],   
     colors='none',          
     zorder=10,              
     transform=ccrs.PlateCarree()
 )
+
+# Add contour around the hatched region
+# ax.contour(
+#     lon,
+#     lat,
+#     data_boundary,
+#     levels=[0.5],   
+#     colors='tab:blue',          
+#     linewidths=0.75,
+#     zorder=11,              
+#     transform=ccrs.PlateCarree()
+# )
 
 # Plot the CCE1 mooring point
 ax.scatter(

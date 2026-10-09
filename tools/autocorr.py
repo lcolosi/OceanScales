@@ -27,23 +27,25 @@ from datetime import timedelta
 def compute_autocorr_biased(
     data,
     t,
+    demean=True,
 ):
 
     """
-    Function for computing the normalized, biased autocorrelation of a one-dimensional
+    Computes the normalized, biased autocorrelation of a one-dimensional
     series.
 
-    The autocorrelation is calculated from the anomaly time series (i.e., 
-    time-mean removed) using FFT-based convolution through the function
-    scipy.signal.correlate.
+    The autocorrelation is calculated using FFT-based convolution
+    through scipy.signal.correlate.
 
     For an input time series
 
         x = [x_0, x_1, ..., x_{N-1}],
 
-    the function first forms the anomaly series
+    the anomaly series is 
 
         x'_t = x_t - mean(x).
+
+    when demean=True.
 
     It then computes the biased sample autocovariance at lag m as
 
@@ -70,16 +72,31 @@ def compute_autocorr_biased(
     t : numpy.ndarray
         One-dimensional array containing the time coordinate. 
 
+    demean : bool, optional
+        If True, the mean of the time series is removed before computing the
+        autocorrelation. Default is True.
+
     Returns
     -------
     autocorrelation : numpy.ndarray
         One-dimensional array of length 2*N - 1, where N = len(x).
 
-        The array contains autocorrelation estimates for positive and negative lags.
+        The array contains the biased autocorrelation estimates for positive and 
+        negative lags.
 
     lag : numpy.ndarray
         One-dimensional integer array containing the time lag corresponding to
         each element of autocorrelation.
+
+    autocovariance : numpy.ndarray
+        One-dimensional array of length 2*N - 1, where N = len(x) 
+        
+        The array contains the biased autocovariance estimates for positive and 
+        negative lags.
+
+    variance : float
+        The zero-lag autocovariance, equivalent to the variance of the input 
+        time series.
 
     Notes
     -----
@@ -102,12 +119,12 @@ def compute_autocorr_biased(
     # Obtain number of data points
     n_samples = data.size
 
+    # Mask data set to identify missing data points
+    data_ma = np.ma.masked_invalid(data)
+
     # The data must be a 1-dimensional array
     if data.ndim != 1:
         raise ValueError("data must be one-dimensional.")
-
-    # Mask data set to identify missing data points
-    data_ma = np.ma.masked_invalid(data)
 
     # FFT autocorrelation method requires regularly sampled data (no missing data)
     if np.any(np.ma.getmaskarray(data_ma)):
@@ -120,8 +137,8 @@ def compute_autocorr_biased(
     if n_samples < 2:
         raise ValueError("data must contain at least two samples.")
 
-    # Compute anomaly series x'_t = x_t - x_bar
-    data_anomaly = data - np.mean(data)
+    # Compute anomaly series by demeaning the time series if requested
+    data_anomaly = data - np.mean(data) if demean else data
 
     # Compute the complete linear correlation (i.e.,non-normalized summed products) using the fft approach 
     autocovariance = correlate(
@@ -134,33 +151,190 @@ def compute_autocorr_biased(
     # Apply the biased autocovariance normalization
     autocovariance /= n_samples
 
-    # In a full correlation array of length 2*N - 1, zero lag is at index N - 1.
+    # Obtain the index at the zero-lag 
     zero_lag_index = n_samples - 1
-    zero_lag_value = autocovariance[zero_lag_index]
+
+    # Extract the variance of the time series (zero-lag autocovariance)
+    variance = autocovariance[zero_lag_index]
 
     # Normalize by the zero-lag autocovariance to obtain autocorrelation
-    autocorrelation = autocovariance / zero_lag_value
+    autocorrelation = autocovariance / variance
 
     # Construct the lag array corresponding to the full autocorrelation
     lag_number = np.arange(-(n_samples - 1), n_samples)
     lag = lag_number * abs(t[1]-t[0])
 
-    return autocorrelation, lag
+    return autocorrelation, lag, autocovariance, variance
+
+
+# --- Unbiased Estimate of the Autocorrelation --- #
+def compute_autocorr_unbiased(
+    data,
+    t,
+    demean=True,
+):
+    """
+    Compute the normalized autocorrelation using the unbiased
+    (lag-dependent) autocovariance normalization.
+
+    The autocorrelation is calculated using FFT-based convolution
+    through scipy.signal.correlate.
+
+    For an input time series
+
+        x = [x_0, x_1, ..., x_{N-1}],
+
+    the anomaly series is
+
+        x'_t = x_t - mean(x),
+
+    when demean=True.
+
+    The unbiased sample autocovariance at lag m is
+
+        R(m) = (1 / (N - |m|)) * sum_t x'_t x'_{t+m},
+
+    where the summation includes only overlapping index pairs.
+
+    Unlike the biased estimator, the denominator decreases with
+    increasing absolute lag.
+
+    The autocorrelation is obtained by normalizing by the
+    zero-lag autocovariance:
+
+        rho(m) = R(m) / R(0).
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        One-dimensional array containing the time-series
+        observations. All values must be finite.
+
+    t : numpy.ndarray
+        One-dimensional array containing the time coordinate.
+
+    demean : bool, optional
+        If True, remove the time-series mean before computing
+        the autocorrelation. Default is True.
+
+    Returns
+    -------
+    autocorrelation : numpy.ndarray
+        Full unbiased-normalized autocorrelation of length
+        2*N - 1, containing negative and positive lags.
+
+    lag : numpy.ndarray
+        Time lags corresponding to the autocorrelation.
+
+    autocovariance : numpy.ndarray
+        Full autocovariance estimated using the lag-dependent
+        normalization N - |m|.
+
+    variance : float
+        Zero-lag autocovariance.
+
+    Notes
+    -----
+    FFT-based convolution has approximately O(N log N)
+    computational complexity.
+
+    The lag-dependent normalization removes the triangular
+    taper of the biased estimator. However, estimates at
+    large lags can have substantial sampling uncertainty
+    because fewer overlapping pairs are available.
+
+    Estimating and removing the sample mean can introduce
+    additional finite-sample bias, so the normalized
+    autocorrelation is not strictly unbiased.
+    """
+
+    # Convert input to a floating-point masked array
+    data = np.ma.asarray(data, dtype=float)
+
+    # Obtain number of data points
+    n_samples = data.size
+
+    # Mask data set to identify missing data points
+    data_ma = np.ma.masked_invalid(data)
+
+    # Check input dimensions
+    if data.ndim != 1:
+        raise ValueError("data must be one-dimensional.")
+
+    if np.any(np.ma.getmaskarray(data_ma)):
+        raise ValueError(
+            "FFT autocorrelation requires a complete regularly sampled segment."
+        )
+
+    if n_samples < 2:
+        raise ValueError("data must contain at least two samples.")
+
+    if len(t) != n_samples:
+        raise ValueError("data and t must have the same length.")
+
+    # Convert to a regular NumPy array
+    data = np.asarray(data, dtype=float)
+
+    # Compute anomaly series by demeaning if requested
+    data_anomaly = data - np.mean(data) if demean else data
+
+    # Compute complete linear correlation using FFT
+    autocovariance = correlate(
+        data_anomaly,
+        data_anomaly,
+        mode="full",
+        method="fft",
+    )
+
+    # Construct lag indices
+    lag_number = np.arange(-(n_samples - 1), n_samples)
+
+    # Determine number of overlapping pairs at each lag
+    n_overlap = n_samples - np.abs(lag_number)
+
+    # Apply unbiased autocovariance normalization
+    autocovariance /= n_overlap
+
+    # Obtain zero-lag index
+    zero_lag_index = n_samples - 1
+
+    # Extract zero-lag autocovariance
+    variance = autocovariance[zero_lag_index]
+
+    if not np.isfinite(variance) or variance <= 0:
+        raise ValueError(
+            "Zero-lag autocovariance must be positive and finite."
+        )
+
+    # Normalize by zero-lag autocovariance
+    autocorrelation = autocovariance / variance
+
+    # Construct time-lag array
+    lag = lag_number * abs(t[1] - t[0])
+
+    return autocorrelation, lag, autocovariance, variance
+
 
 # --- Decorrelation Scale --- #
 def compute_decor_scale(
     autocorrelation,
     lag,
+    method="maximum",
 ):
 
     """
-    Estimate the decorrelation scale from a full autocorrelation (positive and 
-    negative lags).
+    Estimate the decorrelation scale from a full autocorrelation containing both 
+    positive and negative lags).
 
     The autocorrelation is integrated over progressively wider symmetric
-    intervals about zero lag. The decorrelation scale is defined as the
-    maximum cumulative integral. The function also returns the lag number 
-    corresponding to the maximum symmetric integral.
+    intervals about zero lag using the trapezoidal rule. Two integration methods
+    are available:
+
+        "maximum": Maximum symmetric integral over all lags.
+        "full": Integral over the entire available lag domain.
+    
+    The function also returns the lag number corresponding to the maximum 
+    symmetric integral.
 
     Parameters
     ----------
@@ -170,13 +344,19 @@ def compute_decor_scale(
     lag : numpy.ndarray
         Lag coordinate corresponding to each autocorrelation value.
 
+    method : {"maximum", "full"}, optional
+        Integration method. Default is "maximum".
+
     Returns
     -------
     decor_scale : float
-        Maximum symmetric integral of the autocorrelation.
+        Estimated decorrelation scale. If method = "maximum", the maximum 
+        symmetric integral of the autocorrelation is returned.
 
     M_lag : float
-        Lag number corresponding to the maximum symmetric integral.
+        Positive-lag number corresponding to the integration limit. If 
+        method = "maximum",the lag number corresponding to the maximum symmetric
+        integral.
     """
 
     # Convert inputs to NumPy arrays
@@ -192,6 +372,9 @@ def compute_decor_scale(
 
     if not np.all(np.diff(lag) > 0):
         raise ValueError("lag must be strictly increasing.")
+
+    if method not in ("maximum", "full"):
+        raise ValueError("method must be 'maximum' or 'full'.")
 
     # Locate the zero-lag element
     zero_indices = np.flatnonzero(np.isclose(lag, 0.0))
@@ -223,11 +406,20 @@ def compute_decor_scale(
         - cumulative_integral[center - radius]
     )
 
-    # Compute the decorrelation scale as the maximum symmetric integral
-    decor_scale = float(np.max(symmetric_integrals))
+    # --- Maximum symmetric integral --- #
+    if method == "maximum":
 
-    # Obtain the lag number which corresponds to the maximum symmetric integral
-    M_lag = np.argmax(symmetric_integrals)
+        # Obtain the lag number which corresponds to the maximum symmetric integral
+        M_lag = int(np.argmax(symmetric_integrals))
+
+    # --- Full symmetric integral --- #
+    elif method == "full":
+
+        # Obtain the largest possiblelag number 
+        M_lag = int(maximum_radius)
+
+    # Extract the integral at the selected integration limit
+    decor_scale = float(symmetric_integrals[M_lag])
 
     return decor_scale, M_lag
 
@@ -927,11 +1119,29 @@ def autocorrelation_analytic(
     fmin, 
     fmax, 
     alpha,
+    biased=False,
+    record_duration=None,
 ):
     """
-    Function for computing the analytic autocovariance and 
-    autocorrelation for a power-law spectrum using the 
-    upper incomplete gamma function.
+    Compute the analytic autocovariance and autocorrelation for a
+    band-limited power-law spectrum using the upper incomplete gamma
+    function.
+
+    The underlying spectrum is
+
+        S(f) ~ f^(-alpha),
+
+    over the frequency interval
+
+        fmin <= f <= fmax.
+
+    Optionally, the expected finite-record taper associated with the
+    biased autocovariance estimator can be applied:
+
+        R_b(tau) = [1 - |tau| / T] R(tau),
+
+    where T is the record duration. The same taper applies to the
+    normalized autocorrelation because the taper equals one at zero lag.
 
     This combines:
         - Upper incomplete gamma evaluation (using analytic continuation for s < 1)
@@ -948,16 +1158,66 @@ def autocorrelation_analytic(
         Maximum frequency.
     alpha : float
         Power-law exponent.
+    biased : bool, optional
+        If True, apply the finite-record triangular taper associated
+        with the biased autocovariance estimator. Default is False.
+    record_duration : float or None, optional
+        Duration T of the finite record, in the same time units as
+        ``tau``. Required when ``biased=True``.
+
+        For a regularly sampled record containing N samples separated
+        by dt,
+
+            record_duration = N * dt.
+
+        This gives the taper
+
+            1 - |tau| / record_duration.
 
     Returns
     -------
     R : ndarray (complex)
-        Autocovariance function.
+        Analytic autocovariance function.
     rho : ndarray (float)
-        Autocorrelation function.
+        Analytic autocorrelation function.
     R0 : float
-        Variance (R at zero lag).
+        Zero-lag variance of the underlying power-law spectrum.
+        This quantity is unchanged by the biased-estimator correction.
+
+    Notes
+    -----
+    The biased-estimator correction represents the reduction in the
+    number of overlapping sample pairs with increasing lag. It does not
+    include additional finite-sample effects associated with estimating
+    and removing the sample mean.
     """
+
+    # Convert lag to NumPy array
+    tau = np.asarray(tau, dtype=float)
+
+    # Check frequency limits
+    if fmin <= 0:
+        raise ValueError("fmin must be greater than zero.")
+
+    if fmax <= fmin:
+        raise ValueError("fmax must be greater than fmin.")
+
+    # Check biased-estimator inputs
+    if biased:
+
+        if record_duration is None:
+            raise ValueError(
+                "record_duration must be specified when biased=True."
+            )
+
+        if (
+            not np.isscalar(record_duration)
+            or not np.isfinite(record_duration)
+            or record_duration <= 0
+        ):
+            raise ValueError(
+                "record_duration must be a positive finite scalar."
+            )
 
     #------------------------------------------# 
     # Upper Incomplete Gamma Function 
@@ -1064,6 +1324,21 @@ def autocorrelation_analytic(
         R0 = np.log(fmax / fmin)
     else:
         R0 = (fmax**(1 - alpha) - fmin**(1 - alpha)) / (1 - alpha)
+
+    # -------------------------------------------------------------------------
+    # Apply finite-record biased-estimator taper
+    # -------------------------------------------------------------------------
+
+    if biased:
+
+        # Expected triangular taper of the biased autocovariance estimator
+        bias_factor = 1.0 - np.abs(tau) / record_duration
+
+        # No overlapping samples exist beyond the finite record duration
+        bias_factor = np.clip(bias_factor, 0.0, 1.0)
+
+        # Apply taper to autocovariance
+        R = R * bias_factor
 
     #------------------------------------------# 
     # Compute Autocorrelaton rho(tau)

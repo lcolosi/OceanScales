@@ -9,7 +9,7 @@ data/calcofi/
 data/analytic/
 
 # Figs directory
-
+figs/testing/
 
 # Docs directory 
 docs/
@@ -20,7 +20,9 @@ src/fig_stats/
 
 # Tools directory
 tools/__pycache__/
+tools/testing/
 tools/README.md
+
 
 # Notebooks directory
 notebooks/__pycache__/
