@@ -592,6 +592,7 @@ def compute_autocorr_biased_masked(
     data,
     x,
     normalization="corrected",
+    demean=True,
 ):
     """
     Compute the normalized, biased autocorrelation of a one-dimensional
@@ -666,6 +667,10 @@ def compute_autocorr_biased_masked(
 
         Default is "corrected".
 
+    demean : bool, optional
+        If True, the mean of the time series is removed before computing the
+        autocorrelation. Default is True.
+
     Returns
     -------
     autocorrelation : numpy.ma.MaskedArray
@@ -674,6 +679,16 @@ def compute_autocorr_biased_masked(
 
     lag : numpy.ndarray
         Coordinate lag corresponding to each autocorrelation value.
+    
+    autocovariance : numpy.ma.MaskedArray
+        Full biased autocovariance function containing negative and
+        positive lags. Length is 2*N - 1.
+
+        Lags with no valid observation pairs are masked.
+
+    variance : float
+        The zero-lag autocovariance, equivalent to the variance of the input 
+        time series.
     """
 
     # Convert input to masked array and mask NaN/inf values
@@ -712,8 +727,8 @@ def compute_autocorr_biased_masked(
             "data must contain at least two valid observations."
         )
 
-    # Compute anomaly using mean of valid observations
-    data_anomaly = data - np.ma.mean(data)
+    # Compute anomaly using mean of valid observations if requested
+    data_anomaly = data - np.ma.mean(data) if demean else data
 
     # Initialize positive-lag autocovariance
     autocovariance_pos = np.ma.masked_all(N, dtype=float)
@@ -754,19 +769,20 @@ def compute_autocorr_biased_masked(
             # the standard biased finite-record taper
             autocovariance_pos[k] = (inner_product / n_eff) * (n / N)
 
-    # Zero-lag autocovariance
-    R0 = autocovariance_pos[0]
+    # Extract the variance of the time series (zero-lag autocovariance)
+    variance = autocovariance_pos[0]
 
-    if np.ma.is_masked(R0) or R0 <= 0:
+    if np.ma.is_masked(variance) or variance <= 0:
         raise ValueError(
             "Zero-lag autocovariance must be positive."
         )
 
     # Normalize autocovariance by zero-lag value
-    autocorrelation_pos = autocovariance_pos / R0
+    autocorrelation_pos = autocovariance_pos / variance
 
-    # Construct full autocorrelation using rho(-k) = rho(k)
+    # Construct full autocorrelation and autocovariance using rho(-k) = rho(k)
     autocorrelation = np.ma.concatenate((autocorrelation_pos[:0:-1],autocorrelation_pos))
+    autocovariance  = np.ma.concatenate((autocovariance_pos[:0:-1],autocovariance_pos))
 
     # Positive lag coordinate
     lag_pos = x - x[0]
@@ -774,7 +790,7 @@ def compute_autocorr_biased_masked(
     # Construct full lag coordinate
     lag = np.concatenate((-lag_pos[:0:-1],lag_pos))
 
-    return autocorrelation, lag
+    return autocorrelation, lag, autocovariance, variance
 
 # --- Decorrelation Scale for Masked Data --- #
 def compute_decor_scale_masked(

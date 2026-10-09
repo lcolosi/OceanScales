@@ -48,7 +48,7 @@ from filter import gaussian_low_pass_filter
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", or "vvel".
+#                Options: "temp", "salt", "density", "uvel", or "vvel".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
@@ -71,7 +71,7 @@ from filter import gaussian_low_pass_filter
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'gaussian' 
+option_interannual = 'linear' 
 option_harmonics   = 2      
 option_detrend_seg = "detrend"
 option_averaging   = "weighted"

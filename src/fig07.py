@@ -53,7 +53,11 @@ from plotting import add_corner_label
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - segment_months : Specifies the window duration. 
 #
 # ------------#
@@ -61,11 +65,12 @@ from plotting import add_corner_label
 # Set processing parameters
 option_data        = 'density'    
 option_interannual = 'gaussian' 
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging    = "weighted" 
 segment_months     = 6
 
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+# Label segment processing method 
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set font and fontsize using LaTeX 
 fontsize=16
@@ -86,7 +91,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "mooring" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -115,8 +120,8 @@ PATH_processed_cce1 = PATH_data / "cce" / "cce1" / "processed"
 PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
 
 # Obtain filename paths
-filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
-filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc_cce1 = Dataset(filename_cce1, 'r')
@@ -308,7 +313,7 @@ ax.plot(Lt_cce1,depth_pos_cce1,'.-', color='tab:green')
 ax.fill_betweenx(depth_pos_cce1, Lt_cce1 - Lt_stdm_cce1, Lt_cce1 + Lt_stdm_cce1, color='tab:green', alpha=0.5)
 
 # Set left edge x-position 
-x_left = ax.get_xlim()[0] - 11
+x_left = ax.get_xlim()[0] -13
 
 # Plot the sensor depths 
 ax.plot(

@@ -47,7 +47,7 @@ from filter import gaussian_low_pass_filter
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", or "vvel".
+#                Options: "temp", "salt", "density", "uvel", or "vvel".
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
@@ -402,10 +402,10 @@ for isite in tqdm(range(nsite), desc="Computing Decorrelation Scales", unit="moo
 
 # Convert time scale to units of days
 time_lag_days = time_lag / seconds_per_day 
-Lt_days      = Lt / seconds_per_day 
-Lt_stdm_days = Lt_stdm / seconds_per_day 
-Lt_std_days  = Lt_std / seconds_per_day
-Lt_stds_days = Lt_stds / seconds_per_day   
+Lt_days       = Lt / seconds_per_day 
+Lt_stdm_days  = Lt_stdm / seconds_per_day 
+Lt_std_days   = Lt_std / seconds_per_day
+Lt_stds_days  = Lt_stds / seconds_per_day   
      
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file

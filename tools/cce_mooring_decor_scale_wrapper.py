@@ -37,6 +37,7 @@ sys.path.append(str(PATH_tools))
 from autocorr import compute_autocorr_biased_masked, compute_decor_scale_masked, compute_decor_scale_unc_masked, segment_time_series
 from lsf import unweighted_lsf, detrend, compute_fve
 from filter import gaussian_low_pass_filter
+from processing_utils import longest_masked_gap
 
 # -----------------------------------------------------------------------------
 # Set data analysis parameters
@@ -54,7 +55,11 @@ from filter import gaussian_low_pass_filter
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
@@ -71,15 +76,20 @@ option_mooring     = 'cce2'
 option_data        = 'density'    
 option_interannual = 'gaussian' 
 option_harmonics   = 2      
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging    = "weighted" 
 
 # Set time and space parameters
+seconds_per_day    = 24 * 60 * 60
 dt                = 3600    
-T_annual          = 365.25*(24)*(60)*(60)    
+T_annual          = 365.25 * seconds_per_day   
 segment_overlap   = 0.5                                        
 segment_durations = np.array([1, 2, 3, 4, 6, 8, 12]) / 12   
 depth_lim         = -220 
 norm              = "corrected"
+max_gap_duration   = 45 * seconds_per_day
+min_valid_fraction = 0.75
+min_valid_segments = 3
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density"):
@@ -93,8 +103,19 @@ if option_interannual not in ("linear", "gaussian"):
         "Choose 'linear' or 'gaussian'."
     )
 
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+if option_detrend_seg not in ("detrend", "demean", None):
+    raise ValueError(
+        "option_detrend_seg must be 'detrend', 'demean', or None."
+    )
+
+if option_averaging not in ("weighted", "unweighted"):
+    raise ValueError(
+        f"Invalid option_averaging: {option_averaging}. "
+        "Choose 'weighted' or 'unweighted'."
+    )
+
+# Label segment processing method 
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # -----------------------------------------------------------------------------
 # Analysis
@@ -297,6 +318,8 @@ def run_analysis(segment_duration):
     Lt_stdm       = np.ma.masked_all(ndepth)
     Lt_std        = np.ma.masked_all(ndepth)
     Lt_stds       = np.ma.masked_all(ndepth)
+    nseg_used       = np.zeros(ndepth, dtype=int)
+    longest_gap     = np.zeros(ndepth, dtype=float)
 
     # Loop over each depth
     for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="depth"):
@@ -317,44 +340,115 @@ def run_analysis(segment_duration):
 
         # Initialize arrays
         autocorr_seg = np.ma.masked_all((nseg,2*ntime_seg-1))
+        autocov_seg  = np.ma.masked_all((nseg,2*ntime_seg-1))
+        var_seg      = np.ma.masked_all((nseg))
+
+        # Initialize accepted segment indices
+        accepted_idx = []
 
         # Loop through segments
         for iseg, (tseg, dseg) in enumerate(segments):
+
+            # Obtain mask array for the time series
+            mask = np.ma.getmaskarray(dseg)
+    
+            # Skip segment if all data are missing
+            if mask.all():
+                longest_gap[idepth] = max(longest_gap[idepth], len(dseg) * dt)
+                continue
+    
+            # Determine longest missing-data gap
+            gap_duration, _ = longest_masked_gap(mask, dt)
+    
+                # Save longest gap encountered at this depth
+            longest_gap[idepth] = max(longest_gap[idepth], gap_duration)
+    
+            # Compute fraction of valid observations
+            valid_fraction = np.mean(~mask)
+    
+            # Skip segment if gap exceeds threshold
+            if gap_duration > max_gap_duration:
+                continue
+    
+            # Skip segment if valid fraction is below threshold
+            if valid_fraction < min_valid_fraction:
+                continue
 
             # Compute the elapsed time from beginning of segmented time series
             t0 = tseg[0]
             time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
             
             # Remove segment-wise mean or linear trend
-            if option_detrend_seg: 
-                data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-            else: 
+            if option_detrend_seg == "detrend": 
+                data_dt = detrend(dseg, time_elapsed_seg, mean = False)
+            elif option_detrend_seg == "demean":
                 data_dt = dseg - np.ma.mean(dseg)
+            else: 
+                data_dt = dseg
 
             # Compute autocorrelation function
-            autocorr_seg[iseg,:], time_lag = compute_autocorr_biased_masked(data_dt, time_elapsed_seg, normalization=norm)
+            autocorr_seg[iseg,:], time_lag, autocov_seg[iseg,:], var_seg[iseg] = compute_autocorr_biased_masked(data_dt, 
+                                                                                                                time_elapsed_seg, 
+                                                                                                                normalization=norm, 
+                                                                                                                demean=False
+                                                                                                                )
 
-        # Compute the mean autocorrelation function 
-        autocorr_mean[idepth,:] = np.ma.mean(autocorr_seg, axis=0)
+            # Record accepted segment
+            accepted_idx.append(iseg)
+
+        # Count accepted segments
+        nseg_valid = len(accepted_idx)
+    
+        # Save the number of used segments
+        nseg_used[idepth] = nseg_valid
+    
+        # Skip depth if too few usable segments remain
+        if nseg_valid < min_valid_segments:
+            continue
+
+        if option_averaging == "weighted":
+        
+            # Compute the ensemble-mean autocovariance and variance 
+            autocov_mean = np.ma.mean(autocov_seg, axis=0)
+            var_mean     = np.ma.mean(var_seg)
+    
+            # Normalize after ensemble-averaging to compute the ensemble-mean autocorrelation
+            autocorr_mean_ts = autocov_mean / var_mean
+    
+            # Store the ensemble-mean autocorrelation
+            autocorr_mean[idepth,:] = autocorr_mean_ts
+    
+            # Compute the delta-method segment deviations for ratio-of-means estimator
+            autocorr_delta_seg = (autocov_seg - var_seg[:, None] * autocorr_mean_ts[None, :]) / var_mean 
+    
+            # Compute the pseudo-segment ACFs 
+            autocorr_seg_unc = autocorr_mean_ts[None, :] + autocorr_delta_seg
+    
+        elif option_averaging == "unweighted":
+    
+            # Compute the mean autocorrelation function 
+            autocorr_mean[idepth,:] = np.ma.mean(autocorr_seg, axis=0)
+    
+            # Set the autocorrelation segments for uncertainty estimation
+            autocorr_seg_unc = autocorr_seg
 
         # Compute the decorrelation scale of the mean autocorrelation 
         Lt[idepth], M_lag = compute_decor_scale_masked(autocorr_mean[idepth,:],time_lag) 
 
         # Compute the standard error of the decorrelation scale
         Lt_stdm[idepth], Lt_std[idepth], Lt_stds[idepth]  = compute_decor_scale_unc_masked(autocorr_mean[idepth,:], 
-                                                                                            autocorr_seg, 
+                                                                                            autocorr_seg_unc, 
                                                                                             M_lag, 
                                                                                             dt, 
                                                                                             segment_overlap,
                                                                                             )
 
     # Convert time scale to units of days
-    time_lag_days = time_lag/(24*60*60) 
-    Lt_days       = Lt/(24*60*60) 
-    Lt_stdm_days  = Lt_stdm/(24*60*60) 
-    Lt_std_days   = Lt_std/(24*60*60) 
-    Lt_stds_days  = Lt_stds/(24*60*60)   
-
+    time_lag_days = time_lag / seconds_per_day 
+    Lt_days       = Lt / seconds_per_day 
+    Lt_stdm_days  = Lt_stdm / seconds_per_day 
+    Lt_std_days   = Lt_std / seconds_per_day
+    Lt_stds_days  = Lt_stds / seconds_per_day    
 
     # -----------------------------------------------------------------------------
     # Save data in a netcdf file
@@ -441,17 +535,21 @@ def run_analysis(segment_duration):
         "variable": option_data,
         "interannual_method": option_interannual,
         "seasonal_harmonics": option_harmonics,
+        "autocovariance_normalization": norm,
         "segment_duration_years": segment_duration,
         "segment_overlap": segment_overlap,
         "segment_processing": seg_proc,
         "sampling_interval_seconds": dt,
+        "max_gap_duration_days": max_gap_duration / seconds_per_day,
+        "min_valid_fraction": min_valid_fraction,
+        "min_valid_segments": min_valid_segments,
     })
 
     # Set segment duration in months
     segment_months = int(round(segment_duration * 12))
 
     # Set file path for saving the netcdf file
-    file_path = PATH_processed / f"{option_mooring}_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+    file_path = PATH_processed / f"{option_mooring}_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
     # Check if file exists, then delete it
     if os.path.exists(file_path):

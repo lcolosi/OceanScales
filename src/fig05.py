@@ -55,7 +55,11 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - segment_months : Specifies the window duration. 
 # - sn_threshold : Signal-to-noise ratio threshold for the statistical significance 
 #                  criteria. Represents the number of standard deviation a
@@ -68,11 +72,12 @@ from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
 option_data        = 'density'    
 option_depth       = 9   
 option_interannual = 'linear' 
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging    = "weighted" 
 segment_months     = 6
 
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+# Label segment processing method 
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set uncertainty estimate parameters
 sn_threshold = 1
@@ -96,7 +101,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -183,8 +188,8 @@ xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(7,20+0.25,0.25) #np.arange(7,30+0.25,0.25) 
-ticks  = np.arange(8,20+2,2) #np.arange(8,30+4,4)
+levels = np.arange(6,22+0.25,0.25) 
+ticks  = np.arange(6,22+2,2) 
 levels_is = np.arange(100,300+100,100)
 levels_ms = np.arange(1000,3000+500,500)
 fontsize_g = 18

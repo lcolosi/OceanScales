@@ -47,7 +47,7 @@ from filter import gaussian_low_pass_filter
 # ------------#
 #
 # - option_data: Data variable to analyze.
-#                Options: "temp", "sal", "density", "uvel", "vvel", or "ssh".
+#                Options: "temp", "salt", "density", "uvel", "vvel", or "ssh".
 # - option_depth: Depth at which the decorrelation time scale is computed
 #                 (units: meters). Not used for SSH.
 # - option_interannual: Specifies the model of the interannual variability. 
