@@ -73,7 +73,7 @@ option_depth       = 9
 option_interannual = 'linear' 
 option_harmonics   = 2      
 option_detrend_seg = "detrend"
-option_averaging    = "unweighted" 
+option_averaging    = "weighted" 
 
 # Set time and space parameters
 seconds_per_day  = 24 * 60 * 60
@@ -94,15 +94,16 @@ if option_interannual not in ("linear", "gaussian"):
         "Choose 'linear' or 'gaussian'."
     )
 
+if option_detrend_seg not in ("detrend", "demean", None):
+    raise ValueError(
+        "option_detrend_seg must be 'detrend', 'demean', or None."
+    )
+
+
 if option_averaging not in ("weighted", "unweighted"):
     raise ValueError(
         f"Invalid option_averaging: {option_averaging}. "
         "Choose 'weighted' or 'unweighted'."
-    )
-
-if option_detrend_seg not in ("detrend", "demean", None):
-    raise ValueError(
-        "option_detrend_seg must be 'detrend', 'demean', or None."
     )
 
 # Label segment processing method 
@@ -349,9 +350,9 @@ for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon")
             time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
             
             # Remove segment-wise mean or linear trend
-            if option_detrend_seg == 'detrend': 
-                data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-            elif option_detrend_seg == 'demean':
+            if option_detrend_seg == "detrend": 
+                data_dt = detrend(dseg, time_elapsed_seg, mean = False)
+            elif option_detrend_seg == "demean":
                 data_dt = dseg - np.ma.mean(dseg)
             else: 
                 data_dt = dseg
@@ -397,10 +398,10 @@ for ilon in tqdm(range(nlon), desc="Computing Decorrelation Scales", unit="lon")
                                                                                             )
 
 # Convert time scale to units of days
-Lt_days      = Lt/(24*60*60) 
-Lt_stdm_days = Lt_stdm/(24*60*60) 
-Lt_std_days  = Lt_std/(24*60*60) 
-Lt_stds_days  = Lt_stds/(24*60*60) 
+Lt_days      = Lt / seconds_per_day 
+Lt_stdm_days = Lt_stdm / seconds_per_day 
+Lt_std_days  = Lt_std / seconds_per_day
+Lt_stds_days = Lt_stds / seconds_per_day  
 
 # -----------------------------------------------------------------------------
 # Save data in a netcdf file
@@ -486,6 +487,7 @@ data.attrs.update({
     "segment_duration_years": segment_duration,
     "segment_overlap": segment_overlap,
     "segment_processing": seg_proc,
+    "averaging_method": option_averaging,
     "sampling_interval_seconds": dt,
 })
 
@@ -496,14 +498,14 @@ segment_months = int(round(segment_duration * 12))
 if option_data == "ssh":
     file_path = (
         PATH_processed
-        / f"mitgcm_decor_scale_ssh_hrly_reg_{option_interannual}_{seg_proc}_{option_averaging}_"
+        / f"mitgcm_decor_scale_ssh_hrly_reg_{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{segment_duration}.nc"
     )
 else:
     file_path = (
         PATH_processed
         / f"mitgcm_decor_scale_{option_data}_hrly_reg_"
-          f"depth_{option_depth}m_{option_interannual}_{seg_proc}_{option_averaging}_"
+          f"depth_{option_depth}m_{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{segment_months}mo.nc"
     )
 
