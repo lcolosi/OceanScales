@@ -2,7 +2,12 @@
 # Figure 09
 # =============================================================================
 #
-# Caption:
+# Caption: 
+#   Spectral slope $\alpha$ in the study domain at 9.66 meter water depth. Black
+#   contour lines are the ocean bathymetry, with 200- and 2000-meter isobaths
+#   highlighted as solid black lines. Dashed bathymetric contours are shown at
+#   100-m intervals around the 200-m isobath and at 500-m intervals around the
+#   2000-m isobath.
 #   
 #
 # Author:
@@ -21,6 +26,7 @@ from netCDF4 import Dataset
 import cartopy.crs as ccrs
 import cmocean.cm as cmo
 import matplotlib as mpl
+from scipy.ndimage import gaussian_filter
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +69,8 @@ option_detrend_seg = True
 segment_months     = 6
 option_depth       = 9 
 option_slope_range = [182.5, 4.0] 
+option_smooth_slope = False
+slope_smooth_sigma = 1.5 
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -139,6 +147,52 @@ calCOFI_lat   = calCOFI_line80[:, 1]
 calCOFI_lon   = calCOFI_line80[:, 2]
 
 # -----------------------------------------------------------------------------
+# Apply spatial low-pass filter to spectral slope
+# -----------------------------------------------------------------------------
+
+# Convert spectral slope to slope parameter alpha
+alpha = np.ma.abs(spec_slope)
+
+# Initialize plotting field
+alpha_plot = alpha.copy()
+
+if option_smooth_slope:
+
+    # Convert masked array to regular array with NaNs
+    alpha_data = np.ma.filled(alpha, np.nan)
+
+    # Identify valid ocean grid points
+    valid = np.isfinite(alpha_data)
+
+    # Replace invalid values with zero for convolution
+    alpha_filled = np.where(valid, alpha_data, 0.0)
+
+    # Apply Gaussian filter to data
+    numerator = gaussian_filter(
+        alpha_filled,
+        sigma=slope_smooth_sigma,
+        mode='reflect'
+    )
+
+    # Apply identical filter to valid-data mask
+    denominator = gaussian_filter(
+        valid.astype(float),
+        sigma=slope_smooth_sigma,
+        mode='reflect'
+    )
+
+    # Normalize to avoid contamination from missing data
+    alpha_smoothed = np.divide(
+        numerator,
+        denominator,
+        out=np.full_like(numerator, np.nan),
+        where=denominator > 1e-12
+    )
+
+    # Preserve original land and missing-data mask
+    alpha_plot = np.ma.masked_where(~valid, alpha_smoothed)
+
+# -----------------------------------------------------------------------------
 # Compute the relative uncertainty of the spectral slope
 # -----------------------------------------------------------------------------
 
@@ -201,7 +255,7 @@ set_coastlines(
 ct = ax.contourf(
     lon, 
     lat, 
-    alpha, 
+    alpha_plot, 
     levels=levels,
     transform=ccrs.PlateCarree(),
     cmap=cmap, 

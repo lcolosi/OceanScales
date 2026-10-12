@@ -234,18 +234,6 @@ ax.contourf(
     transform=ccrs.PlateCarree()
 )
 
-# Add contour around the hatched region
-# ax.contour(
-#     lon,
-#     lat,
-#     data_boundary,
-#     levels=[0.5],   
-#     colors='tab:blue',          
-#     linewidths=0.75,
-#     zorder=11,              
-#     transform=ccrs.PlateCarree()
-# )
-
 # Plot the CCE1 mooring point
 ax.scatter(
     lon1, 

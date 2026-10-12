@@ -3,7 +3,14 @@
 # =============================================================================
 #
 # Caption:
-#   
+#   Autocorrelation of the the residual potential density time series at (a) CCE1,
+#   (b) CCE2, and (c) CCE3 for observations at 10 m depth for CCE1 (green) and 7 m
+#   depth for CCE2 (red) and model data at 9.66 m depth (gray). Corresponding 
+#   frequency spectra of the residual potential density time series at (d) CCE1, 
+#   (e) CCE2, and (f) CCE3. Dashed black curves in (a-c) 
+#   are the autocorrelation computed using the analytic solution \ref{} using the 
+#   spectral slope estimated from the model's frequency spectrum over the frequency 
+#   band $0.0055 \leq f \leq 0.25$ cpd.  
 #
 # Author:
 #   Luke Colosi
@@ -32,7 +39,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_corner_label, plot_spectral_slope
+from plotting import add_corner_label
 from spectra import spectral_slope
 from autocorr import autocorrelation_analytic, compute_decor_scale
 
@@ -67,11 +74,11 @@ option_detrend_seg = "detrend"
 option_averaging   = "weighted"
 segment_months     = 6
 option_depth       = 10 
-option_slope_range = [182.5, 30.0]
+option_slope_range = [182.5, 4.0]
 
 # Set time and space parameters
-fmin_slope = [1/182.5] #[1/182.5, 1/182.5, 1/182.5] 
-fmax_slope = [1/1.0]  #[1/4, 1/14.0, 1/30.0]       
+fmin_slope = [1/182.5]
+fmax_slope = [1/4.0]       
 
 # Label segment processing 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -327,7 +334,7 @@ def slope_label(key, i=0):
     return rf'$\alpha = {alpha:.2f} \pm {stdm:.2f}$'
 
 # Create figure
-fig, axes = plt.subplots(2,2,figsize=(15, 10))
+fig, axes = plt.subplots(2,3,figsize=(20, 10))
 ax_flat = axes.flatten()
 
 # --- Subplot 1 --- # 
@@ -341,7 +348,7 @@ ax.plot(time_lag_m_pos, autocorr_m_depth_pos[0,:], '-', color='dimgray', linewid
 ax.plot(time_lag_cce1_pos, autocorr_cce1_depth_pos, '-', color='tab:green', linewidth=1.5, label='Obs')
 
 # Plot the analytic autocorrelation for the specified slope and duration
-ax.plot(tau, autocorr_analytic['cce1_m'][0,:], '--', color='k', linewidth=1.5)
+ax.plot(tau, autocorr_analytic['cce1_m'][0,:], '--', color='k', linewidth=1.5, label='Analytic')
 
 # Set axis attributes
 ax.set_xlabel('Time Lag (days)')
@@ -352,6 +359,7 @@ ax.set_xticks(np.arange(0,x_max+dx,dx))
 ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
+ax.legend(loc='lower right', fontsize=12)
 
 # Add inset showing short-lag autocorrelation
 axins = ax.inset_axes([0.35, 0.55, 0.45, 0.42])
@@ -364,18 +372,17 @@ axins.plot(time_lag_m_pos, autocorr_m_depth_pos[0,:], '-', color='dimgray', line
 axins.plot(time_lag_cce1_pos, autocorr_cce1_depth_pos, '-', color='tab:green', linewidth=1.5)
 
 # Plot the analytic autocorrelation for the specified slope and duration
-axins.plot(tau, autocorr_analytic['cce2_m'][0,:], '--', color='k', linewidth=1.5)
+axins.plot(tau, autocorr_analytic['cce1_m'][0,:], '--', color='k', linewidth=1.5)
 
 # Set inset axis attributes
 axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
 axins.set_ylabel('Autocorrelation',fontsize=fontsize_ins)
-axins.set_xlim(0, 20)
+axins.set_xlim(0, 22)
 axins.set_ylim(-0.1,1.05)
-axins.set_xticks(np.arange(0, 20+2, 2))
+axins.set_xticks(np.arange(0, 22+2, 2))
 axins.set_yticks(np.arange(0,1+0.25,0.25))
 axins.grid(True, linestyle='--', alpha=0.3)
 axins.tick_params(which='both',direction='out',top=False,right=False,left=True,bottom=True,labelsize=fontsize_ins,length=3)
-ax.legend(loc='lower right', fontsize=14)
 
 # --- Subplot 2 --- # 
 ax = ax_flat[1]
@@ -416,15 +423,59 @@ axins.plot(tau, autocorr_analytic['cce2_m'][0,:], '--', color='k', linewidth=1.5
 # Set inset axis attributes
 axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
 axins.set_ylabel('Autocorrelation',fontsize=fontsize_ins)
-axins.set_xlim(0, 20)
+axins.set_xlim(0, 22)
 axins.set_ylim(-0.1,1.05)
-axins.set_xticks(np.arange(0, 20+2, 2))
+axins.set_xticks(np.arange(0, 22+2, 2))
 axins.set_yticks(np.arange(0,1+0.25,0.25))
 axins.grid(True, linestyle='--', alpha=0.3)
 axins.tick_params(which='both',direction='out',top=False,right=False,left=True,bottom=True,labelsize=fontsize_ins,length=3)
 
 # --- Subplot 3 --- # 
 ax = ax_flat[2]
+
+# Plot the zero line 
+ax.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=1)
+
+# Plot the mean autocorrelation at CCE1 for the model and observations
+ax.plot(time_lag_m_pos, autocorr_m_depth_pos[2,:], '-', color='dimgray', linewidth=1.5)
+
+# Plot the analytic autocorrelation for the specified slope and duration
+ax.plot(tau, autocorr_analytic['cce3_m'][0,:], '--', color='k', linewidth=1.5)
+
+# Set axis attributes
+ax.set_xlabel('Time Lag (days)')
+ax.set_xlim(-10,x_max)
+ax.set_ylim(-0.45, 1.1)
+ax.set_xticks(np.arange(0,x_max+dx,dx))
+ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
+ax.set_yticklabels([])
+ax.grid(True,linestyle='--',alpha=0.3)
+ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
+
+# Add inset showing short-lag autocorrelation
+axins = ax.inset_axes([0.35, 0.55, 0.45, 0.42])
+
+# Plot the zero line 
+axins.axhline(0, color='k', alpha = 0.8, ls='--', linewidth=0.75)
+
+# Plot the mean autocorrelation
+axins.plot(time_lag_m_pos, autocorr_m_depth_pos[2,:], '-', color='dimgray', linewidth=1.5)
+
+# Plot the analytic autocorrelation for the specified slope and duration
+axins.plot(tau, autocorr_analytic['cce3_m'][0,:], '--', color='k', linewidth=1.5)
+
+# Set inset axis attributes
+axins.set_xlabel('Time Lag (days)',fontsize=fontsize_ins)
+axins.set_ylabel('Autocorrelation',fontsize=fontsize_ins)
+axins.set_xlim(0, 22)
+axins.set_ylim(-0.1,1.05)
+axins.set_xticks(np.arange(0, 22+2, 2))
+axins.set_yticks(np.arange(0,1+0.25,0.25))
+axins.grid(True, linestyle='--', alpha=0.3)
+axins.tick_params(which='both',direction='out',top=False,right=False,left=True,bottom=True,labelsize=fontsize_ins,length=3)
+
+# --- Subplot 4 --- # 
+ax = ax_flat[3]
 
 # Add tidal and Coriolis frequencies
 ax.axvline(f_K1, color='k', linestyle=':', linewidth=1.0)
@@ -442,41 +493,16 @@ ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 20), text
             rotation=0, ha='center', va='top', fontsize=10)
 
 # Plot the mean power spectrum at CCE1 for the model and observations
-ax.loglog(freq_m[1:], psd_m_depth[0,1:], '-', color='dimgray', linewidth=1.5)
-ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1.5, alpha=0.7)
+ax.loglog(freq_m[1:], psd_m_depth[0,1:], '-', color='dimgray', linewidth=1)
+ax.loglog(freq_cce1[1:], psd_cce1_depth[1:], '-', color='tab:green', linewidth=1, alpha=0.7)
 
 # Plot the 95% confidence interval of the mean power spectrum 
-ax.fill_between(freq_m[1:], psd_CI_m_depth[0,1:,0], psd_CI_m_depth[0,1:,1], color='dimgray', alpha=0.25)
-ax.fill_between(freq_cce1[1:], psd_CI_cce1_depth[1:,0], psd_CI_cce1_depth[1:,1], color='tab:green', alpha=0.25)
+ax.fill_between(freq_m[1:], psd_CI_m_depth[0,1:,0], psd_CI_m_depth[0,1:,1], color='dimgray', alpha=0.15)
+ax.fill_between(freq_cce1[1:], psd_CI_cce1_depth[1:,0], psd_CI_cce1_depth[1:,1], color='tab:green', alpha=0.15)
 
 # Plot the least-squares fit of the spectral slope
-ax.loglog(f_fit['cce1_m'][0], spec_fit['cce1_m'][0], '--', color='k', linewidth=1.25, label=slope_label('cce1_m'))
-ax.loglog(f_fit['cce1'][0], spec_fit['cce1'][0], '-.', color='k', linewidth=1.25, label=slope_label('cce1'))
-
-# Plot the reference spectral slopes lines
-# plot_spectral_slope(ax, fmin=fmin_slope_ref, fmax=fmax_slope_ref, y_ref=2e0, slope=-1.5, color='gray', linestyle='--', linewidth=1, fontsize=11)
-# plot_spectral_slope(ax, fmin=fmin_slope_ref, fmax=fmax_slope_ref, y_ref=4e0, slope=-2, color='gray', linestyle='-.', linewidth=1, fontsize=11)
-
-# # Label spectral slopes
-# ax.annotate(
-#     r'$f^{-\frac{3}{2}}$',
-#     xy=(0.95, 0.37),
-#     xycoords='axes fraction',
-#     fontsize=11,
-#     color='k',
-#     ha='left',
-#     va='center',
-# )
-
-# ax.annotate(
-#     r'$f^{-2}$',
-#     xy=(0.95, 0.23),
-#     xycoords='axes fraction',
-#     fontsize=11,
-#     color='k',
-#     ha='left',
-#     va='center',
-# )
+ax.loglog(f_fit['cce1_m'][0], spec_fit['cce1_m'][0], '--', color='k', linewidth=1.25, label='Model: ' + slope_label('cce1_m'))
+ax.loglog(f_fit['cce1'][0], spec_fit['cce1'][0], '--', color='tab:green', linewidth=1.25, label='Obs: ' + slope_label('cce1'))
 
 # Set axis attributes
 ax.set_xlabel('Frequency (cpd)')
@@ -485,10 +511,10 @@ ax.set_xlim(4*10**(-3), 1.5*10**1)
 ax.set_ylim(6*10**(-10),1*10**1)
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
-ax.legend(loc='lower left', fontsize=14)
+ax.legend(loc='lower left', fontsize=12)
 
-# --- Subplot 4 --- # 
-ax = ax_flat[3]
+# --- Subplot 5 --- # 
+ax = ax_flat[4]
 
 # Add tidal and Coriolis frequencies
 ax.axvline(f_K1, color='k', linestyle=':', linewidth=1.0)
@@ -506,41 +532,16 @@ ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 20), text
             rotation=0, ha='center', va='top', fontsize=10)
 
 # Plot the mean power spectrum at CCE1 for the model and observations
-ax.loglog(freq_m[1:], psd_m_depth[1,1:], '-', color='dimgray', linewidth=1.0)
-ax.loglog(freq_cce2[1:], psd_cce2_depth[1:], '-', color='tab:red', linewidth=1.0, alpha=0.7)
+ax.loglog(freq_m[1:], psd_m_depth[1,1:], '-', color='dimgray', linewidth=1)
+ax.loglog(freq_cce2[1:], psd_cce2_depth[1:], '-', color='tab:red', linewidth=1, alpha=0.7)
 
 # Plot the 95% confidence interval of the mean power spectrum 
-ax.fill_between(freq_m[1:], psd_CI_m_depth[1,1:,0], psd_CI_m_depth[1,1:,1], color='dimgray', alpha=0.25)
-ax.fill_between(freq_cce2[1:], psd_CI_cce2_depth[1:,0], psd_CI_cce2_depth[1:,1], color='tab:red', alpha=0.25)
+ax.fill_between(freq_m[1:], psd_CI_m_depth[1,1:,0], psd_CI_m_depth[1,1:,1], color='dimgray', alpha=0.15)
+ax.fill_between(freq_cce2[1:], psd_CI_cce2_depth[1:,0], psd_CI_cce2_depth[1:,1], color='tab:red', alpha=0.15)
 
 # Plot the least-squares fit of the spectral slope
-ax.loglog(f_fit['cce2_m'][0], spec_fit['cce2_m'][0], '--', color='k', linewidth=1.25, label=slope_label('cce2_m'))
-ax.loglog(f_fit['cce2'][0], spec_fit['cce2'][0], '-.', color='k', linewidth=1.25, label=slope_label('cce2'))
-
-# Plot the reference spectral slopes lines
-# plot_spectral_slope(ax, fmin=fmin_slope_ref, fmax=fmax_slope_ref, y_ref=3e0, slope=-1, color='gray', linestyle='--', linewidth=1, fontsize=11)
-# plot_spectral_slope(ax, fmin=fmin_slope_ref, fmax=fmax_slope_ref, y_ref=2.5e1, slope=-1.75, color='gray', linestyle='-.', linewidth=1, fontsize=11)
-
-# # Label spectral slopes
-# ax.annotate(
-#     r'$f^{-\frac{7}{4}}$',
-#     xy=(0.95, 0.38),
-#     xycoords='axes fraction',
-#     fontsize=11,
-#     color='k',
-#     ha='left',
-#     va='center',
-# )
-
-# ax.annotate(
-#     r'$f^{-1}$',
-#     xy=(0.95, 0.65),
-#     xycoords='axes fraction',
-#     fontsize=11,
-#     color='k',
-#     ha='left',
-#     va='center',
-# )
+ax.loglog(f_fit['cce2_m'][0], spec_fit['cce2_m'][0], '--', color='k', linewidth=1.25, label='Model: ' + slope_label('cce2_m'))
+ax.loglog(f_fit['cce2'][0], spec_fit['cce2'][0], '--', color='tab:red', linewidth=1.25, label='Obs: ' + slope_label('cce2'))
 
 # Set axis attributes
 ax.set_xlabel('Frequency (cpd)')
@@ -549,14 +550,52 @@ ax.set_ylim(6*10**(-10),1*10**1)
 ax.set_yticklabels([])
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
-ax.legend(loc='lower left', fontsize=14)
+ax.legend(loc='lower left', fontsize=12)
+
+# --- Subplot 6 --- # 
+ax = ax_flat[5]
+
+# Add tidal and Coriolis frequencies
+ax.axvline(f_K1, color='k', linestyle=':', linewidth=1.0)
+ax.axvline(f_M2, color='k', linestyle=':', linewidth=1.0)
+ax.axvline(f_coriolis[1], color='k', linestyle='--', linewidth=1.0)
+
+# Add frequency labels
+ax.annotate(r'$\mathrm{K}_1$', xy=(f_K1, ax.get_ylim()[1]), xytext=(-8, 20), textcoords='offset points',
+            rotation=0, ha='center', va='top', fontsize=10)
+
+ax.annotate(r'$f$', xy=(f_coriolis[1], ax.get_ylim()[1]), xytext=(5, 21), textcoords='offset points',
+            rotation=0, ha='center', va='top', fontsize=10)
+
+ax.annotate(r'$\mathrm{M}_2$', xy=(f_M2, ax.get_ylim()[1]), xytext=(8, 20), textcoords='offset points',
+            rotation=0, ha='center', va='top', fontsize=10)
+
+# Plot the mean power spectrum at CCE1 for the model and observations
+ax.loglog(freq_m[1:], psd_m_depth[2,1:], '-', color='dimgray', linewidth=1)
+
+# Plot the 95% confidence interval of the mean power spectrum 
+ax.fill_between(freq_m[1:], psd_CI_m_depth[2,1:,0], psd_CI_m_depth[2,1:,1], color='dimgray', alpha=0.15)
+
+# Plot the least-squares fit of the spectral slope
+ax.loglog(f_fit['cce3_m'][0], spec_fit['cce3_m'][0], '--', color='k', linewidth=1.25, label='Model: ' + slope_label('cce3_m'))
+
+# Set axis attributes
+ax.set_xlabel('Frequency (cpd)')
+ax.set_xlim(4*10**(-3), 1.5*10**1)
+ax.set_ylim(6*10**(-10),1*10**1)
+ax.set_yticklabels([])
+ax.grid(True,linestyle='--',alpha=0.3)
+ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
+ax.legend(loc='lower left', fontsize=12)
 
 # Label each subplot
 pos = [0.95, 0.91] 
 add_corner_label(axes[0,0], pos, 'A', fontsize = fontsize)
 add_corner_label(axes[0,1], pos, 'B', fontsize = fontsize)
-add_corner_label(axes[1,0], pos, 'C', fontsize = fontsize)
-add_corner_label(axes[1,1], pos, 'D', fontsize = fontsize)
+add_corner_label(axes[0,2], pos, 'C', fontsize = fontsize)
+add_corner_label(axes[1,0], pos, 'D', fontsize = fontsize)
+add_corner_label(axes[1,1], pos, 'E', fontsize = fontsize)
+add_corner_label(axes[1,2], pos, 'E', fontsize = fontsize)
 
 # Adjust spacing 
 plt.subplots_adjust(hspace=0.21, wspace=0.1)

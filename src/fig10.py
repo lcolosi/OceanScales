@@ -163,49 +163,49 @@ T_months_ds    = T_ds / days_per_month
 # Compute the analytic autocorrelation at a range of spectral slopes
 # -----------------------------------------------------------------------------
 
-# # Set sampling interval and record duration parameters (units: days)
-# dt = 1/24                                         
-# T  = (segment_months/12) * 365  
+# Set sampling interval and record duration parameters (units: days)
+dt = 1 / 24                                         
+T  = (segment_months/12) * 365  
 
-# # Set maximum and minimum frequency in units of cpd
-# fmax = 1 / (2*dt)                                         
-# fmin = 1 / T               
+# Set maximum and minimum frequency in units of cpd
+fmax = 1 / (2*dt)                                         
+fmin = 1 / T               
 
-# # Set time lag (units: days)
-# tau = np.arange(0, T + dt/2, dt)
+# Set time lag (units: days)
+tau = np.arange(0, T + dt/2, dt)
 
-# # Set range of spectral slopes to evaluate
-# alpha = np.arange(0, 3 + 0.05, 0.05)
-# nalpha = len(alpha)
+# Set range of spectral slopes to evaluate
+alpha = np.arange(0, 3 + 0.05, 0.05)
+nalpha = len(alpha)
 
-# # Set precision for complex special functions
-# mp.dps = 25
+# Set precision for complex special functions
+mp.dps = 25
 
-# # Initialize results
-# Lt_analytic = np.zeros((nalpha))
+# Initialize results
+Lt_analytic = np.zeros((nalpha))
 
-# # Loop through spectral slopes
-# for i, ialpha in enumerate(alpha):
+# Loop through spectral slopes
+for i, ialpha in enumerate(alpha):
 
-#         # Compute analytic autocorrelation at positive lags
-#         _, autocorr_pos, _ = autocorrelation_analytic(
-#             tau[1:],
-#             fmin,
-#             fmax,
-#             ialpha,
-#             biased=True,
-#             record_duration=T
-#         )
+        # Compute analytic autocorrelation at positive lags
+        _, autocorr_pos, _ = autocorrelation_analytic(
+            tau[1:],
+            fmin,
+            fmax,
+            ialpha,
+            biased=True,
+            record_duration=T
+        )
 
-#         # Add exact zero-lag autocorrelation
-#         rho = np.concatenate(([1.0], np.asarray(autocorr_pos, dtype=float)))
+        # Add exact zero-lag autocorrelation
+        rho = np.concatenate(([1.0], np.asarray(autocorr_pos, dtype=float)))
 
-#         # Construct full autocorrelation and lag arrays
-#         rho_full = np.concatenate((rho[:0:-1], rho))
-#         lag_full = np.concatenate((-tau[:0:-1], tau))
+        # Construct full autocorrelation and lag arrays
+        rho_full = np.concatenate((rho[:0:-1], rho))
+        lag_full = np.concatenate((-tau[:0:-1], tau))
 
-#         # Compute decorrelation scale by maximizing the symmetric integral
-#         Lt_analytic[i], _ = compute_decor_scale(rho_full, lag_full)
+        # Compute decorrelation scale by maximizing the symmetric integral
+        Lt_analytic[i], _ = compute_decor_scale(rho_full, lag_full)
 
 # -----------------------------------------------------------------------------
 # Preprocess spectral slope and decorrelation scale data

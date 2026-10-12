@@ -46,15 +46,15 @@ from autocorr import autocorrelation_analytic, decorrelation_scale_analytic, com
 # -----------------------------------------------------------------------------
 
 # Set sampling interval and record duration parameters (units: days)
-dt = 1/24                                         
+dt = 1 / 24                                         
 T_ac  = np.array([1/12, 2/12, 3/12, 4/12, 6/12, 8/12, 1]) * (365)  
 
 # Set maximum and minimum frequency in units of cpd
-fmax = 1/(2*dt)                                         
-fmin_values_ac = 1/T_ac               
+fmax = 1 / (2*dt)                                         
+fmin_values_ac = 1 / T_ac               
 
 # Set spectral slope values 
-alpha_values_ac = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0, 5.0]
+alpha_values_ac = np.arange(0, 3 + 0.05, 0.05) #[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0, 5.0]
 
 # Convert time to units of months 
 days_per_month = 365 / 12 
