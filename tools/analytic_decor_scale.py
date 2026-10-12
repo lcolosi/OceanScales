@@ -45,6 +45,9 @@ from autocorr import autocorrelation_analytic, decorrelation_scale_analytic, com
 # Set parameters for Autocorrelation calculation
 # -----------------------------------------------------------------------------
 
+# Set whether to compute the biased or unbiased estimate 
+option_biased = True
+
 # Set sampling interval and record duration parameters (units: days)
 dt = 1 / 24                                         
 T_ac  = np.array([1/12, 2/12, 3/12, 4/12, 6/12, 8/12, 1]) * (365)  
@@ -54,7 +57,7 @@ fmax = 1 / (2*dt)
 fmin_values_ac = 1 / T_ac               
 
 # Set spectral slope values 
-alpha_values_ac = np.arange(0, 3 + 0.05, 0.05) #[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0, 5.0]
+alpha_values_ac = np.arange(0, 3 + 0.05, 0.05)
 
 # Convert time to units of months 
 days_per_month = 365 / 12 
@@ -95,7 +98,7 @@ for i, fmin in enumerate(tqdm(fmin_values_ac,desc="Computing Analytic Autocorrel
                                                       fmin, 
                                                       fmax, 
                                                       alpha, 
-                                                      biased=True, 
+                                                      biased=option_biased, 
                                                       record_duration=T_ac[i]
                                                      )
 
@@ -155,12 +158,15 @@ for i, fmin in enumerate(tqdm(fmin_values_ds,desc="Computing Analytic decorrelat
 # Save data in a netcdf file 
 # -----------------------------------------------------------------------------
 
+# Set label for autocorrelation estimate  
+autocorr_estimate = "biased" if option_biased else "unbiased"
+
 # --- Autocorrelation --- # 
 autocorr = xr.DataArray(data=rho,
                         dims=['lag','duration_ac','slope_ac'],
                         coords=dict(lag=tau,duration_ac=T_ac,slope_ac=alpha_values_ac),
                         attrs=dict(
-                            description=(f'Analytic autocorrelation solutions for ' + 
+                            description=(f'Analytic ({autocorr_estimate}) autocorrelation solutions for ' + 
                                         'a range of window durations and spectral slopes.'),
                             units='unitless'
                         )
@@ -208,7 +214,7 @@ data = xr.Dataset({'autocorr':autocorr,'decor_scale':decor_scale,'decor_scale_ma
 PATH_processed = PATH_data / 'analytic' 
 
 # Set file path for saving the netcdf file
-file_path = PATH_processed / f"analytic_decor_scale.nc"
+file_path = PATH_processed / f"analytic_decor_scale_{autocorr_estimate}.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

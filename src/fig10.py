@@ -1,8 +1,19 @@
 # =============================================================================
-# Figure 09
+# Figure 10
 # =============================================================================
 #
 # Caption:
+#   Scatter plot of the decorrelation time scale as a function of spectral 
+#   slope for model data in the study domain at 9.66 meters water depth. 
+#   Dots are colored according to bathymetric regions described in table~\ref{t1}: 
+#   deep ocean ($H>2000$ m; green), intermediate depth ($200<H\leq2000$ m; red), 
+#   and continental shelf ($H\leq200$ m; blue). Dashed curves show the analytically 
+#   derived solution, calculated using the full integral of the autocorrelation 
+#   (gray) and the maximum of the cumulative integral $\mathcal{I}(\tau)$ (black). 
+#   Inset shows the same scatterplot over an expanded range of spectral slopes
+#   and decorrelation time scales. Marginal probability density functions of 
+#   spectral slope (top) and decorrelation time scales (right) are show for each 
+#   bathymetric region, with colors corresponding to those in the scatter plot.  
 #   
 #
 # Author:
@@ -18,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
-import mpmath as mp
+from scipy.stats import gaussian_kde
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,8 +42,8 @@ PATH_tools = ROOT / "tools"
 # Set path to access additional python functions
 sys.path.append(str(PATH_tools))
 
-# Import toolbox 
-from autocorr import autocorrelation_analytic, compute_decor_scale
+# Import plotting toolbox 
+from stats import compute_pdf_1D
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -59,13 +70,14 @@ from autocorr import autocorrelation_analytic, compute_decor_scale
 # ------------#
 
 # Set processing parameters
-option_data        = 'density'    
-option_interannual = 'linear' 
-option_detrend_seg = "detrend"
-option_averaging   = "weighted"
-segment_months     = 6
-option_depth       = 9 
-option_slope_range = [182.5, 4.0] # [182.5, 14.0]
+option_data         = 'density'    
+option_interannual  = 'linear' 
+option_detrend_seg  = "detrend"
+option_averaging    = "weighted"
+segment_months      = 6
+option_depth        = 9 
+option_slope_range  = [182.5, 4.0]
+option_analytic_est = "biased" 
 
 # Label segment processing 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -83,7 +95,7 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scale and spectral data
+# Load MITgcm and CCE decorrelation scale and spectral data 
 # -----------------------------------------------------------------------------
 
 # --- MITgcm Decorrelation Scale Data --- # 
@@ -116,6 +128,46 @@ nc = Dataset(filename_mitgcm, 'r')
 spec_slope      = nc.variables['SPEC_slope'][:]
 spec_slope_stdm = nc.variables['SPEC_slope_stde'][:]
 
+# --- CCE Autocorrelation Data --- # 
+
+# Set path to processed regional MITgcm data
+PATH_processed_cce1 = PATH_data / "cce" / "cce1" / "processed"
+PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
+
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
+
+# Extract data variables
+depth_cce1    = nc_cce1.variables['depth'][:]
+Lt_cce1       = nc_cce1.variables['decor_scale'][:]
+Lt_stdm_cce1  = nc_cce1.variables['decor_scale_stdm'][:]
+
+depth_cce2    = nc_cce2.variables['depth'][:]
+Lt_cce2       = nc_cce2.variables['decor_scale'][:]
+Lt_stdm_cce2  = nc_cce2.variables['decor_scale_stdm'][:]
+
+# --- CCE Spectral Data --- # 
+
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_spectra_{option_data}_hrly_mooring_gaussian_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_spectra_{option_data}_hrly_mooring_gaussian_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
+
+# Extract data variables
+spec_slope_cce1      = nc_cce1.variables['SPEC_slope'][:]
+spec_slope_stdm_cce1 = nc_cce1.variables['SPEC_slope_stde'][:]
+
+spec_slope_cce2      = nc_cce2.variables['SPEC_slope'][:]
+spec_slope_stdm_cce2 = nc_cce2.variables['SPEC_slope_stde'][:]
+
 # --- Water Depth --- # 
 
 # Set path to processed regional MITgcm data
@@ -130,16 +182,13 @@ nc = Dataset(filename, 'r')
 # Extract local bathymetric depth
 water_depth = nc.variables["water_depth"][:]
 
-# Close file
-nc.close()
-
 # Mask dry cells previously set to NaN during preprocessing
 water_depth_m = np.ma.masked_invalid(water_depth)
 
 # --- Analytic Autocorrelation --- # 
 
 # Set filename to saved the netcdf file
-filename = PATH_data / "analytic" / f"analytic_decor_scale.nc"
+filename = PATH_data / "analytic" / f"analytic_decor_scale_{option_analytic_est}.nc"
 
 # Load in data
 with Dataset(filename, "r") as nc:
@@ -158,54 +207,6 @@ with Dataset(filename, "r") as nc:
 days_per_month = 365 / 12 
 T_months_ac    = T_ac / days_per_month
 T_months_ds    = T_ds / days_per_month
-
-# -----------------------------------------------------------------------------
-# Compute the analytic autocorrelation at a range of spectral slopes
-# -----------------------------------------------------------------------------
-
-# Set sampling interval and record duration parameters (units: days)
-dt = 1 / 24                                         
-T  = (segment_months/12) * 365  
-
-# Set maximum and minimum frequency in units of cpd
-fmax = 1 / (2*dt)                                         
-fmin = 1 / T               
-
-# Set time lag (units: days)
-tau = np.arange(0, T + dt/2, dt)
-
-# Set range of spectral slopes to evaluate
-alpha = np.arange(0, 3 + 0.05, 0.05)
-nalpha = len(alpha)
-
-# Set precision for complex special functions
-mp.dps = 25
-
-# Initialize results
-Lt_analytic = np.zeros((nalpha))
-
-# Loop through spectral slopes
-for i, ialpha in enumerate(alpha):
-
-        # Compute analytic autocorrelation at positive lags
-        _, autocorr_pos, _ = autocorrelation_analytic(
-            tau[1:],
-            fmin,
-            fmax,
-            ialpha,
-            biased=True,
-            record_duration=T
-        )
-
-        # Add exact zero-lag autocorrelation
-        rho = np.concatenate(([1.0], np.asarray(autocorr_pos, dtype=float)))
-
-        # Construct full autocorrelation and lag arrays
-        rho_full = np.concatenate((rho[:0:-1], rho))
-        lag_full = np.concatenate((-tau[:0:-1], tau))
-
-        # Compute decorrelation scale by maximizing the symmetric integral
-        Lt_analytic[i], _ = compute_decor_scale(rho_full, lag_full)
 
 # -----------------------------------------------------------------------------
 # Preprocess spectral slope and decorrelation scale data
@@ -231,84 +232,226 @@ valid = (
 )
 
 # -----------------------------------------------------------------------------
-# Compute representative uncertainty for each bathymetric region
-# -----------------------------------------------------------------------------
-
-# Define valid masks for each bathymetric region
-shelf_mask_valid = valid & (water_depth_m <= 200)
-inter_mask_valid = valid & (water_depth_m > 200) & (water_depth_m <= 2000)
-deep_mask_valid = valid & (water_depth_m > 2000)
-
-# Compute median 1-sigma uncertainty in each region
-
-# Continental Shelf
-shelf_xerr = np.nanmedian(slope_err[shelf_mask_valid])
-shelf_yerr = np.nanmedian(Lt_err[shelf_mask_valid])
-
-# Intermediate Depth
-inter_xerr = np.nanmedian(slope_err[inter_mask_valid])
-inter_yerr = np.nanmedian(Lt_err[inter_mask_valid])
-
-# Deep Ocean
-deep_xerr = np.nanmedian(slope_err[deep_mask_valid])
-deep_yerr = np.nanmedian(Lt_err[deep_mask_valid])
-
-# -----------------------------------------------------------------------------
 # Plot decorrelation time scale as a function of spectral slope
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-fontsize_g = 18
 regions = [
     (water_depth_m > 2000, 'tab:green', 'Deep Ocean'),
     ((water_depth_m > 200) & (water_depth_m <= 2000), 'tab:red', 'Intermediate Depth'),
     (water_depth_m <= 200, 'tab:blue', 'Continental Shelf'),
 ]
-fontsize_ins = 10
+fontsize_ins = 12
+alpha_edges = np.arange(0, 2.15 + 0.05, 0.05)
+Lt_edges    = np.arange(4, 26 + 0.5, 0.5)
 
 # Create figure
-fig, ax = plt.subplots(figsize=(10, 8))
+fig = plt.figure(figsize=(10, 8))
 
-# Loop through regions
+# Define GridSpec layout for scatter plot and marginal PDFs
+gs = fig.add_gridspec(
+    2, 2,
+    width_ratios=[5, 1],
+    height_ratios=[1, 5],
+    hspace=0.03,
+    wspace=0.03
+)
+
+# Create axes
+ax       = fig.add_subplot(gs[1, 0])
+ax_top   = fig.add_subplot(gs[0, 0], sharex=ax)
+ax_right = fig.add_subplot(gs[1, 1], sharey=ax)
+
+# Adjust figure margins
+fig.subplots_adjust(
+    left=0.12,
+    right=0.95,
+    bottom=0.13,
+    top=0.95
+)
+
+# Loop through bathymetric regions
 for mask, color, label in regions:
 
     # Select valid data points within the current region
-    select = valid & mask
+    select = valid & np.ma.filled(mask, False)
+
+    # Extract data for the region
+    x = alpha_data[select]
+    y = Lt_data[select]
 
     # Plot scatter for the current region
     ax.scatter(
-        alpha_data[select],
-        Lt_data[select],
+        x,
+        y,
         s=10,
         color=color,
-        alpha=0.25,
+        alpha=0.225,
         edgecolors='none',
         label=label
     )
 
-# Plot the theoretical decorrelation scale and spectral slope relationship
-idx_T_ds = T_months_ds == 6
-ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label='Analytic - Full Integral')
+    # Compute marginal PDFs
+    _, pdf_x, x_centers = compute_pdf_1D(x, alpha_edges)
+    _, pdf_y, y_centers = compute_pdf_1D(y, Lt_edges)
 
-idx_T_ac = T_months_ac == 6
+    # Plot top marginal PDF
+    ax_top.stairs(
+        pdf_x,
+        alpha_edges,
+        color=color,
+        linewidth=1.8
+    )
+
+    ax_top.bar(
+        x_centers,
+        pdf_x,
+        width=np.diff(alpha_edges),
+        facecolor=color,
+        alpha=0.15,
+        edgecolor='none',
+        linewidth=1.2
+    )
+
+    # Plot right marginal PDF
+    ax_right.stairs(
+        pdf_y,
+        Lt_edges,
+        orientation='horizontal',
+        color=color,
+        linewidth=1.8
+    )
+
+    ax_right.barh(
+        y_centers,
+        pdf_y,
+        height=np.diff(Lt_edges),
+        facecolor=color,
+        alpha=0.15,
+        edgecolor='none',
+        linewidth=1.2
+    )
+
+# --- Top marginal PDF --- #
+ax_top.tick_params(
+    axis='both',
+    which='both',
+    bottom=True,
+    left=False,
+    labelbottom=False,
+    labelleft=False
+)
+
+for spine in ['top', 'right', 'left']:
+    ax_top.spines[spine].set_visible(False)
+
+
+# --- Right marginal PDF --- #
+ax_right.tick_params(
+    axis='both',
+    which='both',
+    bottom=False,
+    left=True,
+    labelbottom=False,
+    labelleft=False
+)
+
+for spine in ['top', 'right', 'bottom']:
+    ax_right.spines[spine].set_visible(False)
+
+# Remove the top and right spines of the main axis
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+# Obtain the depth indices for the CCE1 and CCE2 data 
+idx_cce1 = np.argmin(np.abs(depth_cce1 - option_depth))
+idx_cce2 = np.argmin(np.abs(depth_cce2 - option_depth))
+
+# Extract spectral slopes and decorrelation scales
+alpha_cce1 = np.abs(spec_slope_cce1[idx_cce1])
+alpha_cce2 = np.abs(spec_slope_cce2[idx_cce2])
+alpha_stdm_cce1 = spec_slope_stdm_cce1[idx_cce1]
+alpha_stdm_cce2 = spec_slope_stdm_cce2[idx_cce2]
+
+Lt_cce1_plot = Lt_cce1[idx_cce1]
+Lt_cce2_plot = Lt_cce2[idx_cce2]
+Lt_stdm_cce1_plot = Lt_stdm_cce1[idx_cce1]
+Lt_stdm_cce2_plot = Lt_stdm_cce2[idx_cce2]
+
+# Plot observations
+ax.plot(
+    alpha_cce1, Lt_cce1_plot,
+    marker='^', linestyle='none',
+    color='tab:green', markeredgecolor='black',
+    markersize=8, alpha=1, label='CCE1'
+)
+
+ax.plot(
+    alpha_cce2, Lt_cce2_plot,
+    marker='s', linestyle='none',
+    color='tab:red', markeredgecolor='black',
+    markersize=8, alpha=1, label='CCE2'
+)
+
+# Plot CCE1
+ax.errorbar(
+    alpha_cce1,
+    Lt_cce1_plot,
+    xerr=alpha_stdm_cce1,
+    yerr=Lt_stdm_cce1_plot,
+    fmt='^',
+    markersize=10,
+    color='tab:green',
+    markeredgecolor='k',
+    markeredgewidth=1.5,
+    ecolor='black',
+    elinewidth=1.2,
+    capsize=3,
+    capthick=1.2,
+    alpha=1.0,
+    zorder=10,
+)
+
+# Plot CCE2
+ax.errorbar(
+    alpha_cce2,
+    Lt_cce2_plot,
+    xerr=alpha_stdm_cce2,
+    yerr=Lt_stdm_cce2_plot,
+    fmt='s',
+    markersize=10,
+    color='tab:red',
+    markeredgecolor='k',
+    markeredgewidth=1.5,
+    ecolor='black',
+    elinewidth=1.2,
+    capsize=3,
+    capthick=1.2,
+    alpha=1.0,
+    zorder=10,
+)
+
+# Obtain the indices of the segment duration 
+idx_T_ds = T_months_ds == segment_months
+idx_T_ac = T_months_ac == segment_months
+
+# Plot the theoretical decorrelation scale and spectral slope relationship
+ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label='Analytic - Full Integral')
 ax.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
 
-#ax.plot(alpha, Lt_analytic, '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
-
 # Set axis attributes
-ax.set_xlabel(r'Spectral Slope $\alpha$', fontsize=fontsize_g)
-ax.set_ylabel(r'Decorrelation Scale (days)', fontsize=fontsize_g)
-ax.set_xlim(-0.1, 2.1)
+ax.set_xlabel(r'Spectral Slope $\alpha$')
+ax.set_ylabel(r'Decorrelation Scale (days)')
+ax.set_xlim(0, 2.15)
 ax.set_ylim(4, 26)
 ax.set_xticks(np.arange(0,2+0.25,0.25))
 ax.set_yticks(np.arange(4,26+2,2))
-ax.tick_params(axis='both', labelsize=fontsize_g)
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
 ax.legend(loc='lower left', fontsize=12)
 
 # Add inset showing short-lag autocorrelation
-axins = ax.inset_axes([0.075, 0.55, 0.4, 0.4])
+axins = ax.inset_axes([0.1, 0.55, 0.4, 0.4])
 
 # Loop through regions
 for mask, color, label in regions:
@@ -328,16 +471,13 @@ for mask, color, label in regions:
     )
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
-idx_T_ds = T_months_ds == 6
-axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label='Analytic')
-
-idx_T_ac = T_months_ac == 6
-axins.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
+axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5)
+axins.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5)
 
 # Set inset axis attributes
 axins.set_xlabel(r'Spectral Slope $\alpha$',fontsize=fontsize_ins)
 axins.set_ylabel('Decorrelation Scale (days)',fontsize=fontsize_ins)
-axins.set_xlim(-0.1, 2.5)
+axins.set_xlim(0, 3)
 axins.set_ylim(0, 35)
 axins.set_xticks(np.arange(0,3+0.5,0.5))
 axins.set_yticks(np.arange(0,35+5,5))
@@ -377,51 +517,3 @@ for mask, color, label in regions:
     r = np.corrcoef(x, y)[0, 1]
 
     print(f'{label}: r = {r:.3f}, N = {len(x)}')
-
-
-# # Plot the representive uncertainty for the continental shelf region
-# ax.errorbar(
-#     x0, y0,
-#     xerr=shelf_xerr, yerr=shelf_yerr,
-#     fmt='o',
-#     color='tab:blue',
-#     ecolor='tab:blue',
-#     elinewidth=1.5,
-#     capsize=3,
-#     markersize=4
-# )
-# ax.text(x0 + 0.08, y0 + 0.4, 'Continental Shelf ', va='center', fontsize=14)
-
-# # Plot the representive uncertainty for the intermediate depth region
-# ax.errorbar(
-#     x0, y0 - dy,
-#     xerr=inter_xerr, yerr=inter_yerr,
-#     fmt='o',
-#     color='tab:red',
-#     ecolor='tab:red',
-#     elinewidth=1.5,
-#     capsize=3,
-#     markersize=4
-# )
-# ax.text(x0 + 0.08, y0 - dy + 0.4, 'Intermediate Depth', va='center', fontsize=14)
-
-# # Plot the representive uncertainty for the deep ocean region
-# ax.errorbar(
-#     x0, y0 - 2.4*dy,
-#     xerr=deep_xerr, yerr=deep_yerr,
-#     fmt='o',
-#     color='tab:green',
-#     ecolor='tab:green',
-#     elinewidth=1.5,
-#     capsize=3,
-#     markersize=4
-# )
-# ax.text(x0 + 0.08, y0 - 2.4*dy + 0.4, 'Deep ocean', va='center', fontsize=14)
-
-# x0 = 0.3 # 0.22
-# y0 = 24 #22.8
-# dy = 4
-
-
-
-
