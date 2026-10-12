@@ -39,10 +39,10 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import month_fmt, add_corner_label
 from autocorr import compute_autocorr_biased, compute_decor_scale, compute_decor_scale_unc, segment_time_series
 from lsf import unweighted_lsf, detrend
 from filter import gaussian_low_pass_filter
+from plotting import month_fmt, add_corner_label
 
 # -----------------------------------------------------------------------------
 # Set data analysis and plotting parameters
@@ -59,7 +59,11 @@ from filter import gaussian_low_pass_filter
 #                 at each mooring.
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit. 
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - dt: Specify the model time resolution (units: seconds)
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
@@ -72,11 +76,13 @@ from filter import gaussian_low_pass_filter
 option_depth       = 9 
 option_interannual = 'linear' 
 option_harmonics   = 2
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging   = "unweighted" 
  
 # Set time and space parameters
+seconds_per_day  = 24 * 60 * 60
 dt               = 3600      
-T_annual         = 365.25*(24)*(60)*(60)    
+T_annual         = 365.25 * seconds_per_day     
 segment_overlap  = 0.5                                        
 segment_duration = 0.5                                           
 
@@ -94,7 +100,7 @@ plt.rcParams.update({
 # Load mitgcm data netcdf files 
 # -----------------------------------------------------------------------------
 
-# Obtain filename paths
+# Obtain filename path
 filename = PATH_data / "mitgcm" / "mooring" / "processed" / "mitgcm_proc_density_hrly_mooring.nc"
 
 # Generate the nc data structure
@@ -105,7 +111,7 @@ depth = nc.variables['depth'][:]
 lon   = nc.variables['LON'][:]
 lat   = nc.variables['LAT'][:]
 time  =  num2date(nc.variables['time'][:], nc.variables['time'].units)
-sig = nc.variables['SIG'][:]
+sig   = nc.variables['SIG'][:]
 
 # Mask dry cells previously set to NaN during preprocessing
 sig_m = np.ma.masked_invalid(sig)
@@ -206,7 +212,7 @@ else:
     model = fit 
 
 # -----------------------------------------------------------------------------
-# Compute autocorrelation and the decorrelation time scales 
+# Compute autocorrelation and their associated decorrelation time scales 
 # -----------------------------------------------------------------------------
 
 # Segment a single time series 
@@ -240,6 +246,10 @@ for isite in range(nsite):
                                    duration=segment_duration, 
                                    overlap=segment_overlap)
 
+    # Initialize arrays
+    autocov_seg  = np.ma.masked_all((nseg,2*ntime_seg-1))
+    var_seg      = np.ma.masked_all((nseg))
+
     # Loop through segments
     for iseg, (tseg, dseg) in enumerate(segments):
 
@@ -248,33 +258,62 @@ for isite in range(nsite):
         time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
         
         # Remove segment-wise mean or linear trend
-        if option_detrend_seg: 
-            data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-        else: 
+        if option_detrend_seg == "detrend": 
+            data_dt = detrend(dseg, time_elapsed_seg, mean = False)
+        elif option_detrend_seg == "demean":
             data_dt = dseg - np.ma.mean(dseg)
+        else: 
+            data_dt = dseg
         
         # Compute autocorrelation function
-        autocorr_seg[isite,iseg,:], time_lag = compute_autocorr_biased(data_dt, time_elapsed_seg)
+        autocorr_seg[isite,iseg,:], time_lag, autocov_seg[iseg,:], var_seg[iseg] = compute_autocorr_biased(data_dt, 
+                                                                                                           time_elapsed_seg,
+                                                                                                           demean=False,
+                                                                                                           )
 
-    # Compute the mean autocorrelation  
-    autocorr_mean[isite,:] = np.mean(autocorr_seg[isite,:,:], axis=0)
+    if option_averaging == "weighted":
+    
+        # Compute the ensemble-mean autocovariance and variance 
+        autocov_mean = np.ma.mean(autocov_seg, axis=0)
+        var_mean     = np.ma.mean(var_seg)
+
+        # Normalize after ensemble-averaging to compute the ensemble-mean autocorrelation
+        autocorr_mean_ts = autocov_mean / var_mean
+
+        # Store the ensemble-mean autocorrelation
+        autocorr_mean[isite,:] = autocorr_mean_ts
+
+        # Compute the delta-method segment deviations for ratio-of-means estimator
+        autocorr_delta_seg = (autocov_seg - var_seg[:, None] * autocorr_mean_ts[None, :]) / var_mean 
+
+        # Compute the pseudo-segment of the autocorrelation (overwriting the original segment)
+        autocorr_seg_unc = autocorr_mean_ts[None, :] + autocorr_delta_seg
+        
+    elif option_averaging == "unweighted":
+
+        # Compute the mean autocorrelation function 
+        autocorr_mean[isite,:] = np.ma.mean(autocorr_seg[isite,:,:], axis=0)
+
+        # Set the autocorrelation segments for uncertainty estimation
+        autocorr_seg_unc = autocorr_seg
 
     # Compute the decorrelation scale of the mean autocorrelation 
     Lt[isite], M_lag = compute_decor_scale(autocorr_mean[isite,:],time_lag) 
 
     # Compute the standard error of the decorrelation scale
     Lt_stdm[isite], Lt_std[isite], Lt_stds[isite] = compute_decor_scale_unc(autocorr_mean[isite,:], 
-                                                                            autocorr_seg[isite,:,:], 
+                                                                            autocorr_seg_unc[isite,:,:], 
                                                                             M_lag, 
                                                                             dt, 
                                                                             segment_overlap
                                                                             )
 
     # Convert from seconds to days
-    time_lag_days = time_lag/(24*60*60) 
-    Lt_days       = Lt/(24*60*60) 
-    Lt_stdm_days  = Lt_stdm/(24*60*60)
-    Lt_stds_days  = Lt_stds/(24*60*60)
+    time_lag_days = time_lag / seconds_per_day 
+    Lt_days       = Lt / seconds_per_day 
+    Lt_std_days   = Lt_std / seconds_per_day 
+    Lt_stdm_days  = Lt_stdm / seconds_per_day 
+    Lt_stds_days  = Lt_stds / seconds_per_day 
 
 # -----------------------------------------------------------------------------
 # Plot time series, least-squares fit, residual, and autocorrelation
@@ -414,9 +453,9 @@ ax.plot(time_lag_pos, autocorr_mean[0,zero_lag_index:], color='tab:green', linew
 ax.set_xlabel('Time Lag (days)')
 ax.set_ylabel('Autocorrelation')
 ax.set_xlim(-10,x_max)
-ax.set_ylim(-0.45, 1.1)
+ax.set_ylim(-0.45, 1.1) 
 ax.set_xticks(np.arange(0,x_max+dx,dx))
-ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25))
+ax.set_yticks(np.arange(-0.25,1.0+ 0.25, 0.25)) 
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=True, left=True, bottom=True, length=5)
 
@@ -626,3 +665,38 @@ fig.savefig(
     pad_inches=0.1,
     transparent=False
 )
+
+# -----------------------------------------------------------------------------
+# Print decorrelation scale statistics
+# -----------------------------------------------------------------------------
+
+print("\n" + "=" * 60)
+print("Decorrelation Scale Statistics")
+print("=" * 60)
+
+print(
+    f"CCE1:\n"
+    f"  Decorrelation scale       : {Lt_days[0]:.2f} days\n"
+    f"  Standard error            : {Lt_stdm_days[0]:.2f} days\n"
+    f"  Standard deviation        : {Lt_std_days[0]:.2f} days\n"
+    f"  Std. error of std. dev.   : {Lt_stds_days[0]:.2f} days\n"
+)
+
+print()
+
+print(
+    f"CCE2:\n"
+    f"  Decorrelation scale       : {Lt_days[1]:.2f} days\n"
+    f"  Standard error            : {Lt_stdm_days[1]:.2f} days\n"
+    f"  Standard deviation        : {Lt_std_days[1]:.2f} days\n"
+    f"  Std. error of std. dev.   : {Lt_stds_days[1]:.2f} days\n"
+)
+
+print(
+    f"CCE3:\n"
+    f"  Decorrelation scale       : {Lt_days[2]:.2f} days\n"
+    f"  Standard error            : {Lt_stdm_days[2]:.2f} days\n"
+    f"  Standard deviation        : {Lt_std_days[2]:.2f} days\n"
+    f"  Std. error of std. dev.   : {Lt_stds_days[2]:.2f} days\n"
+)
+print("=" * 60)

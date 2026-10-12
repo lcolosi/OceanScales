@@ -98,7 +98,6 @@ if option_detrend_seg not in ("detrend", "demean", None):
         "option_detrend_seg must be 'detrend', 'demean', or None."
     )
 
-
 if option_averaging not in ("weighted", "unweighted"):
     raise ValueError(
         f"Invalid option_averaging: {option_averaging}. "

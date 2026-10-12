@@ -13,10 +13,12 @@
 # =============================================================================
 
 # Import libraries 
+import sys
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
+import mpmath as mp
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +26,13 @@ ROOT = Path(__file__).resolve().parents[1]
 # Set paths to project directories
 PATH_data = ROOT / "data"
 PATH_figs = ROOT / "figs"
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import toolbox 
+from autocorr import autocorrelation_analytic, compute_decor_scale
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -38,7 +47,11 @@ PATH_figs = ROOT / "figs"
 # - option_interannual: Specifies the model of the interannual variability. 
 #                       Options include: 'linear' or 'gaussian'
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - segment_months : Specifies the window duration. 
 # - option_depth: Specifies the water depth which the data is extracted from 
 #                 at each mooring.
@@ -48,13 +61,14 @@ PATH_figs = ROOT / "figs"
 # Set processing parameters
 option_data        = 'density'    
 option_interannual = 'linear' 
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging   = "weighted"
 segment_months     = 6
 option_depth       = 9 
-option_slope_range = [182.5, 30.0] # [182.5, 14.0]
+option_slope_range = [182.5, 4.0] # [182.5, 14.0]
 
 # Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set uncertainty estimate parameters
 sn_threshold = 1
@@ -78,7 +92,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -144,6 +158,54 @@ with Dataset(filename, "r") as nc:
 days_per_month = 365 / 12 
 T_months_ac    = T_ac / days_per_month
 T_months_ds    = T_ds / days_per_month
+
+# -----------------------------------------------------------------------------
+# Compute the analytic autocorrelation at a range of spectral slopes
+# -----------------------------------------------------------------------------
+
+# # Set sampling interval and record duration parameters (units: days)
+# dt = 1/24                                         
+# T  = (segment_months/12) * 365  
+
+# # Set maximum and minimum frequency in units of cpd
+# fmax = 1 / (2*dt)                                         
+# fmin = 1 / T               
+
+# # Set time lag (units: days)
+# tau = np.arange(0, T + dt/2, dt)
+
+# # Set range of spectral slopes to evaluate
+# alpha = np.arange(0, 3 + 0.05, 0.05)
+# nalpha = len(alpha)
+
+# # Set precision for complex special functions
+# mp.dps = 25
+
+# # Initialize results
+# Lt_analytic = np.zeros((nalpha))
+
+# # Loop through spectral slopes
+# for i, ialpha in enumerate(alpha):
+
+#         # Compute analytic autocorrelation at positive lags
+#         _, autocorr_pos, _ = autocorrelation_analytic(
+#             tau[1:],
+#             fmin,
+#             fmax,
+#             ialpha,
+#             biased=True,
+#             record_duration=T
+#         )
+
+#         # Add exact zero-lag autocorrelation
+#         rho = np.concatenate(([1.0], np.asarray(autocorr_pos, dtype=float)))
+
+#         # Construct full autocorrelation and lag arrays
+#         rho_full = np.concatenate((rho[:0:-1], rho))
+#         lag_full = np.concatenate((-tau[:0:-1], tau))
+
+#         # Compute decorrelation scale by maximizing the symmetric integral
+#         Lt_analytic[i], _ = compute_decor_scale(rho_full, lag_full)
 
 # -----------------------------------------------------------------------------
 # Preprocess spectral slope and decorrelation scale data
@@ -226,7 +288,12 @@ for mask, color, label in regions:
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
 idx_T_ds = T_months_ds == 6
-ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='k', linewidth=1.5, label='Analytic')
+ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label='Analytic - Full Integral')
+
+idx_T_ac = T_months_ac == 6
+ax.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
+
+#ax.plot(alpha, Lt_analytic, '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
 
 # Set axis attributes
 ax.set_xlabel(r'Spectral Slope $\alpha$', fontsize=fontsize_g)
@@ -238,7 +305,7 @@ ax.set_yticks(np.arange(4,26+2,2))
 ax.tick_params(axis='both', labelsize=fontsize_g)
 ax.grid(True,linestyle='--',alpha=0.3)
 ax.tick_params(which='both', direction='out', top=False, right=False, left=True, bottom=True, length=5)
-ax.legend(loc='lower right')
+ax.legend(loc='lower left', fontsize=12)
 
 # Add inset showing short-lag autocorrelation
 axins = ax.inset_axes([0.075, 0.55, 0.4, 0.4])
@@ -262,7 +329,10 @@ for mask, color, label in regions:
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
 idx_T_ds = T_months_ds == 6
-axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='k', linewidth=1.5, label='Analytic')
+axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label='Analytic')
+
+idx_T_ac = T_months_ac == 6
+axins.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
 
 # Set inset axis attributes
 axins.set_xlabel(r'Spectral Slope $\alpha$',fontsize=fontsize_ins)

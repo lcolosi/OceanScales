@@ -89,8 +89,8 @@ segment_duration = 0.5
 depth_lim        = -220 
 max_gap_duration = (24) * 60 * 60
 f_cut            = 1 / (14 * seconds_per_day)
-fmin_slope       = (1/92) / seconds_per_day
-fmax_slope       = (1/20) / seconds_per_day 
+fmin_slope       = (1/182.5) / seconds_per_day
+fmax_slope       = (1/30) / seconds_per_day 
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density"):

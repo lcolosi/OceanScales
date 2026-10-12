@@ -40,8 +40,9 @@ sys.path.append(str(PATH_tools))
 
 # Import analysis functions 
 from autocorr import compute_autocorr_biased_masked, compute_decor_scale_masked, compute_decor_scale_unc_masked, segment_time_series
-from lsf import unweighted_lsf, detrend, compute_fve
+from lsf import unweighted_lsf, detrend
 from filter import gaussian_low_pass_filter
+from processing_utils import longest_masked_gap
 from plotting import add_corner_label
 
 # -----------------------------------------------------------------------------
@@ -59,7 +60,11 @@ from plotting import add_corner_label
 #                       Options include: 'linear' or 'gaussian'
 # - option_harmonics : Specify the number of seasonal cycle harmonics to fit.
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
+# - option_averaging: Specifies whether to compute the variance-weighted or unweighted
+#                     ensemble-average of the autocorrelation.
+#                      Options: "weighted" for variance-weighted average.
+#                               "unweighted" for unweighted average.
 # - dt: Sampling interval of the model data (units: seconds). 
 # - T_annual: Specifies the annual cycle period (one Julian year) in units of seconds. 
 # - segment_overlap: Specifies the fractional overlap between segments 
@@ -75,14 +80,19 @@ option_depth       = 9
 option_data        = 'density'    
 option_interannual = 'gaussian' 
 option_harmonics   = 2      
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging   = "weighted" 
 
 # Set time and space parameters
-dt               = 3600    
-T_annual         = 365.25*(24)*(60)*(60)    
-segment_overlap  = 0.5                                        
-segment_duration = 0.5   
-norm             = "standard"
+seconds_per_day    = 24 * 60 * 60
+dt                 = 3600    
+T_annual           = 365.25 * seconds_per_day  
+segment_overlap    = 0.5                                        
+segment_duration   = 0.5   
+norm               = "corrected"
+max_gap_duration   = 45 * seconds_per_day
+min_valid_fraction = 0.75
+min_valid_segments = 3
 
 # Set font and fontsize
 fontsize=16
@@ -105,13 +115,17 @@ if option_interannual not in ("linear", "gaussian"):
         f"Invalid option_interannual: {option_interannual}. "
         "Choose 'linear' or 'gaussian'."
     )
+
+if option_averaging not in ("weighted", "unweighted"):
+    raise ValueError(
+        f"Invalid option_averaging: {option_averaging}. "
+        "Choose 'weighted' or 'unweighted'."
+    )
+
 if norm not in ("standard", "corrected"):
     raise ValueError(
         "norm must be 'standard' or 'corrected'."
     )
-
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
 
 # -----------------------------------------------------------------------------
 # Load cce data
@@ -299,12 +313,8 @@ else:
     model1 = fit1 
     model2 = fit2 
 
-# Compute the fraction of variance explained by the interannual and season model
-fve1 = compute_fve(data1_depth, model1)
-fve2 = compute_fve(data2_depth, model2)
-
 # -----------------------------------------------------------------------------
-# Compute autocorrelation and the decorrelation time scales 
+# Compute autocorrelation and their associated decorrelation time scales 
 # -----------------------------------------------------------------------------
 
 # Segment the time series 
@@ -331,87 +341,219 @@ autocorr2_seg   = np.ma.masked_all((nseg2,2*ntime_seg2-1))
 
 # --- CCE1 --- # 
 
+# Initialize arrays
+autocov_seg  = np.ma.masked_all((nseg1,2*ntime_seg1-1))
+var_seg      = np.ma.masked_all((nseg1))
+
+# Initialize accepted segment indices
+accepted_idx = []
+
 # Loop through segments
 for iseg, (tseg, dseg) in enumerate(segments1):
+
+    # Obtain mask array for the time series
+    mask = np.ma.getmaskarray(dseg)
+
+    # Skip segment if all data are missing
+    if mask.all():
+        continue
+
+    # Determine longest missing-data gap
+    gap_duration, _ = longest_masked_gap(mask, dt)
+
+    # Compute fraction of valid observations
+    valid_fraction = np.mean(~mask)
+
+    # Skip segment if gap exceeds threshold
+    if gap_duration > max_gap_duration:
+        continue
+
+    # Skip segment if valid fraction is below threshold
+    if valid_fraction < min_valid_fraction:
+        continue
 
     # Compute the elapsed time from beginning of segmented time series
     t0 = tseg[0]
     time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
     
     # Remove segment-wise mean or linear trend
-    if option_detrend_seg: 
-        data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-    else: 
+    if option_detrend_seg == "detrend": 
+        data_dt = detrend(dseg, time_elapsed_seg, mean = False)
+    elif option_detrend_seg == "demean":
         data_dt = dseg - np.ma.mean(dseg)
+    else: 
+        data_dt = dseg
 
-    # Compute autocorrelation function
-    autocorr1_seg[iseg,:], time1_lag = compute_autocorr_biased_masked(data_dt, 
-                                                                      time_elapsed_seg, 
-                                                                      normalization=norm
-                                                                     )
+    # Compute autocorrelation
+    autocorr1_seg[iseg,:], time1_lag, autocov_seg[iseg,:], var_seg[iseg] = compute_autocorr_biased_masked(data_dt, 
+                                                                                                          time_elapsed_seg, 
+                                                                                                          normalization=norm, 
+                                                                                                          demean=False,
+                                                                                                          )
 
-# Compute the mean autocorrelation function 
-autocorr1_mean = np.ma.mean(autocorr1_seg, axis=0)
+    # Record accepted segment
+    accepted_idx.append(iseg)
+
+# Count accepted segments
+nseg_valid = len(accepted_idx)
+
+# Skip depth if too few usable segments remain
+if nseg_valid < min_valid_segments:
+    raise ValueError(
+        f"Too few valid segments: {nseg_valid}. Minimum required is {min_valid_segments}."
+    )
+
+if option_averaging == "weighted":
+    
+    # Compute the ensemble-mean autocovariance and variance 
+    autocov_mean = np.ma.mean(autocov_seg, axis=0)
+    var_mean     = np.ma.mean(var_seg)
+
+    # Normalize after ensemble-averaging to compute the ensemble-mean autocorrelation
+    autocorr_mean_ts = autocov_mean / var_mean
+
+    # Store the ensemble-mean autocorrelation
+    autocorr1_mean = autocorr_mean_ts
+
+    # Compute the delta-method segment deviations for ratio-of-means estimator
+    autocorr_delta_seg = (autocov_seg - var_seg[:, None] * autocorr_mean_ts[None, :]) / var_mean 
+
+    # Compute the pseudo-segment of the autocorrelation (overwriting the original segment)
+    autocorr1_seg_unc = autocorr_mean_ts[None, :] + autocorr_delta_seg
+    
+elif option_averaging == "unweighted":
+
+    # Compute the mean autocorrelation function 
+    autocorr1_mean = np.ma.mean(autocorr1_seg, axis=0)
+
+    # Set the autocorrelation segments for uncertainty estimation
+    autocorr1_seg_unc = autocorr1_seg
 
 # Compute the decorrelation scale of the mean autocorrelation 
 Lt1, M_lag1 = compute_decor_scale_masked(autocorr1_mean,time1_lag) 
 
 # Compute the standard error of the decorrelation scale
 Lt1_stdm, Lt1_std, Lt1_stds  = compute_decor_scale_unc_masked(autocorr1_mean, 
-                                                              autocorr1_seg, 
+                                                              autocorr1_seg_unc, 
                                                               M_lag1, 
                                                               dt, 
                                                               segment_overlap,
                                                              )
 
-# Convert time scale to units of days
-time1_lag_days = time1_lag/(24*60*60) 
-Lt1_days       = Lt1/(24*60*60) 
-Lt1_stdm_days  = Lt1_stdm/(24*60*60) 
-Lt1_std_days   = Lt1_std/(24*60*60) 
-Lt1_stds_days  = Lt1_stds/(24*60*60)   
+# Convert from seconds to days
+time1_lag_days = time1_lag / seconds_per_day 
+Lt1_days       = Lt1 / seconds_per_day 
+Lt1_stdm_days  = Lt1_stdm / seconds_per_day 
+Lt1_std_days   = Lt1_std / seconds_per_day 
+Lt1_stds_days  = Lt1_stds / seconds_per_day   
 
 # --- CCE2 --- # 
 
+# Initialize arrays
+autocov_seg  = np.ma.masked_all((nseg2,2*ntime_seg2-1))
+var_seg      = np.ma.masked_all((nseg2))
+
+# Initialize accepted segment indices
+accepted_idx = []
+
 # Loop through segments
 for iseg, (tseg, dseg) in enumerate(segments2):
+
+    # Obtain mask array for the time series
+    mask = np.ma.getmaskarray(dseg)
+
+    # Skip segment if all data are missing
+    if mask.all():
+        continue
+
+    # Determine longest missing-data gap
+    gap_duration, _ = longest_masked_gap(mask, dt)
+
+    # Compute fraction of valid observations
+    valid_fraction = np.mean(~mask)
+
+    # Skip segment if gap exceeds threshold
+    if gap_duration > max_gap_duration:
+        continue
+
+    # Skip segment if valid fraction is below threshold
+    if valid_fraction < min_valid_fraction:
+        continue
 
     # Compute the elapsed time from beginning of segmented time series
     t0 = tseg[0]
     time_elapsed_seg = np.array([(t - t0).total_seconds() for t in tseg])
     
     # Remove segment-wise mean or linear trend
-    if option_detrend_seg: 
-        data_dt = detrend(dseg, time_elapsed_seg, mean = 0)
-    else: 
+    if option_detrend_seg == "detrend": 
+        data_dt = detrend(dseg, time_elapsed_seg, mean = False)
+    elif option_detrend_seg == "demean":
         data_dt = dseg - np.ma.mean(dseg)
+    else: 
+        data_dt = dseg
 
     # Compute autocorrelation function
-    autocorr2_seg[iseg,:], time2_lag = compute_autocorr_biased_masked(data_dt, 
-                                                                      time_elapsed_seg, 
-                                                                      normalization=norm
-                                                                     )
+    autocorr2_seg[iseg,:], time2_lag, autocov_seg[iseg,:], var_seg[iseg] = compute_autocorr_biased_masked(data_dt, 
+                                                                                                          time_elapsed_seg, 
+                                                                                                          normalization=norm, 
+                                                                                                          demean=False,
+                                                                                                          )
 
-# Compute the mean autocorrelation function 
-autocorr2_mean = np.ma.mean(autocorr2_seg, axis=0)
+    # Record accepted segment
+    accepted_idx.append(iseg)
+    
+# Count accepted segments
+nseg_valid = len(accepted_idx)
+
+# Skip depth if too few usable segments remain
+if nseg_valid < min_valid_segments:
+    raise ValueError(
+        f"Too few valid segments: {nseg_valid}. Minimum required is {min_valid_segments}."
+    )
+
+if option_averaging == "weighted":
+    
+    # Compute the ensemble-mean autocovariance and variance 
+    autocov_mean = np.ma.mean(autocov_seg, axis=0)
+    var_mean     = np.ma.mean(var_seg)
+
+    # Normalize after ensemble-averaging to compute the ensemble-mean autocorrelation
+    autocorr_mean_ts = autocov_mean / var_mean
+
+    # Store the ensemble-mean autocorrelation
+    autocorr2_mean = autocorr_mean_ts
+
+    # Compute the delta-method segment deviations for ratio-of-means estimator
+    autocorr_delta_seg = (autocov_seg - var_seg[:, None] * autocorr_mean_ts[None, :]) / var_mean 
+
+    # Compute the pseudo-segment of the autocorrelation
+    autocorr2_seg_unc = autocorr_mean_ts[None, :] + autocorr_delta_seg
+    
+elif option_averaging == "unweighted":
+
+    # Compute the mean autocorrelation function 
+    autocorr2_mean = np.ma.mean(autocorr2_seg, axis=0)
+
+    # Set the autocorrelation segments for uncertainty estimation
+    autocorr2_seg_unc = autocorr2_seg
 
 # Compute the decorrelation scale of the mean autocorrelation 
 Lt2, M_lag2 = compute_decor_scale_masked(autocorr2_mean,time2_lag) 
 
 # Compute the standard error of the decorrelation scale
 Lt2_stdm, Lt2_std, Lt2_stds  = compute_decor_scale_unc_masked(autocorr2_mean, 
-                                                              autocorr2_seg, 
+                                                              autocorr2_seg_unc, 
                                                               M_lag2, 
                                                               dt, 
                                                               segment_overlap,
                                                              )
 
-# Convert time scale to units of days
-time2_lag_days = time2_lag/(24*60*60) 
-Lt2_days       = Lt2/(24*60*60) 
-Lt2_stdm_days  = Lt2_stdm/(24*60*60) 
-Lt2_std_days   = Lt2_std/(24*60*60) 
-Lt2_stds_days  = Lt2_stds/(24*60*60)   
+# Convert from seconds to days
+time2_lag_days = time2_lag / seconds_per_day
+Lt2_days       = Lt2 / seconds_per_day
+Lt2_stdm_days  = Lt2_stdm / seconds_per_day
+Lt2_std_days   = Lt2_std / seconds_per_day
+Lt2_stds_days  = Lt2_stds / seconds_per_day  
 
 # -----------------------------------------------------------------------------
 # Plot time series, least-squares fit, residual, and autocorrelation
@@ -655,7 +797,7 @@ plt.subplots_adjust(hspace=0.21, wspace=0.1)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / 'figS09.png',
+    PATH_figs / 'figS02.png',
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

@@ -62,7 +62,7 @@ option_interannual = 'linear'
 option_detrend_seg = True
 segment_months     = 6
 option_depth       = 9 
-option_slope_range = [182.5, 30.0] # [182.5, 14.0]
+option_slope_range = [182.5, 4.0] 
 
 # Label segment processing 
 seg_proc = "detrend" if option_detrend_seg else "demean"
@@ -171,8 +171,8 @@ xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels = np.arange(0.25,1.75+0.05,0.05) # np.arange(0.5,1.75+0.025,0.025)
-ticks  = np.arange(0.25,1.75+0.25,0.25)  # np.arange(0.5,1.75+0.25,0.25)
+levels = np.arange(1,2+0.01,0.01) # np.arange(0.25,1.75+0.05,0.05)
+ticks  = np.arange(1,2+0.2,0.2)  # np.arange(0.5,1.75+0.25,0.25)
 levels_is = np.arange(100,300+100,100)
 levels_ms = np.arange(1000,3000+500,500)
 fontsize_g = 18

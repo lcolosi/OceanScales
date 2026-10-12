@@ -433,7 +433,7 @@ for idepth in tqdm(range(ndepth), desc="Computing Decorrelation Scales", unit="d
                                                                                         segment_overlap,
                                                                                         )
 
-# Convert time scale to units of days
+# Convert from seconds to days
 time_lag_days = time_lag / seconds_per_day 
 Lt_days       = Lt / seconds_per_day 
 Lt_stdm_days  = Lt_stdm / seconds_per_day 
