@@ -3,8 +3,17 @@
 # =============================================================================
 #
 # Caption:
-# 
-#
+#   (a) Decorrelation time scale depth-averaged from the surface to 30 meters
+#   water depth along the CalCOFI line 80.0 transect. Gray shading represents
+#   $\pm1$ standard error of the mean depth averaged over the same depth range.
+#   Vertical dashed lines show the position of CCE1 (green), CCE2 (red), and 
+#   CCE3 (blue) moorings. (b) Time-mean ocean velocity vectors in the cross-shore
+#   and along-shore coordinate system and depth averaged from the surface to
+#   400 meters water depth. (c) Time-mean along-shore velocity component. Gray
+#   shading is the ocean bottom. (d) Fraction of the total potential density 
+#   variance explained (FVE) by low-frequency variability with frequencies 
+#   $f < 1/30 cpd$
+#   
 # Author:
 #   Luke Colosi
 #
@@ -19,7 +28,6 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
 import cmocean.cm as cmo
-import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 
 # Set path to project root directory
@@ -34,7 +42,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_x_axis_marker, add_x_axis_marker
+from plotting import add_x_axis_marker, add_corner_label
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -66,12 +74,13 @@ from plotting import add_x_axis_marker, add_x_axis_marker
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_detrend_seg = "detrend"
-option_averaging    = "weighted" 
+option_averaging   = "weighted" 
+option_slope_range = [182.5, 4.0] 
 segment_months     = 6
-depth_lim        = -220 
-lat_bnds         = [33.0, 35.0]                                          
-lon_bnds         = [237.0, 240.0]
-depth_avg_max   = 30
+depth_lim          = -220 
+lat_bnds           = [33.0, 35.0]                                          
+lon_bnds           = [237.0, 240.0]
+depth_avg_max      = 30
 
 # Label segment processing method 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -115,19 +124,13 @@ Lt_std  = nc.variables['decor_scale_std'][:]
 # --- Spectral data --- # 
 
 # Obtain filename path
-filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_trans_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_trans_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
-dist    = nc.variables['dist'][:]
-depth   = nc.variables['depth'][:]
-lon     = nc.variables['LON'][:]
-lat     = nc.variables['LAT'][:]
-Lt      = nc.variables['decor_scale'][:]
-Lt_stdm = nc.variables['decor_scale_stdm'][:]
-Lt_std  = nc.variables['decor_scale_std'][:]
+fve      = nc.variables['FVE'][:]
 
 # --- Velocity --- # 
 
@@ -283,13 +286,16 @@ for idist in range(len(dist)):
         )
 
 # -----------------------------------------------------------------------------
-# Plot velocity field and FVE  
+# Plot depth average decorrelation time scale, velocity, and FVE  
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
 levels_vel = np.arange(-0.15, 0.15 + 0.005, 0.005)
 ticks_vel = np.arange(-0.15, 0.15 + 0.05, 0.05)
+levels_fve = np.arange(60, 92.5+0.5, 0.5)
+ticks_fve  = np.arange(60, 90+5, 5)
 cmap_vel = cmo.balance
+cmap_fve = cmo.rain
 arrow_length_x,arrow_length_y = 0.015, 0.08  
 x0, y0 = 0.075, 0.78 
 
@@ -299,26 +305,13 @@ gs = gridspec.GridSpec(4, 1, height_ratios=[1, 1, 2, 2])
 
 #--- Subplot 1 ---# 
 ax = fig.add_subplot(gs[0])
+ax1 = ax
 
 # Plot uncertainty envelope
-ax.fill_between(
-    dist,
-    Lt_depth_avg - Lt_stdm_depth_avg,
-    Lt_depth_avg + Lt_stdm_depth_avg,
-    color='k',
-    alpha=0.15,
-    linewidth=0,
-    zorder=2
-)
+ax.fill_between(dist, Lt_depth_avg - Lt_stdm_depth_avg, Lt_depth_avg + Lt_stdm_depth_avg, color='k', alpha=0.15, linewidth=0, zorder=2)
 
 # Plot depth-averaged decorrelation scale
-ax.plot(
-    dist,
-    Lt_depth_avg,
-    color='k',
-    linewidth=2,
-    zorder=3
-)
+ax.plot(dist, Lt_depth_avg, color='k', linewidth=2, zorder=3)
 
 # Set axis attributes
 ax.set_ylabel(r'$\langle\overline{\mathcal{T}}\rangle_z$ (days)')
@@ -377,9 +370,10 @@ ax.set_xticklabels([])
 
 #--- Subplot 2 ---# 
 ax = fig.add_subplot(gs[1])
+ax2 = ax
 
 # Plot the time-mean velocity vectors in the cross and along-shore coordinates 
-q = ax.quiver(dist_vel[idx_dist], np.zeros_like(dist_vel[idx_dist]), v_cross_bar_mean, u_along_bar_mean, angles='uv', scale=1.25, width=0.001)
+q = ax.quiver(dist_vel[idx_dist], np.zeros_like(dist_vel[idx_dist]), v_cross_bar_mean, u_along_bar_mean, angles='uv', scale=1.3, width=0.001)
 
 # Set axis attributes
 ax.set_xlim(0, dist[-1])
@@ -453,6 +447,7 @@ ax.set_xticklabels([])
 
 #--- Subplot 3 ---# 
 ax = fig.add_subplot(gs[2])
+ax3 = ax
 
 # Plot the time-mean along-shore velocity 
 cf = ax.contourf(dist,abs(depth),u_along_mean.T, levels=levels_vel, cmap=cmap_vel, extend='both')
@@ -527,6 +522,81 @@ ax.set_xticklabels([])
 
 #--- Subplot 4 ---# 
 ax = fig.add_subplot(gs[3])
+ax4 = ax
+
+# Plot the time-mean along-shore velocity 
+cf = ax.contourf(dist,abs(depth),fve[:,:,0].T, levels=levels_fve, cmap=cmap_fve, extend='both')
+
+# Plot the ocean bottom depth 
+ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
+
+# Set axis attributes
+ax.set_xlabel('Distance from shore (km)')
+ax.set_ylabel('Depth (m)')
+ax.set_xlim(0,dist[-1])
+ax.set_ylim(0,200)
+ax.set_xticks(np.arange(0,250+25,25))
+ax.set_yticks(np.arange(0,200+25,25))
+ax.invert_xaxis()
+ax.invert_yaxis()
+ax.grid(linestyle='--',alpha=0.1,color='k')
+
+# Set colorbar
+cax = fig.add_axes([0.915, 0.115, 0.02, 0.23])
+cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
+cbar.set_label(r'FVE ($\%$)')
+cbar.set_ticks(ticks_fve)
+
+# --- Create top axis for longitude --- #
+ax_top = ax.twiny()
+
+# Make sure limits match
+ax_top.set_xlim(ax.get_xlim())
+
+# Choose where you want longitude ticks (same positions as distance ticks)
+dist_ticks = ax.get_xticks()
+
+# Interpolate longitude at those distance values
+lon_180 = ((lon + 180) % 360) - 180
+lon_ticks = np.interp(dist_ticks, dist, lon_180)
+
+# Create labels but only keep every other one
+labels = [
+    f"{abs(x):.1f}°W" if i % 2 == 0 else ""
+    for i, x in enumerate(lon_ticks)
+]
+
+# Set ticks and labels
+ax_top.set_xticks(dist_ticks)
+ax_top.set_xticklabels(labels) 
+
+sort_idx = np.argsort(lon_180)
+lon_sorted = lon_180[sort_idx]
+dist_sorted = dist[sort_idx]
+
+# Interpolate longtiude onto distance coordinates 
+dist1 = np.interp(lon1, lon_sorted, dist_sorted)
+dist2 = np.interp(lon2, lon_sorted, dist_sorted)
+dist3 = np.interp(lon3, lon_sorted, dist_sorted)
+
+# Add CCE1, CCE2, and CCE3 locations markers
+add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
+add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
+add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
+
+# Plot vertical lines at CCE1, CCE2, and CCE3 locations
+ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
+ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
+ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
+
+# Remove top x-axis ticklabels
+ax_top.set_xticklabels([])
+
+# Label each subplot
+add_corner_label(ax1, [0.025,0.145], 'A', fontsize = 13)
+add_corner_label(ax2, [0.025,0.145], 'B', fontsize = 13)
+add_corner_label(ax3, [0.025,0.08], 'C', fontsize = 13)
+add_corner_label(ax4, [0.025,0.08], 'D', fontsize = 13)
 
 # Adjust figure spacing
 plt.subplots_adjust(hspace=0.1, wspace=0.1)
