@@ -57,7 +57,7 @@ fmax = 1 / (2*dt)
 fmin_values_ac = 1 / T_ac               
 
 # Set spectral slope values 
-alpha_values_ac = np.arange(0, 3 + 0.05, 0.05)
+alpha_values_ac = np.arange(0, 5 + 0.05, 0.05)
 
 # Convert time to units of months 
 days_per_month = 365 / 12 

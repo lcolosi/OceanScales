@@ -53,7 +53,7 @@ from lsf import detrend
 # ------------ #
 #
 # - option_detrend_seg: Specifies whether each segment is detrended or not. 
-#                        Options: True or False
+#                        Options: "detrend", "demean", or None
 # - hours_per_year : Specifies the number of hours in a 365-day year. 
 # - dt : The time interval between data points in units of hours. 
 # - T : The duration of the record in units of hours. 
@@ -75,15 +75,15 @@ from lsf import detrend
 
 # Set processing parameters
 option_random_amplitudes = False
-option_normalization     = "sample"
-option_detrend           = False
+option_normalization     = "expected"
+option_detrend           = None
 
 # Set time parameters 
 hours_per_year = 365 * 24     
 dt             = 1   
 
 # Set ensemble parameters
-n_realization = 100
+n_realization = 1000
 
 # Set power-law parameters
 alpha   = np.arange(0,5+0.1,0.1) 
@@ -97,7 +97,7 @@ segment_duration        = np.round(segment_duration_months * hours_per_month / d
 n_duration              = len(segment_duration)  
 
 # Label segment processing 
-seg_proc = "detrend" if option_detrend else "demean"
+seg_proc = "none" if option_detrend is None else option_detrend
 rand_amp = "random_amplitudes" if option_random_amplitudes else "random_phases"
 
 # -----------------------------------------------------------------------------
@@ -142,7 +142,8 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
         # --- Perform Monte Carlo Simulation --- #
 
         # Initialize array
-        autocorr_realization = np.ma.masked_all((n_realization,2*iT-1))
+        autocov_realization = np.ma.masked_all((n_realization,2*iT-1))
+        var_realization     = np.ma.masked_all(n_realization)
 
         # Loop through Monte Carlo Realizations 
         for k in range(n_realization): 
@@ -156,6 +157,7 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
                                                 random_state=iseed, 
                                                 dt=dt, 
                                                 random_amplitudes=option_random_amplitudes,
+                                                demean = False,
                                                 normalization=option_normalization,
                                                 target_variance=1.0,
                                                 frequency_oversample = 20,
@@ -166,29 +168,44 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
             t = np.ma.asarray(t)
 
             # Remove segment-wise mean or linear trend
-            if option_detrend: 
+            if option_detrend == "detrend":
                 x_dt = detrend(x, t, mean = 0)
-            else: 
+            elif option_detrend == "demean":
                 x_dt = x - np.ma.mean(x)
+            else: 
+                x_dt = x
 
             # Compute autocorrelation for the ith realization
-            autocorr_realization[k,:], time_lag = compute_autocorr_biased(x_dt, t)
+            _, time_lag, autocov_realization[k,:], var_realization[k] = compute_autocorr_biased(x_dt, 
+                                                                                                t, 
+                                                                                                demean=False
+                                                                                                )
 
-        # Compute the mean autocorrelation over all realizations 
-        autocorr_mean = np.ma.mean(autocorr_realization,axis=0)
+        # Compute the ensemble mean autocovariance and variance 
+        autocov_mean = np.ma.mean(autocov_realization,axis=0)
+        var_mean = np.ma.mean(var_realization) 
 
-        # Compute realization-to-realization standard deviation at each lag
-        autocorr_std = np.ma.std(autocorr_realization, axis=0, ddof=1)
+        # Compute the variance-weighted ensemble-mean autocorrelation 
+        autocorr_mean = autocov_mean/var_mean
 
-        # Compute standard error at each lag
-        autocorr_stdm = autocorr_std / np.sqrt(n_realization)
+        # Compute realization contributions to the weighted mean uncertainty
+        delta_r = (autocov_realization - var_realization[:, None] * autocorr_mean[None, :]) / var_mean
+
+        # Compute standard deviation of realization contributions at each lag
+        autocorr_std_delta = np.ma.std(delta_r, axis=0, ddof=1)
+
+        # Compute standard error of the weighted ensemble-mean autocorrelation
+        autocorr_stdm = autocorr_std_delta / np.sqrt(n_realization)
+
+        # Compute the pseudo-segment ACFs 
+        autocorr_seg_unc = autocorr_mean[None, :] + delta_r 
 
         # Compute the decorrelation scale of the mean autocorrelation 
         Lt_mean[j,i], M_lag = compute_decor_scale(autocorr_mean,time_lag)
 
         # Compute the standard error of the decorrelation scale
         Lt_stdm[j,i], Lt_std[j,i], _ = compute_decor_scale_unc(autocorr_mean, 
-                                                                autocorr_realization, 
+                                                                autocorr_seg_unc, 
                                                                 M_lag, 
                                                                 dt, 
                                                                 segment_overlap,
@@ -200,7 +217,6 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
         # Extract nonnegative lags and corresponding mean and std autocorrelation
         lag_pos           = time_lag[izero:]
         autocorr_mean_pos = autocorr_mean[izero:]
-        autocorr_std_pos  = autocorr_std[izero:]
         autocorr_stdm_pos = autocorr_stdm[izero:]
 
         # Set the number of nonnegative lags
@@ -208,7 +224,6 @@ for i in tqdm(range(n_alpha), desc="Prerforming Monte Carlo Simulation", unit="s
 
         # Save mean and std autocorrelation 
         autocorr_ens_mean[j,i,:nlag] = autocorr_mean_pos
-        autocorr_ens_std[j,i,:nlag]  = autocorr_std_pos
         autocorr_ens_stdm[j,i,:nlag] = autocorr_stdm_pos
 
 # Convert decorrelation scales from hours to days
@@ -252,16 +267,6 @@ autocorr_ens_stdm = xr.DataArray(data=autocorr_ens_stdm,
                     )
 )
 
-autocorr_ens_std = xr.DataArray(data=autocorr_ens_std,
-                dims=['duration','alpha','lag'],
-                coords=dict(duration=segment_duration_months,alpha=alpha,lag=lag_positive_c_days),
-                attrs=dict(
-                    description=('Ensemble standard deviation of the mean autocorrelation as a ' +
-                                 'function of record duration and spectral slope.'),
-                    units='unitless'
-                    )
-)
-
 # --- Decorrelation Scale --- # 
 decor_scale = xr.DataArray(data=Lt_mean_days,
                         dims=['duration','alpha'],
@@ -294,7 +299,7 @@ decor_scale_std = xr.DataArray(data=Lt_std_days,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'autocorr':autocorr,'autocorr_ens_stdm':autocorr_ens_stdm,'autocorr_ens_std':autocorr_ens_std, 'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std})
+data = xr.Dataset({'autocorr':autocorr,'autocorr_ens_stdm':autocorr_ens_stdm,'decor_scale':decor_scale,'decor_scale_stdm':decor_scale_stdm, 'decor_scale_std':decor_scale_std})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({

@@ -591,6 +591,8 @@ def spectral_diags(
     psd, 
     f, 
     f_cutoff=None,
+    f_min=None,
+    f_max=None,
 ):
 
     """
@@ -608,6 +610,14 @@ def spectral_diags(
         Frequency separating the low- and high-frequency bands used to
         compute the partitioned variance ratio.
 
+    f_min : float, optional
+            Lower frequency bound for computing the partitioned variance ratio.
+            Defaults to the minimum frequency in f.
+    
+    f_max : float, optional
+        Upper frequency bound for computing the partitioned variance ratio.
+        Defaults to the maximum frequency in f.
+
     Returns
     -------
     moments : ndarray
@@ -616,13 +626,22 @@ def spectral_diags(
             mn = integral(f**n * PSD(f) df)
 
     FVE : ndarray
-        Fraction of the total variance contained in the low- and
-        high-frequency bands:
+        Percentage of variance contained in the low- and high-frequency
+        bands relative to the variance in [f_min, f_max]:
 
-            variance_ratio[0] = low-frequency variance / total variance
-            variance_ratio[1] = high-frequency variance / total variance
+            FVE[0] = 100 * var_low / var_band
+            FVE[1] = 100 * var_high / var_band
+
+        where
+
+            var_low  = integral from f_min to f_cutoff of PSD(f) df
+            var_high = integral from f_cutoff to f_max of PSD(f) df
+            var_band = var_low + var_high
 
         If f_cutoff is None, both values are NaN.
+
+        When f_min and f_max are omitted, the fractions are computed
+        relative to the total resolved variance.
 
     mean_period : float
         Mean spectral period computed from the zeroth and first
@@ -630,7 +649,14 @@ def spectral_diags(
 
             mean_period = m0 / m1
 
-        This corresponds to the inverse of the spectral centroid (mean spectral frequency).
+        This corresponds to the inverse of the spectral centroid 
+        (mean spectral frequency).
+
+    Notes
+    -----
+    All spectral integrals use discrete frequency-bin summation.
+    Frequency bounds are applied to the available frequency bins,
+    without interpolation at the specified cutoff frequencies.
     """
 
     # Convert input arrays to floating point
@@ -690,27 +716,40 @@ def spectral_diags(
 
     if f_cutoff is not None:
 
-        # Check frequency cutoff
-        if not np.isfinite(f_cutoff):
-            raise ValueError("f_cutoff must be finite.")
+        # Set frequency bounds
+        f_min = f[0] if f_min is None else f_min
+        f_max = f[-1] if f_max is None else f_max
 
-        if f_cutoff < f[0] or f_cutoff >= f[-1]:
+        # Check frequency bounds
+        if not np.all(np.isfinite([f_min, f_cutoff, f_max])):
+            raise ValueError("Frequency bounds must be finite.")
+
+        if not (f[0] <= f_min < f_cutoff < f_max <= f[-1]):
             raise ValueError(
-                "f_cutoff must lie within the frequency range."
+                "Require f[0] <= f_min < f_cutoff < f_max <= f[-1]."
             )
 
-        # Define low- and high-frequency bands
-        low_mask = f <= f_cutoff
-        high_mask = f > f_cutoff
+        # Define frequency bands
+        band_mask = (f >= f_min) & (f <= f_max)
+        low_mask  = band_mask & (f <= f_cutoff)
+        high_mask = band_mask & (f > f_cutoff)
 
         # Compute variance in each frequency band
         var_low = np.sum(psd[low_mask]) * df
         var_high = np.sum(psd[high_mask]) * df
 
-        # Normalize by total variance
-        if m0 > 0:
-            FVE[0] = (var_low / m0) * 100
-            FVE[1] = (var_high / m0) * 100
+        # Compute total variance in selected frequency range
+        var_band = var_low + var_high
+
+        # Normalize by variance in selected frequency range
+        if var_band > 0:
+            FVE[0] = (var_low / var_band) * 100
+            FVE[1] = (var_high / var_band) * 100
+            
+    elif f_min is not None or f_max is not None:
+            raise ValueError(
+                "f_cutoff must be specified when using f_min or f_max."
+            )
 
     # -------------------------------------------------------------------------
     # Compute mean spectral period
