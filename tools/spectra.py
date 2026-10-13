@@ -625,6 +625,25 @@ def spectral_diags(
 
             mn = integral(f**n * PSD(f) df)
 
+    variance_band : ndarray
+        Absolute variance contained in the low- and high-frequency
+        bands:
+
+            variance_band[0] = var_low
+            variance_band[1] = var_high
+
+        where
+
+            var_low  = integral from f_min to f_cutoff of PSD(f) df
+            var_high = integral from f_cutoff to f_max of PSD(f) df
+
+        If f_cutoff is None, both values are NaN.
+
+        When f_min and f_max are omitted, the variances are computed
+        over the full resolved frequency range.
+
+        Units are the squared units of the original data.
+
     FVE : ndarray
         Percentage of variance contained in the low- and high-frequency
         bands relative to the variance in [f_min, f_max]:
@@ -657,7 +676,20 @@ def spectral_diags(
     All spectral integrals use discrete frequency-bin summation.
     Frequency bounds are applied to the available frequency bins,
     without interpolation at the specified cutoff frequencies.
+
+    A frequency bin exactly equal to f_cutoff is assigned to the
+    low-frequency band.
+
+    When the full frequency range is selected:
+
+        variance_band[0] + variance_band[1] = moments[0]
+
+    provided f_cutoff is specified.
     """
+
+    # -------------------------------------------------------------------------
+    # Check inputs
+    # -------------------------------------------------------------------------
 
     # Convert input arrays to floating point
     psd = np.asarray(psd, dtype=float)
@@ -708,11 +740,14 @@ def spectral_diags(
     moments = np.array([m0, m1, m2, m3])
 
     # -------------------------------------------------------------------------
-    # Compute partitioned variance ratio
+    # Compute partitioned variance and variance ratio
     # -------------------------------------------------------------------------
 
     # Initialize fraction of variance explained
     FVE = np.full(2, np.nan)
+
+    # Initialize absolute variance in each frequency band
+    variance_band = np.full(2, np.nan)
 
     if f_cutoff is not None:
 
@@ -741,6 +776,10 @@ def spectral_diags(
         # Compute total variance in selected frequency range
         var_band = var_low + var_high
 
+        # Save absolute variance in each frequency band
+        variance_band[0] = var_low
+        variance_band[1] = var_high
+
         # Normalize by variance in selected frequency range
         if var_band > 0:
             FVE[0] = (var_low / var_band) * 100
@@ -767,7 +806,7 @@ def spectral_diags(
 
         mean_period = np.nan
 
-    return moments, FVE, mean_period
+    return moments, variance_band, FVE, mean_period
 
 
 #--- Generate 1D data from a power law spectrum ---# 

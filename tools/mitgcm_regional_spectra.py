@@ -291,6 +291,7 @@ psd_CI          = np.ma.masked_all((nlat,nlon,nfreq,2))
 spec_slope      = np.ma.masked_all((nlat,nlon))
 spec_slope_stde = np.ma.masked_all((nlat,nlon))
 moments         = np.ma.masked_all((nlat,nlon,4))
+var_band        = np.ma.masked_all((nlat,nlon,2))
 fve             = np.ma.masked_all((nlat,nlon,2))
 mean_period     = np.ma.masked_all((nlat,nlon))
 
@@ -365,10 +366,10 @@ for ilon in tqdm(range(nlon), desc="Computing power spectra", unit="lon"):
                                                                               )
 
         # Compute spectral moments, FVE and mean period
-        moments[ilat,ilon,:], fve[ilat,ilon,:], mean_period[ilat,ilon] = spectral_diags(psd_mean[ilat,ilon,:], 
-                                                                                        f, 
-                                                                                        f_cutoff=f_cut
-                                                                                        )
+        moments[ilat,ilon,:], var_band[ilat,ilon,:], fve[ilat,ilon,:], mean_period[ilat,ilon] = spectral_diags(psd_mean[ilat,ilon,:], 
+                                                                                                                f, 
+                                                                                                                f_cutoff=f_cut
+                                                                                                                )
 
 # Convert mean period to units of days
 mean_period_days = mean_period/(24*60*60) 
@@ -385,6 +386,7 @@ psd_CI_cpd = psd_CI / seconds_per_day
 # Set coordinates
 CI_coord      = ['lower', 'upper']
 moments_coord = ["m0", "m1", "m2", "m3"]
+var_coord     = ['low_freq_var', 'high_freq_var']
 fve_coord     = ['low_FVE', 'high_FVE']
 
 # --- Spectral analysis diagnostics --- # 
@@ -440,6 +442,16 @@ MOMENTS = xr.DataArray(data=moments,
                     )
 )
 
+VAR = xr.DataArray(data=var_band,
+                   dims=['lat','lon','var_coord'],
+                   coords=dict(lat=lat,lon=lon,var_coord=var_coord),
+                   attrs=dict(
+                       description=('Absolute variance contained in the ' +
+                                    'low and high frequency bands.'),
+                       units='variance'
+                    )
+)
+
 FVE = xr.DataArray(data=fve,
                    dims=['lat','lon','fve_coord'],
                    coords=dict(lat=lat,lon=lon,fve_coord=fve_coord),
@@ -462,7 +474,7 @@ MEAN_PERIOD_days = xr.DataArray(data=mean_period_days,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'PSD':PSD,'PSD_CI':PSD_CI,'SPEC_slope':SPEC_slope,'SPEC_slope_stde':SPEC_slope_stde,'MOMENTS':MOMENTS,'FVE':FVE,'MEAN_PERIOD_days':MEAN_PERIOD_days})
+data = xr.Dataset({'PSD':PSD,'PSD_CI':PSD_CI,'SPEC_slope':SPEC_slope,'SPEC_slope_stde':SPEC_slope_stde,'MOMENTS':MOMENTS,'VAR':VAR,'FVE':FVE,'MEAN_PERIOD_days':MEAN_PERIOD_days})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({

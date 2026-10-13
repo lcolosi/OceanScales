@@ -268,16 +268,16 @@ if option_proc == 'vel':
     dx = R_earth * np.cos(lat_mid) * np.diff(lon_r)
     dy = R_earth * np.diff(lat_r)
 
-    # Compute total displacement from offshore to onshore
+    # Compute total displacement from onshore to offshore
     dx_total = np.sum(dx)
     dy_total = np.sum(dy)
 
     # Compute overall transect angle relative to east.
-    # Because the transect is ordered offshore -> onshore,
+    # Because the transect is ordered onshore -> offshore,
     # theta points in the positive onshore direction.
     theta = np.arctan2(
-        dy_total,
-        dx_total
+        -dy_total,
+        -dx_total
     )
 
     # Define unit vector pointing onshore
