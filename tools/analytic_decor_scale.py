@@ -50,7 +50,7 @@ option_biased = True
 
 # Set sampling interval and record duration parameters (units: days)
 dt = 1 / 24                                         
-T_ac  = np.array([1/12, 2/12, 3/12, 4/12, 6/12, 8/12, 1]) * (365)  
+T_ac  = np.array([0.25/12, 0.5/12, 0.75/12, 1/12, 2/12, 3/12, 4/12, 6/12, 8/12, 1]) * (365)  
 
 # Set maximum and minimum frequency in units of cpd
 fmax = 1 / (2*dt)                                         
