@@ -45,8 +45,14 @@ sys.path.append(str(PATH_tools))
 from plotting import add_corner_label
 
 # -----------------------------------------------------------------------------
-# Set plotting parameters 
+# Set processing and plotting parameters 
 # -----------------------------------------------------------------------------
+
+# Set processing parameters
+option_biased = True
+
+# Label segment processing 
+autocorr_estimate = "biased" if option_biased else "unbiased"
 
 # Set font and fontsize using LaTeX 
 fontsize=16
@@ -62,14 +68,14 @@ plt.rcParams.update({
 # -----------------------------------------------------------------------------
 
 # Set filename to saved the netcdf file
-filename = PATH_data / "analytic" / f"analytic_decor_scale.nc"
+filename = PATH_data / "analytic" / f"analytic_decor_scale_{autocorr_estimate}.nc"
 
 # Load in data
 with Dataset(filename, "r") as nc:
 
     # Load analytic autocorrelation and decorrelation scale
     rho     = nc.variables["autocorr"][:]
-    T_tilde = nc.variables["decor_scale"][:]
+    T_tilde = nc.variables["decor_scale_maxI"][:]
 
     # Load coordinates
     tau             = nc.variables["lag"][:]
@@ -123,9 +129,9 @@ for k, idx_alpha in enumerate(idx_alpha_p):
 ax.set_ylabel('Autocorrelation')
 ax.set_xlabel(r'$\tau$ (days)')
 ax.set_xticks(np.arange(0,365+10,10))
-ax.set_yticks(np.arange(-0.75,1+0.25,0.25))
+ax.set_yticks(np.arange(-0.5,1+0.25,0.25))
 ax.set_xlim(0,120)
-ax.set_ylim(-0.75,1)
+ax.set_ylim(-0.5,1)
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)
 ax.grid(True,linestyle='--',alpha=0.3)
@@ -140,17 +146,20 @@ ax = axes[0,1]
 ax.axhline(0, ls = '--', lw = 1.5, alpha = 0.7, color='k')
 
 # Loop through f_min values 
-for k in range(0,len(T_months_ac)): 
+for k in range(0,len(T_months_p)): 
+
+    # Find indices of duration values to plot
+    idx_T_p = np.where(np.isclose(T_months_ac, T_months_p[k]))[0][0]
 
     # Plot the ith autocorrelation function for the ith T value 
-    ax.plot(tau, rho[:,k,idx_alpha_ac], '-', lw = 2, label=f"T = {int(round(T_months_ac[k]))} months", color=colors_decor[k]) 
+    ax.plot(tau, rho[:,idx_T_p,idx_alpha_ac], '-', lw = 2, label=f"T = {int(round(T_months_ac[idx_T_p]))} months", color=colors_decor[k]) 
 
 # Set axis attributes 
 ax.set_xlabel(r'$\tau$ (days)')
 ax.set_xticks(np.arange(0,365+10,10))
-ax.set_yticks(np.arange(-0.75,1+0.25,0.25))
+ax.set_yticks(np.arange(-0.5,1+0.25,0.25))
 ax.set_xlim(0,120)
-ax.set_ylim(-0.75,1)
+ax.set_ylim(-0.5,1)
 ax.set_yticklabels([])
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)
@@ -166,21 +175,21 @@ ax = axes[1,0]
 for k, iT in enumerate(T_months_p): 
 
     # Find index value
-    idx_T = np.argmin(np.abs(T_months_ds - iT))
+    idx_T = np.argmin(np.abs(T_months_ac - iT))
 
     # Plot the decorrelation scale as a function of spectral slope
-    ax.plot(alpha_values_ds[::2], T_tilde[idx_T,::2], '.-', lw = 2, label=f"T = {int(T_months_ds[idx_T])} months", color=colors_decor[k]) 
+    ax.plot(alpha_values_ac[::2], T_tilde[idx_T,::2], '.-', lw = 2, label=f"T = {int(T_months_ac[idx_T])} months", color=colors_decor[k]) 
 
 # Plot markers for decorrelation scales for alpha = 1.5, 2, 3, 4 and T = 12 months
-idx_t = np.argmin(np.abs(T_months_ds - 12))
-idx_a1 = np.argmin(np.abs(alpha_values_ds - 1.5))
-idx_a2 = np.argmin(np.abs(alpha_values_ds - 2))
-idx_a3 = np.argmin(np.abs(alpha_values_ds - 3))
-idx_a4 = np.argmin(np.abs(alpha_values_ds - 4))
-ax.plot(alpha_values_ds[idx_a1], T_tilde[idx_t, idx_a1], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(alpha_values_ds[idx_a2], T_tilde[idx_t, idx_a2], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(alpha_values_ds[idx_a3], T_tilde[idx_t, idx_a3], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(alpha_values_ds[idx_a4], T_tilde[idx_t, idx_a4], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+idx_t = np.argmin(np.abs(T_months_ac - 12))
+idx_a1 = np.argmin(np.abs(alpha_values_ac - 1.5))
+idx_a2 = np.argmin(np.abs(alpha_values_ac - 2))
+idx_a3 = np.argmin(np.abs(alpha_values_ac - 3))
+idx_a4 = np.argmin(np.abs(alpha_values_ac - 4))
+ax.plot(alpha_values_ac[idx_a1], T_tilde[idx_t, idx_a1], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_values_ac[idx_a2], T_tilde[idx_t, idx_a2], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_values_ac[idx_a3], T_tilde[idx_t, idx_a3], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_values_ac[idx_a4], T_tilde[idx_t, idx_a4], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
 
 # Set axis attributes 
 ax.set_xlabel(r'Spectral Slope $\alpha$')
@@ -203,21 +212,21 @@ ax = axes[1,1]
 for k, ialpha in enumerate(alpha_p): 
 
     # Find index value
-    idx_alpha = np.argmin(np.abs(np.array(alpha_values_ds) - ialpha))
+    idx_alpha = np.argmin(np.abs(np.array(alpha_values_ac) - ialpha))
 
     # Plot the decorrelation scale as a function of f_min
-    ax.plot(T_ds, T_tilde[:,idx_alpha], '.-', lw = 2, label=rf"$\alpha =$ {np.round(alpha_values_ds[idx_alpha],1)}", color=colors_decor[k]) 
+    ax.plot(T_ac, T_tilde[:,idx_alpha], '.-', lw = 2, label=rf"$\alpha =$ {np.round(alpha_values_ac[idx_alpha],1)}", color=colors_decor[k]) 
 
 # Plot markers for decorrelation scales for alpha = 3 and T = 3, 6, 8, 12 months
-idx_t3 = np.argmin(np.abs(T_months_ds - 3))
-idx_t6 = np.argmin(np.abs(T_months_ds - 6))
-idx_t8 = np.argmin(np.abs(T_months_ds - 8))
-idx_t12 = np.argmin(np.abs(T_months_ds - 12))
-idx_a = np.argmin(np.abs(alpha_values_ds - 3))
-ax.plot(T_ds[idx_t3], T_tilde[idx_t3, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(T_ds[idx_t6], T_tilde[idx_t6, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(T_ds[idx_t8], T_tilde[idx_t8, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(T_ds[idx_t12], T_tilde[idx_t12, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1, clip_on=False)
+idx_t3 = np.argmin(np.abs(T_months_ac - 3))
+idx_t6 = np.argmin(np.abs(T_months_ac - 6))
+idx_t8 = np.argmin(np.abs(T_months_ac - 8))
+idx_t12 = np.argmin(np.abs(T_months_ac - 12))
+idx_a = np.argmin(np.abs(alpha_values_ac - 3))
+ax.plot(T_ac[idx_t3], T_tilde[idx_t3, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(T_ac[idx_t6], T_tilde[idx_t6, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(T_ac[idx_t8], T_tilde[idx_t8, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(T_ac[idx_t12], T_tilde[idx_t12, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1, clip_on=False)
 
 # Set axis attributes 
 ax.set_xlabel(r'Duration $T$ (days)')

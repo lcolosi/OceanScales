@@ -180,9 +180,9 @@ for k, idx_alpha in enumerate(idx_alpha_p):
 ax.set_ylabel('Autocorrelation')
 ax.set_xlabel(r'$\tau$ (days)')
 ax.set_xticks(np.arange(0,365+10,10))
-ax.set_yticks(np.arange(-0.75,1+0.25,0.25))
+ax.set_yticks(np.arange(-0.5,1+0.25,0.25))
 ax.set_xlim(0,120)
-ax.set_ylim(-0.75,1)
+ax.set_ylim(-0.5,1)
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)
 ax.grid(True,linestyle='--',alpha=0.3)
@@ -237,9 +237,9 @@ for k, idx_T in enumerate(idx_T_p):
 # Set axis attributes 
 ax.set_xlabel(r'$\tau$ (days)')
 ax.set_xticks(np.arange(0,365+10,10))
-ax.set_yticks(np.arange(-0.75,1+0.25,0.25))
+ax.set_yticks(np.arange(-0.5,1+0.25,0.25))
 ax.set_xlim(0,120)
-ax.set_ylim(-0.75,1)
+ax.set_ylim(-0.5,1)
 ax.set_yticklabels([])
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)

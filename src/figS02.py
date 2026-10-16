@@ -25,7 +25,6 @@ from netCDF4 import Dataset, num2date
 from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.ticker import FuncFormatter
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
