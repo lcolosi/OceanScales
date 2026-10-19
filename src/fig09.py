@@ -14,7 +14,7 @@
 #   Luke Colosi
 #
 # Created:
-#   2026-10-07
+#   2026-10-16
 # =============================================================================
 
 # Import libraries 
@@ -26,7 +26,6 @@ from netCDF4 import Dataset
 import cartopy.crs as ccrs
 import cmocean.cm as cmo
 import matplotlib as mpl
-from scipy.ndimage import gaussian_filter
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -171,7 +170,7 @@ slope_mask = slope_mask & ~land_mask
 data_mask = np.where(slope_mask, 1, np.nan)
 
 # -----------------------------------------------------------------------------
-# Plot regional spectral slope  
+# Plot regional spectral slope and FVE 
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
@@ -198,156 +197,6 @@ fig, axes = plt.subplots(2, 1, figsize=(12, 12), subplot_kw={"projection": proje
 
 # --- Subplot 1 --- # 
 ax = axes[0]
-
-# Plot coastlines and land 
-set_coastlines(
-    ax, 
-    projection, 
-    resolution, 
-    lon_min=lon_min, 
-    lon_max=lon_max, 
-    lat_min=lat_min, 
-    lat_max=lat_max
-) 
-
-# Plot the spectral slope 
-ct = ax.contourf(
-    lon, 
-    lat, 
-    fve[:,:,0], 
-    levels=levels_fve,
-    transform=ccrs.PlateCarree(),
-    cmap=cmap_fve, 
-    extend='both'
-)
-
-# Plot the CCE1 mooring point
-ax.scatter(
-    lon1, 
-    lat1, 
-    color='w',
-    edgecolor='black', 
-    marker='^', 
-    s=40, 
-    transform=ccrs.PlateCarree(),
-    zorder=10, 
-    label='CCE1'
-)
-
-# Plot the CCE2 mooring point
-ax.scatter(
-    lon2, 
-    lat2, 
-    color='w',  
-    edgecolor='black', 
-    marker='s', 
-    s=40,  
-    transform=ccrs.PlateCarree(),
-    zorder=10, 
-    label='CCE2'
-)
-
-# Plot the CCE3 mooring point
-ax.scatter(
-    lon3, 
-    lat3, 
-    color= 'w',  
-    edgecolor='black', 
-    marker='o', 
-    s=40,  
-    transform=ccrs.PlateCarree(),
-    zorder=10, 
-    label='CCE3'
-)
-
-# Plot depth contour lines
-ct1 = ax.contour(
-    lon_b, 
-    lat_b, 
-    -1*(bathy),
-    levels=levels_ms, 
-    colors='black', 
-    linewidths=0.5, 
-    linestyles='dashed'
-)
-ct2 = ax.contour(
-    lon_b, 
-    lat_b, 
-    -1*(bathy),
-    levels=[2000], 
-    colors='black', 
-    linewidths=1, 
-    linestyles='solid'
-)
-ct3 = ax.contour(
-    lon_b, 
-    lat_b, 
-    -1*(bathy),
-    levels=levels_is, 
-    colors='black', 
-    linewidths=0.5, 
-    linestyles='dashed'
-)
-ct4 = ax.contour(
-    lon_b, 
-    lat_b, 
-    -1*(bathy),
-    levels=[200], 
-    colors='black', 
-    linewidths=1, 
-    linestyles='solid'
-)
-
-# Plot Line 80 CalCOFI Stations
-ax.plot(
-    calCOFI_lon % 360, 
-    calCOFI_lat,
-    color='k',
-    linestyle=(0, (5, 3)),  
-    linewidth=1.5,
-    transform=ccrs.PlateCarree(),
-)
-
-# Set grid ticks 
-set_grid_ticks(
-    ax,
-    xticks=xticks,
-    yticks=yticks,
-    xlabels=False,
-    ylabels=True,
-    grid=True,
-    fontsize=fontsize_g,
-    color='k',
-    lw=1,
-    ls='--',
-    alpha=0.1
-)
-
-# Create colormap
-cax = plt.axes([0.8075, 0.535, 0.02, 0.3])
-cbar = set_cbar(
-    ct,
-    cax,
-    fig,
-    orientation="vertical",
-    extend="both",
-    label=r'FVE ($\%$)',
-    fontsize=fontsize_g,
-    ticks=ticks_fve, 
-    invert = False
-)
-
-# Set legend
-ax.legend(
-    loc='upper right',
-    bbox_to_anchor=(1.0, 0.905),
-    fontsize=10,
-    framealpha=0.9,
-    edgecolor='black'
-)
-
-# --- Subplot 2 --- # 
-ax = axes[1]
 
 # Plot coastlines and land 
 set_coastlines(
@@ -475,6 +324,156 @@ set_grid_ticks(
     ax,
     xticks=xticks,
     yticks=yticks,
+    xlabels=False,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
+
+# Create colormap
+cax = plt.axes([0.8075, 0.535, 0.02, 0.3])
+cbar = set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="vertical",
+    extend="both",
+    label=r'Spectral Slope $\alpha$',
+    fontsize=fontsize_g,
+    ticks=ticks_slope, 
+    invert = False
+)
+
+# Set legend
+ax.legend(
+    loc='upper right',
+    bbox_to_anchor=(1.0, 0.905),
+    fontsize=10,
+    framealpha=0.9,
+    edgecolor='black'
+)
+
+# --- Subplot 2 --- # 
+ax = axes[1]
+
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
+
+# Plot FVE
+ct = ax.contourf(
+    lon, 
+    lat, 
+    fve[:,:,0], 
+    levels=levels_fve,
+    transform=ccrs.PlateCarree(),
+    cmap=cmap_fve, 
+    extend='both'
+)
+
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
+
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
+
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
+
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+
+# Plot Line 80 CalCOFI Stations
+ax.plot(
+    calCOFI_lon % 360, 
+    calCOFI_lat,
+    color='k',
+    linestyle=(0, (5, 3)),  
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+)
+
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
     xlabels=True,
     ylabels=True,
     grid=True,
@@ -508,9 +507,9 @@ cbar = set_cbar(
     fig,
     orientation="vertical",
     extend="both",
-    label=r'Spectral Slope $\alpha$',
+    label=r'FVE ($\%$)',
     fontsize=fontsize_g,
-    ticks=ticks_slope, 
+    ticks=ticks_fve, 
     invert = False
 )
 

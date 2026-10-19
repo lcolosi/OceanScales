@@ -595,7 +595,7 @@ add_corner_label(axes[0,1], pos, 'B', fontsize = fontsize)
 add_corner_label(axes[0,2], pos, 'C', fontsize = fontsize)
 add_corner_label(axes[1,0], pos, 'D', fontsize = fontsize)
 add_corner_label(axes[1,1], pos, 'E', fontsize = fontsize)
-add_corner_label(axes[1,2], pos, 'E', fontsize = fontsize)
+add_corner_label(axes[1,2], pos, 'F', fontsize = fontsize)
 
 # Adjust spacing 
 plt.subplots_adjust(hspace=0.21, wspace=0.1)
