@@ -1363,43 +1363,77 @@ def autocorrelation_analytic(
 
     return R, rho, R0
 
-# --- Analytic Solution of the Decorrelation Scale --- #
-def decorrelation_scale_analytic(
+
+# --- Analytic Upper Bound of the Decorrelation Scale --- #
+def decorrelation_scale_upper_bound_analytic(
     fmin,
-    fmax, 
+    fmax,
     alpha,
 ):
     """
-    Function for computing the analytic two-sided decorrelation scale for a power-law
-    spectrum.  
+    Compute the analytic upper bound of the two-sided decorrelation scale
+    for a power-law spectrum, S(f) = f^(-alpha).
+
+    The decorrelation scale is defined as the maximum of the symmetric
+    integral of the autocorrelation function:
+
+        T = max_tau [2 * integral_0^tau rho(t) dt]
+
+    Using the Wiener-Khinchin theorem, the symmetric integral can be
+    expressed in terms of the frequency spectrum:
+
+        I(tau) = 1/(pi * R0) * integral_[fmin,fmax]
+                 [S(f)/f] * sin(2*pi*f*tau) df
+
+    Since sin(2*pi*f*tau) <= 1 and S(f) >= 0, an upper bound is
+
+        T <= T_upper = 1/(pi * R0) * integral_[fmin,fmax] S(f)/f df
+
+    where R0 is the total variance. Equivalently,
+
+        T_upper = <T_f>_S / pi
+
+    where <T_f>_S is the variance-weighted mean period.
+
+    This expression is an upper bound rather than an exact solution
+    because the sine terms associated with different frequencies
+    generally cannot attain their maximum values simultaneously.
 
     Parameters
     ----------
     fmin : float
-        Minimum frequency.
+        Minimum frequency (strictly positive).
     fmax : float
-        Maximum frequency.
+        Maximum frequency (greater than fmin).
     alpha : float
-        Power-law exponent.
+        Power-law spectral exponent.
 
     Returns
     -------
-    T : ndarray (complex)
-        Decorrelation scale.
-    R0 : float
-        Variance (R at zero lag).
+    T_upper : float
+        Analytic upper bound of the decorrelation scale.
+        Units are the inverse of the frequency units.
     """
 
-    # Compute R(0) (Variance)
+    # Compute the zeroth spectral moment (total variance)
     if np.isclose(alpha, 1.0):
-        R0 = np.log(fmax / fmin)
+        m0 = np.log(fmax / fmin)
     else:
-        R0 = (fmax**(1 - alpha) - fmin**(1 - alpha)) / (1 - alpha)
+        m0 = (fmax**(1 - alpha) - fmin**(1 - alpha)) / (1 - alpha)
 
-    # Compute decorrelaton scale
-    T = 2 * (1/(-2 * np.pi * 1j * alpha * R0)) * (fmin**(-alpha) - fmax**(-alpha)) 
+    # Compute inverse-frequency spectral moment
+    if np.isclose(alpha, 0.0):
+        m1 = np.log(fmax / fmin)
+    else:
+        m1 = (fmin**(-alpha) - fmax**(-alpha)) / alpha
 
-    return np.imag(T), R0
+    # Compute the variance-weighted mean period
+    T_mean = m1 / m0
+
+    # Compute analytic upper bound for the decorrelation scale
+    decor_upper = T_mean / np.pi
+
+    return decor_upper
 
 
 # --- Segment time series --- # 

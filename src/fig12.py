@@ -3,6 +3,16 @@
 # =============================================================================
 #
 # Caption:
+#   (a) Decorrelation time scale (solid black) of potential density at 9.6 meter water 
+#   depth along the CalCOFI line 80.0 transect with the gray-shaded region representing
+#   one standard error of the mean. Spectral variance fraction $\phi$ for frequancy
+#   bands 2 hours to 4 days (blue), 4 to 30 days (red), and 30 to 182.5 days (green) 
+#   along line 80.0 are also shown. Vertical dashed black lines designate the location 
+#   of the 200 and 2000 meter isobaths. Colored triangles along the top axis denote
+#   the location of CCE1 (green), CCE2 (red), and CCE3 (blue) mooring. (b) Frequency
+#   spectrogram of potential density along line 80.0. Vertical dashed lines again 
+#   denote the 200 and 200 meter isobaths. Horizontal lines denote the bounds of the 
+#   frequency bands for the spectral variance fraction.    
 #   
 #   
 # Author:
@@ -89,9 +99,9 @@ lon_bnds             = [237.0, 240.0]
 
 # Set the spectral bands by their period limits (days)
 period_bands = {
-    "4--30 days": (4.0, 30.0),
-    "30--90 days": (30.0, 90.0),
-    "90--182.5 days": (90.0, 182.5),
+    r"$\phi$(2 hour--4 days)": (1/24, 4.0),
+    r"$\phi$(4--30 days)": (4.0, 30.0),
+    r"$\phi$(30--182.5 days)": (30.0, 182.5),
 }
 
 # Label segment processing method 
@@ -242,7 +252,7 @@ else:
     psd_CI_depth = psd_CI[:, idx_depth, :]
 
 # -----------------------------------------------------------------------------
-# Compute fraction of variance explained (FVE) in the spectral bands
+# Compute the spectral variance fraction in the spectral bands
 # -----------------------------------------------------------------------------
 
 # Set helper function 
@@ -275,7 +285,7 @@ freq_array = freq_array[valid_freq]
 psd_array = psd_array[:, valid_freq]
 
 # Initialize dictionary 
-fve = {band: np.full(len(dist), np.nan) for band in period_bands}
+svf = {band: np.full(len(dist), np.nan) for band in period_bands}
 
 # Loop through distances 
 for idist, spectrum in enumerate(psd_array):
@@ -292,17 +302,17 @@ for idist, spectrum in enumerate(psd_array):
         # Compute the variance in the spectral band
         band_variance = integrate_spectral_band(freq_array, spectrum, low, high)
 
-        # Compute the fraction of variance explained (FVE) in the spectral band
-        fve[band][idist] = 100.0 * band_variance / total_variance    
+        # Compute the spectral variance fraction (svf) in the spectral band
+        svf[band][idist] = 100.0 * band_variance / total_variance    
 
 # -----------------------------------------------------------------------------
-# Plot decorrelation time scale, FVE and frequency spectra   
+# Plot decorrelation time scale, SVF and frequency spectra   
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
 cmap   = cmo.deep_r 
-period_bounds = [4.0, 30.0, 90.0, 182.5]
-fve_colors = ['tab:blue', 'tab:red', 'tab:green']
+period_bounds = [4.0, 30.0, 182.5]
+svf_colors = ['tab:blue', 'tab:red', 'tab:green']
 
 # Set the plotting parameters based on the option_plot
 if option_plot == "log": 
@@ -326,21 +336,21 @@ else:
     label  = r'PSD (kg$^2$/m$^6$/cycles/day)'
 
 # Create figure
-fig = plt.figure(figsize=(14,10))
-gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2]) 
+fig = plt.figure(figsize=(13,10))
+gs = gridspec.GridSpec(2, 1, height_ratios=[1.4, 2]) 
 
 #--- Subplot 1 ---# 
 ax = fig.add_subplot(gs[0])
 ax1 = ax
 
-# Plot the uncertainty envelope (+/- 1 standard deviation) of the decorrelation scale
-ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_depth, color='k', alpha=0.15, linewidth=0, zorder=2)
-
 # Plot the decorrelation scale
-ax.plot(dist, Lt_depth, color='k', linewidth=2, zorder=3)
+lt_line, =ax.plot(dist, Lt_depth, color='k', linewidth=2, zorder=3, label=r'$\overline{\mathcal{T}}$')
+
+# Plot the uncertainty envelope (+/- 1 standard deviation) of the decorrelation scale
+lt_error = ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_depth, color='k', alpha=0.15, linewidth=0, zorder=2, label=r'$\sigma_{\overline{\mathcal{T}}}$')
 
 # Set axis attributes
-ax.set_ylabel(r'$\overline{\mathcal{T}}$ (days)')
+ax.set_ylabel('Decorrelation Scale (days)')
 ax.set_xlim(0, dist[-1])
 ax.set_ylim(0,20) 
 ax.set_xticks(np.arange(0,250+25,25))
@@ -350,30 +360,37 @@ ax.tick_params(top=True, bottom=True, left=True, right=False, direction='out', l
 ax.grid(axis='x', linestyle='--', alpha=0.1, color='k')
 
 # --- Create right axis for FVE --- #
-ax_fve = ax.twinx()
+ax_svf = ax.twinx()
 
 # Initialize list to hold handles for legend
-fve_handles = []
+svf_handles = []
 
 # Loop through spectral bands
-for (band, values), color in zip(fve.items(), fve_colors):
+for (band, values), color in zip(svf.items(), svf_colors):
 
-    # Plot the fraction of variance explained (FVE) for each spectral band
-    line, = ax_fve.plot(dist, values, color=color, linewidth=1.8,
+    # Plot the spectral variance fraction (SVF) for each spectral band
+    line, = ax_svf.plot(dist, values, color=color, linewidth=1.8,
                         label=band, zorder=4)
 
     # Append the line handle to the list for the legend
-    fve_handles.append(line)
+    svf_handles.append(line)
 
-# Set axis attributes for FVE
-ax_fve.set_ylabel(r'FVE ($\%$)')
-ax_fve.set_ylim(0, 80)
-ax_fve.set_yticks(np.arange(0, 81, 20))
+# Set axis attributes for SVF
+ax_svf.set_ylabel(r'$\phi$ ($\%$)')
+ax_svf.set_ylim(0, 80)
+ax_svf.set_yticks(np.arange(0, 81, 10))
+
+# Combine decorrelation scale and SVF legend handles
+legend_handles = [lt_line, lt_error] + svf_handles
 
 # Keep the legend compact to avoid obscuring the decorrelation curve.
-ax_fve.legend(handles=fve_handles, loc='center', bbox_to_anchor=(0.6, 0.775), fontsize=11,
-              frameon=True, framealpha=0.85, title='Spectral bands',
-              title_fontsize=11)
+ax_svf.legend(handles=legend_handles, 
+              loc='center', 
+              bbox_to_anchor=(0.55, 0.79), 
+              fontsize=11,
+              frameon=True, 
+              framealpha=0.85, 
+              title_fontsize=11,)
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()
@@ -408,14 +425,9 @@ dist2 = np.interp(lon2, lon_sorted, dist_sorted)
 dist3 = np.interp(lon3, lon_sorted, dist_sorted)
 
 # Add CCE1, CCE2, and CCE3 locations 
-add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.03, y_text=1.035, ms= 6, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
-add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.03, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
-add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.03, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
-
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-# ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-# ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-# ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
+add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035, ms= 6, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
+add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
+add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
 # Plot 200 m and 2000 m isobath markers
 ax.axvline(dist_200m,  color='k', linestyle='--',  lw=1.0, alpha=0.7, zorder=1)
@@ -485,7 +497,7 @@ ax.invert_xaxis()
 ax.grid(axis='x', linestyle='--',alpha=0.1,color='k')
 
 # Set colorbar
-cax = fig.add_axes([0.915, 0.155, 0.02, 0.4])
+cax = fig.add_axes([0.91, 0.125, 0.02, 0.4])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
 cbar.ax.yaxis.set_major_locator(mticker.LogLocator(base=10))
 cbar.ax.yaxis.set_minor_locator(mticker.LogLocator(base=10, subs=np.arange(2, 10)*0.1))
@@ -530,11 +542,6 @@ add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.015, y_text=1.035,ms=6, fon
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.015, y_text=1.035,ms=6, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.015, y_text=1.035,ms=6, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-# ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-# ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-# ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
-
 # Plot 200 m and 2000 m isobath markers
 ax.axvline(dist_200m,  color='k', linestyle='--',  lw=1.0, alpha=0.7, zorder=1)
 ax.axvline(dist_2000m, color='k', linestyle='--', lw=1.0, alpha=0.7, zorder=1)
@@ -543,11 +550,11 @@ ax.axvline(dist_2000m, color='k', linestyle='--', lw=1.0, alpha=0.7, zorder=1)
 ax_top.set_xticklabels([])
 
 # Label each subplot
-add_corner_label(ax1, [0.025,0.1], 'A', fontsize = fontsize)
-add_corner_label(ax2, [0.025,0.95], 'B', fontsize = fontsize)
+add_corner_label(ax1, [0.0225,0.075], 'A', fontsize = fontsize)
+add_corner_label(ax2, [0.0225,0.95], 'B', fontsize = fontsize)
 
 # Adjust figure spacing
-plt.subplots_adjust(hspace=0.1, wspace=0.05)
+plt.subplots_adjust(hspace=0.075, wspace=0.05)
 
 # Save figure in high resolution 
 fig.savefig(

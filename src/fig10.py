@@ -196,6 +196,7 @@ with Dataset(filename, "r") as nc:
     # Load analytic autocorrelation and decorrelation scale
     T_tilde      = nc.variables["decor_scale"][:]
     T_tilde_maxI = nc.variables["decor_scale_maxI"][:]
+    #T_tilde_upper = nc.variables["decor_scale_upper"][:]
 
     # Load coordinates
     T_ac            = nc.variables["duration_ac"][:]
@@ -436,8 +437,8 @@ idx_T_ds = T_months_ds == segment_months
 idx_T_ac = T_months_ac == segment_months
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
-ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label='Analytic - Full Integral')
-ax.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label=r'Analytic - Maximize $\mathcal{I}(\tau)$')
+ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label=r'$\langle T_f \rangle/\pi$')
+ax.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label='Analytic')
 
 # Set axis attributes
 ax.set_xlabel(r'Spectral Slope $\alpha$')
