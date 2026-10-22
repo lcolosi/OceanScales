@@ -3,16 +3,16 @@
 # =============================================================================
 #
 # Caption:
-#   (a) Decorrelation time scale (solid black) of potential density at 9.6 meter water 
+#   (a) Decorrelation time scale (solid black) of model potential density at 9.6 meter water 
 #   depth along the CalCOFI line 80.0 transect with the gray-shaded region representing
 #   one standard error of the mean. Spectral variance fraction $\phi$ for frequancy
 #   bands 2 hours to 4 days (blue), 4 to 30 days (red), and 30 to 182.5 days (green) 
 #   along line 80.0 are also shown. Vertical dashed black lines designate the location 
 #   of the 200 and 2000 meter isobaths. Colored triangles along the top axis denote
 #   the location of CCE1 (green), CCE2 (red), and CCE3 (blue) mooring. (b) Frequency
-#   spectrogram of potential density along line 80.0. Vertical dashed lines again 
+#   spectrogram of model potential density along line 80.0. Vertical dashed lines again 
 #   denote the 200 and 200 meter isobaths. Horizontal lines denote the bounds of the 
-#   frequency bands for the spectral variance fraction.    
+#   frequency bands for the spectral variance fraction estimate.    
 #   
 #   
 # Author:
@@ -99,7 +99,7 @@ lon_bnds             = [237.0, 240.0]
 
 # Set the spectral bands by their period limits (days)
 period_bands = {
-    r"$\phi$(2 hour--4 days)": (1/24, 4.0),
+    r"$\phi$(2 hour--4 days)": (2/24, 4.0),
     r"$\phi$(4--30 days)": (4.0, 30.0),
     r"$\phi$(30--182.5 days)": (30.0, 182.5),
 }
@@ -318,7 +318,7 @@ svf_colors = ['tab:blue', 'tab:red', 'tab:green']
 if option_plot == "log": 
     
     # Compute variance per unit logarithmic frequency 
-    psd_plot = psd_depth * freq[np.newaxis, :]
+    psd_plot = psd_array * freq_array[np.newaxis, :]
 
     # Set plotting parameters 
     levels = np.logspace(np.log10(1e-5), np.log10(3e-2), num=60)  
@@ -328,7 +328,7 @@ if option_plot == "log":
 else: 
 
     # Set psd_plot variable 
-    psd_plot = psd_depth
+    psd_plot = psd_array
 
     # Set plotting parameters 
     levels = np.logspace(np.log10(7e-7), np.log10(1e0), num=45) 
@@ -456,7 +456,7 @@ ax = fig.add_subplot(gs[1])
 ax2 = ax
 
 # Plot the time-mean along-shore velocity 
-cf = ax.contourf(dist, freq[1:], psd_plot[:,1:].T, levels=levels, cmap=cmap, extend='both', norm=norm)
+cf = ax.contourf(dist, freq_array, psd_plot.T, levels=levels, cmap=cmap, extend='both', norm=norm)
 
 # Plot and label spectral band boundaries
 for period in period_bounds:
@@ -490,7 +490,7 @@ for period in period_bounds:
 ax.set_xlabel('Distance from shore (km)')
 ax.set_ylabel('Frequency (cycles/day)')
 ax.set_xlim(0,dist[-1])
-ax.set_ylim(freq[1],freq[-1])
+ax.set_ylim(freq_array[0],freq_array[-1])
 ax.set_yscale('log')
 ax.set_xticks(np.arange(0,250+25,25))
 ax.invert_xaxis()
@@ -565,7 +565,3 @@ fig.savefig(
     pad_inches=0.1,
     transparent=False
 )
-
-
-
-

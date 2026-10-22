@@ -80,14 +80,11 @@ with Dataset(filename, "r") as nc:
     # Load coordinates
     tau             = nc.variables["lag"][:]
     T_ac            = nc.variables["duration_ac"][:]
-    T_ds            = nc.variables["duration_ds"][:]
     alpha_values_ac = nc.variables["slope_ac"][:]
-    alpha_values_ds = nc.variables["slope_ds"][:]
 
 # Convert from days to months
 days_per_month = 365 / 12 
 T_months_ac    = T_ac / days_per_month
-T_months_ds    = T_ds / days_per_month
 
 # -----------------------------------------------------------------------------
 # Plot Autocorrelation and Decorrelation Scale 

@@ -7,10 +7,11 @@
 #   depth from model data at (a) CCE1, (b) CCE2, and (c) CCE3, and observations
 #   at (d) CCE1 and (e) CCE2. The standard error of the mean for the decorrelation 
 #   scale is shown as the shaded regions. The seasonally averaged mixed-layer depth
-#   $\overline{z}_{mld}$ and its standard deviation are displayed as horizontal
-#   dashed lines and light shaded regions, respectively. For CCE1, CCE2, and CCE3
-#   model data, solid black circles denote the vertical model grid. For CCE1 and CCE2
-#   observations, solid back diamonds denote the depth of the CTD sensor.
+#   $\overline{z}_{mld}$ and the temporal standard deviation of mixed layer depth 
+#   are displayed as horizontal dashed lines and light shaded regions, respectively. 
+#   For CCE1, CCE2, and CCE3 model data, solid black circles denote the vertical 
+#   model grid. For CCE1 and CCE2 observations, solid back diamonds denote the 
+#   depth of the CTD sensor.
 #
 # Author:
 #   Luke Colosi
@@ -168,7 +169,7 @@ ax = ax_flat[0]
 ax.axhline(mld_mean[0], ls='--', lw=1.5, color='k', alpha=1, label=r"$\overline{z}_{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='k', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
+ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='k', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
 
 # Plot CCE1 potential density decor scale
 ax.plot(Lt[0,:],depth_pos_m,'.-', color='tab:green', label='CCE1')

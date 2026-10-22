@@ -3,7 +3,15 @@
 # =============================================================================
 #
 # Caption:
-#   
+#   Frequency spectrogram of model potential density at (a) CCE1, (c) CCE2, and (e) 
+#   CCE3. Vertical dashed lines denote the bounds of the frequency bands for the
+#   spectral variance fraction estimate. Decorrelation time scales of model potential
+#   density as a function of depth at (b) CCE1, (d) CCE2, and (f) CCE3. Spectral 
+#   variance fraction $\phi$ for frequancy bands 2 hours to 4 days (blue), 
+#   4 to 30 days (red), and 30 to 182.5 days (green) as a function of depth are also
+#   shown. The seasonally averaged mixed-layer depth $\overline{z}_{mld}$ and the
+#   temporal standard deviation of mixed layer depth are displayed as horizontal
+#   dashed turquoise lines and light shaded regions, respectively.  
 #   
 # Author:
 #   Luke Colosi
@@ -19,7 +27,6 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
 import cmocean.cm as cmo
-import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
 import matplotlib.transforms as transforms
@@ -56,6 +63,10 @@ from plotting import add_corner_label
 #                     ensemble-average of the autocorrelation.
 #                      Options: "weighted" for variance-weighted average.
 #                               "unweighted" for unweighted average.
+# - option_plot: Specifies the whether the variance density is expressed as per unit
+#                frequency or per unit logarithmic frequency.
+#                Options: "log" for variance density per unit logarithmic frequency.
+#                         "linear" for variance density per unit frequency.
 # - segment_months : Specifies the window duration. 
 # - option_depth: Specifies the water depth which the data is extracted from 
 #                 at each mooring.
@@ -74,7 +85,7 @@ option_slope_range = [182.5, 4.0]
 
 # Set the spectral bands by their period limits (days)
 period_bands = {
-    r"$\phi$(2 hour--4 days)": (1/24, 4.0),
+    r"$\phi$(2 hour--4 days)": (2/24, 4.0),
     r"$\phi$(4--30 days)": (4.0, 30.0),
     r"$\phi$(30--182.5 days)": (30.0, 182.5),
 }
@@ -232,7 +243,7 @@ depth_pos = np.abs(depth)
 if option_plot == "log": 
     
     # Compute variance per unit logarithmic frequency 
-    psd_plot = psd * freq[np.newaxis, np.newaxis, :]
+    psd_plot = psd_array * freq_array[np.newaxis, np.newaxis, :]
 
     # Set plotting parameters 
     levels = np.logspace(np.log10(1e-5), np.log10(3e-2), num=60)  
@@ -242,7 +253,7 @@ if option_plot == "log":
 else: 
 
     # Set psd_plot variable 
-    psd_plot = psd
+    psd_plot = psd_array
 
     # Set plotting parameters 
     levels = np.logspace(np.log10(7e-7), np.log10(5e0), num=45) 
@@ -256,11 +267,11 @@ fig, axes = plt.subplots(3,2,figsize=(13,12),gridspec_kw={'width_ratios': [1.5, 
 ax = axes[0,0]
 
 # Plot the depth spectrogram at CCE1
-ax.contourf(freq_array, depth_pos, psd_plot[0,:,1:], levels=levels, norm=norm, cmap=cmap, extend='both')
+ax.contourf(freq_array, depth_pos, psd_plot[0,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
 
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(freq[1],freq[-1])
+ax.set_xlim(freq_array[0],freq_array[-1])
 ax.set_ylim(0,200)
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xscale('log')
@@ -330,7 +341,7 @@ for (band, values), color in zip(svf.items(), svf_colors):
                         label=band, zorder=3)
 
 # Set axis attributes for SVF
-ax_svf.set_xlim(0,80)
+ax_svf.set_xlim(0,90)
 ax_svf.set_xticks(np.arange(0, 91, 10))
 ax_svf.set_xlabel(r'$\phi$ ($\%$)')
 ax_svf.xaxis.set_ticks_position('top')
@@ -348,11 +359,11 @@ ax_svf.invert_yaxis()
 ax = axes[1,0]
 
 # Plot the depth spectrogram at CCE1
-ax.contourf(freq_array, depth_pos, psd_plot[1,:,1:], levels=levels, norm=norm, cmap=cmap, extend='both')
+ax.contourf(freq_array, depth_pos, psd_plot[1,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
 
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(freq[1],freq[-1])
+ax.set_xlim(freq_array[0],freq_array[-1])
 ax.set_ylim(0,200)
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xscale('log')
@@ -422,7 +433,7 @@ for (band, values), color in zip(svf.items(), svf_colors):
                         label=band, zorder=3)
 
 # Set axis attributes for SVF
-ax_svf.set_xlim(0,80)
+ax_svf.set_xlim(0,90)
 ax_svf.set_xticks(np.arange(0, 91, 10))
 ax_svf.xaxis.set_ticks_position('top')
 ax_svf.xaxis.set_label_position('top')
@@ -440,12 +451,12 @@ ax_svf.set_xticklabels([])
 ax = axes[2,0]
 
 # Plot the depth spectrogram at CCE1
-cf = ax.contourf(freq_array, depth_pos, psd_plot[2,:,1:], levels=levels, norm=norm, cmap=cmap, extend='both')
+cf = ax.contourf(freq_array, depth_pos, psd_plot[2,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
 
 # Set axis attributes
 ax.set_xlabel('Frequency (cycles/day)')
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(freq[1],freq[-1])
+ax.set_xlim(freq_array[0],freq_array[-1])
 ax.set_ylim(0,200)
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xscale('log')
@@ -489,7 +500,7 @@ ax = axes[2,1]
 mld_line = ax.axhline(mld_mean[2], ls='--', lw=1.25, color='#008C95', alpha=1, label=r"$\overline{z}_{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-mld_error = ax.fill_between([0, 25], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='#008C95', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
+mld_error = ax.fill_between([0, 25], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='#008C95', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
 
 # Plot the depth profile of the decorrelation time scale at CCE1
 lt_line, = ax.plot(Lt[2,:], depth_pos, color='k', linewidth=1.5, zorder=4, label=r'$\overline{\mathcal{T}}$')
@@ -529,7 +540,7 @@ for (band, values), color in zip(svf.items(), svf_colors):
     svf_handles.append(line)
 
 # Set axis attributes for SVF
-ax_svf.set_xlim(0,80)
+ax_svf.set_xlim(0,90)
 ax_svf.set_xticks(np.arange(0, 91, 10))
 ax_svf.xaxis.set_ticks_position('top')
 ax_svf.xaxis.set_label_position('top')
@@ -595,7 +606,7 @@ for ax in axes[:, 0]:
                 ha='left',
                 va='bottom',
                 rotation=90,
-                fontsize=11,
+                fontsize=13,
                 color='k',
                 zorder=6
             )
