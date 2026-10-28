@@ -1,5 +1,5 @@
 # =============================================================================
-# Figure 13
+# Figure 12
 # =============================================================================
 #
 # Caption:
@@ -85,9 +85,9 @@ option_slope_range = [182.5, 4.0]
 
 # Set the spectral bands by their period limits (days)
 period_bands = {
-    r"$\phi$(2 hour--4 days)": (2/24, 4.0),
-    r"$\phi$(4--30 days)": (4.0, 30.0),
-    r"$\phi$(30--182.5 days)": (30.0, 182.5),
+    r"$\phi_\mathrm{high}$": (2/24, 4.0),
+    r"$\phi_\mathrm{mid}$": (4.0, 30.0),
+    r"$\phi_\mathrm{low}$": (30.0, 182.5),
 }
 
 # Set time and space parameters
@@ -107,7 +107,7 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm and CCE autocorrelation and spectral data
+# Load MITgcm autocorrelation and spectral data
 # -----------------------------------------------------------------------------
 
 # --- MITgcm Autocorrelation Data --- # 
@@ -305,13 +305,13 @@ ax = axes[0,1]
 ax.axhline(mld_mean[0], ls='--', lw=1.25, color='#008C95', alpha=1)
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 25], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='#008C95', alpha=0.15)
+ax.fill_between([0, 25], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='#008C95', alpha=0.15, edgecolor='none',linewidth=0)
 
 # Plot the depth profile of the decorrelation time scale at CCE1
-ax.plot(Lt[0,:], depth_pos, color='k', linewidth=1.5, zorder=4)
+ax.plot(Lt[0,:], depth_pos, '-', color='k', linewidth=1.5, zorder=4)
 
 # Plot standard error of the mean
-ax.fill_betweenx(depth_pos, Lt[0,:] - Lt_stdm[0,:], Lt[0,:] + Lt_stdm[0,:], color='k', alpha=0.15)
+ax.fill_betweenx(depth_pos, Lt[0,:] - Lt_stdm[0,:], Lt[0,:] + Lt_stdm[0,:], color='k', alpha=0.15, edgecolor='none',linewidth=0)
 
 # Set axis attributes
 ax.set_xlim(0,25)
@@ -336,7 +336,7 @@ ax_svf = ax.twiny()
 for (band, values), color in zip(svf.items(), svf_colors):
 
     # Plot SVF as a function of depth for site 0
-    line, = ax_svf.plot(values[0, :], np.abs(depth),
+    line, = ax_svf.plot(values[0, :], np.abs(depth), '-',
                         color=color, linewidth=1.8,
                         label=band, zorder=3)
 
@@ -397,13 +397,13 @@ ax = axes[1,1]
 ax.axhline(mld_mean[1], ls='--', lw=1.25, color='#008C95', alpha=1)
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 25], mld_mean[1] - mld_std[1], mld_mean[1] + mld_std[1], color='#008C95', alpha=0.15)
+ax.fill_between([0, 25], mld_mean[1] - mld_std[1], mld_mean[1] + mld_std[1], color='#008C95', alpha=0.15, edgecolor='none',linewidth=0)
 
 # Plot the depth profile of the decorrelation time scale at CCE1
-ax.plot(Lt[1,:], depth_pos, color='k', linewidth=1.5, zorder=4)
+ax.plot(Lt[1,:], depth_pos, '-', color='k', linewidth=1.5, zorder=4)
 
 # Plot standard error of the mean
-ax.fill_betweenx(depth_pos, Lt[1,:] - Lt_stdm[1,:], Lt[1,:] + Lt_stdm[1,:], color='k', alpha=0.15)
+ax.fill_betweenx(depth_pos, Lt[1,:] - Lt_stdm[1,:], Lt[1,:] + Lt_stdm[1,:], color='k', alpha=0.15, edgecolor='none',linewidth=0)
 
 # Set axis attributes
 ax.set_xlim(0,25)
@@ -428,7 +428,7 @@ ax_svf = ax.twiny()
 for (band, values), color in zip(svf.items(), svf_colors):
 
     # Plot SVF as a function of depth for site 0
-    line, = ax_svf.plot(values[1, :], np.abs(depth),
+    line, = ax_svf.plot(values[1, :], np.abs(depth), '-',
                         color=color, linewidth=1.8,
                         label=band, zorder=3)
 
@@ -500,13 +500,13 @@ ax = axes[2,1]
 mld_line = ax.axhline(mld_mean[2], ls='--', lw=1.25, color='#008C95', alpha=1, label=r"$\overline{z}_{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-mld_error = ax.fill_between([0, 25], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='#008C95', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
+mld_error = ax.fill_between([0, 25], mld_mean[2] - mld_std[2], mld_mean[2] + mld_std[2], color='#008C95', alpha=0.15, label=r"$\sigma_{z_{mld}}$", edgecolor='none',linewidth=0)
 
 # Plot the depth profile of the decorrelation time scale at CCE1
-lt_line, = ax.plot(Lt[2,:], depth_pos, color='k', linewidth=1.5, zorder=4, label=r'$\overline{\mathcal{T}}$')
+lt_line, = ax.plot(Lt[2,:], depth_pos, '-', color='k', linewidth=1.5, zorder=4, label=r'$\overline{\mathcal{T}}$')
 
 # Plot standard error of the mean
-lt_error = ax.fill_betweenx(depth_pos, Lt[2,:] - Lt_stdm[2,:], Lt[2,:] + Lt_stdm[2,:], color='k', alpha=0.15, label=r'$\sigma_{\overline{\mathcal{T}}}$')
+lt_error = ax.fill_betweenx(depth_pos, Lt[2,:] - Lt_stdm[2,:], Lt[2,:] + Lt_stdm[2,:], color='k', alpha=0.15, label=r'$\sigma_{\overline{\mathcal{T}}}$', edgecolor='none',linewidth=0)
 
 # Set axis attributes
 ax.set_xlabel('Decorrelation scale (days)')
@@ -534,7 +534,7 @@ svf_handles = []
 for (band, values), color in zip(svf.items(), svf_colors):
 
     # Plot SVF as a function of depth for site 0
-    line, = ax_svf.plot(values[2, :], np.abs(depth),
+    line, = ax_svf.plot(values[2, :], np.abs(depth), '-',
                         color=color, linewidth=1.8,
                         label=band, zorder=3)
     svf_handles.append(line)
@@ -562,7 +562,7 @@ legend_handles = [lt_line, lt_error, mld_line, mld_error] + svf_handles
 # Add a legend
 ax_svf.legend(handles=legend_handles,
               loc='center',
-              bbox_to_anchor=(0.38, 0.19),
+              bbox_to_anchor=(0.28, 0.19),
               fontsize=11,
               frameon=True,
               framealpha=0.85,
@@ -628,7 +628,7 @@ plt.subplots_adjust(hspace=0.08, wspace=0.05)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / 'fig13.png',
+    PATH_figs / 'fig12.png',
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

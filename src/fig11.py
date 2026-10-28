@@ -1,5 +1,5 @@
 # =============================================================================
-# Figure 12
+# Figure 11
 # =============================================================================
 #
 # Caption:
@@ -99,9 +99,9 @@ lon_bnds             = [237.0, 240.0]
 
 # Set the spectral bands by their period limits (days)
 period_bands = {
-    r"$\phi$(2 hour--4 days)": (2/24, 4.0),
-    r"$\phi$(4--30 days)": (4.0, 30.0),
-    r"$\phi$(30--182.5 days)": (30.0, 182.5),
+    r"$\phi_\mathrm{high}$": (2/24, 4.0),
+    r"$\phi_\mathrm{mid}$": (4.0, 30.0),
+    r"$\phi_\mathrm{low}$": (30.0, 182.5),
 }
 
 # Label segment processing method 
@@ -558,7 +558,7 @@ plt.subplots_adjust(hspace=0.075, wspace=0.05)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / 'fig12.png',
+    PATH_figs / 'fig11.png',
     dpi=300,
     facecolor='white',
     bbox_inches='tight',
