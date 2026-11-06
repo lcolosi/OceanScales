@@ -29,7 +29,6 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
-from scipy.stats import gaussian_kde
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -384,14 +383,14 @@ ax.plot(
     alpha_cce1, Lt_cce1_plot,
     marker='^', linestyle='none',
     color='tab:green', markeredgecolor='black',
-    markersize=8, alpha=1, label='CCE1'
+    markersize=8, alpha=1, label='CCE1 Obs'
 )
 
 ax.plot(
     alpha_cce2, Lt_cce2_plot,
     marker='s', linestyle='none',
     color='tab:red', markeredgecolor='black',
-    markersize=8, alpha=1, label='CCE2'
+    markersize=8, alpha=1, label='CCE2 Obs'
 )
 
 # Plot CCE1
@@ -437,7 +436,7 @@ idx_T_ds = T_months_ds == segment_months
 idx_T_ac = T_months_ac == segment_months
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
-ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label=r'$\langle T_f \rangle/\pi$')
+#ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label=r'$\langle T_f \rangle/\pi$')
 ax.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label='Analytic')
 
 # Set axis attributes
@@ -472,8 +471,61 @@ for mask, color, label in regions:
     )
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
-axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5)
+#axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5)
 axins.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5)
+
+# Plot observations
+axins.plot(
+    alpha_cce1, Lt_cce1_plot,
+    marker='^', linestyle='none',
+    color='tab:green', markeredgecolor='black',
+    markersize=5, markeredgewidth=0.5, alpha=1,
+)
+
+axins.plot(
+    alpha_cce2, Lt_cce2_plot,
+    marker='s', linestyle='none',
+    color='tab:red', markeredgecolor='black',
+    markersize=5, markeredgewidth=0.5, alpha=1,
+)
+
+# Plot CCE1
+axins.errorbar(
+    alpha_cce1,
+    Lt_cce1_plot,
+    xerr=alpha_stdm_cce1,
+    yerr=Lt_stdm_cce1_plot,
+    fmt='^',
+    markersize=5,
+    color='tab:green',
+    markeredgecolor='k',
+    markeredgewidth=0.5,
+    ecolor='black',
+    elinewidth=1.2,
+    capsize=3,
+    capthick=1.2,
+    alpha=1.0,
+    zorder=10,
+)
+
+# Plot CCE2
+axins.errorbar(
+    alpha_cce2,
+    Lt_cce2_plot,
+    xerr=alpha_stdm_cce2,
+    yerr=Lt_stdm_cce2_plot,
+    fmt='s',
+    markersize=5,
+    color='tab:red',
+    markeredgecolor='k',
+    markeredgewidth=0.5,
+    ecolor='black',
+    elinewidth=1.2,
+    capsize=3,
+    capthick=1.2,
+    alpha=1.0,
+    zorder=10,
+)
 
 # Set inset axis attributes
 axins.set_xlabel(r'Spectral Slope $\alpha$',fontsize=fontsize_ins)

@@ -104,7 +104,7 @@ lon             = nc.variables['lon'][:]
 lat             = nc.variables['lat'][:]
 spec_slope      = nc.variables['SPEC_slope'][:]
 spec_slope_stdm = nc.variables['SPEC_slope_stde'][:]
-fve             = nc.variables['FVE'][:]
+svf             = nc.variables['FVE'][:]
 
 # Convert spectral slope to slope parameter alpha 
 alpha = np.abs(spec_slope)
@@ -180,15 +180,15 @@ xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
 yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
 lon_min, lon_max = -123, -120
 lat_min, lat_max = 33, 35
-levels_fve = np.linspace(40, 82, 43)
-ticks_fve  = np.linspace(40, 80, 5)
+levels_svf = np.linspace(40, 82, 43)
+ticks_svf  = np.linspace(40, 80, 5)
 levels_slope = np.linspace(1, 2, 101)
 ticks_slope = np.linspace(1, 2, 6)
 levels_is = np.arange(100,300+100,100)
 levels_ms = np.arange(1000,3000+500,500)
 fontsize_g = 18
 fontsize_c = 10
-cmap_fve = cmo.rain
+cmap_svf = cmo.rain
 cmap_slope = cmo.rain
 mpl.rcParams["hatch.linewidth"] = 0.2 
 
@@ -371,14 +371,14 @@ set_coastlines(
     lat_max=lat_max
 ) 
 
-# Plot FVE
+# Plot SVF
 ct = ax.contourf(
     lon, 
     lat, 
-    fve[:,:,0], 
-    levels=levels_fve,
+    svf[:,:,0], 
+    levels=levels_svf,
     transform=ccrs.PlateCarree(),
-    cmap=cmap_fve, 
+    cmap=cmap_svf, 
     extend='both'
 )
 
@@ -507,9 +507,9 @@ cbar = set_cbar(
     fig,
     orientation="vertical",
     extend="both",
-    label=r'FVE ($\%$)',
+    label=r'$\phi_\mathrm{low}$ ($\%$)',
     fontsize=fontsize_g,
-    ticks=ticks_fve, 
+    ticks=ticks_svf, 
     invert = False
 )
 

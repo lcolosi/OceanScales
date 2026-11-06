@@ -15,15 +15,18 @@
 
 # Import python libraries 
 import os
+from pathlib import Path
 import xarray as xr
 import numpy as np
 
-# Set paths to data directory
-ROOT = '/Users/lukecolosi/Desktop/projects/graduate_research/Gille_lab/OceanScales/'
-PATH_data  = ROOT + 'data/bathymetry/'
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_data = ROOT / "data" / "bathymetry"
 
 # Load bathymetry data 
-filename = PATH_data + "topo_25.1.nc"
+filename = PATH_data / "topo_25.1.nc"
 ds_bathy = xr.open_dataset(filename, engine="netcdf4")
 
 # Extract data variables
@@ -85,7 +88,7 @@ BATHY = xr.DataArray(data=bathy_grid,
 data = xr.Dataset({'LON':LON,'LAT':LAT,'BATHY':BATHY})
 
 # Set file path for saving the netcdf file
-file_path = PATH_data + "etopo1_point_conception.nc"
+file_path = PATH_data / "etopo1_point_conception.nc"
 
 # Check if file exists, then delete it
 if os.path.exists(file_path):

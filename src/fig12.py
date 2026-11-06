@@ -636,7 +636,42 @@ fig.savefig(
     transparent=False
 )
 
+# -----------------------------------------------------------------------------
+# Find the depth where phi_low first exceeds phi_mid at CCE2 and CCE3
+# -----------------------------------------------------------------------------
 
+for site_name, site_index in [("CCE2", 1), ("CCE3", 2)]:
+
+    # Extract the spectral variance fractions at this mooring
+    phi_low = svf[r"$\phi_\mathrm{low}$"][site_index, :]
+    phi_mid = svf[r"$\phi_\mathrm{mid}$"][site_index, :]
+
+    # Compute their difference, ordered from shallowest to deepest
+    z = np.asarray(np.ma.filled(depth_pos, np.nan), dtype=float)
+    difference = phi_low - phi_mid
+    valid = np.isfinite(z) & np.isfinite(difference)
+    z, difference = z[valid], difference[valid]
+    order = np.argsort(z)
+    z, difference = z[order], difference[order]
+
+    if z.size == 0:
+        print(f"{site_name}: No valid spectral variance fraction data available.")
+    elif difference[0] > 0:
+        print(f"{site_name}: phi_low already exceeds phi_mid at the shallowest sampled depth ({z[0]:.2f} m).")
+    else:
+        # Find the first transition from phi_low <= phi_mid to phi_low > phi_mid
+        crossings = np.flatnonzero((difference[:-1] <= 0) & (difference[1:] > 0))
+
+        if crossings.size:
+            i = crossings[0]
+            # Linearly interpolate the depth where phi_low equals phi_mid
+            z_cross = z[i] - difference[i] * (z[i + 1] - z[i]) / (difference[i + 1] - difference[i])
+            print(f"{site_name}: phi_low first exceeds phi_mid below approximately {z_cross:.2f} m.")
+        else:
+            print(f"{site_name}: phi_low does not exceed phi_mid within the sampled depth range.")
+
+print(Lt[2,:])
+print(depth_pos)
 
 
 

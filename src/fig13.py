@@ -76,11 +76,13 @@ option_interannual = 'linear'
 option_detrend_seg = "detrend"
 option_averaging   = "weighted" 
 option_slope_range = [182.5, 4.0] 
+option_depth_avg   = False
 segment_months     = 6
 depth_lim          = -220 
 lat_bnds           = [33.0, 35.0]                                          
 lon_bnds           = [237.0, 240.0]
 depth_avg_max      = 30
+depth_sel          = 9.6
 
 # Label segment processing method 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -130,7 +132,7 @@ filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_trans_{op
 nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
-fve      = nc.variables['FVE'][:]
+svf = nc.variables['FVE'][:]
 
 # --- Velocity --- # 
 
@@ -242,60 +244,71 @@ v_cross_bar_mean = np.mean(v_cross_bar, axis=1)
 # Convert depth to positive-downward coordinates
 z = np.abs(depth)
 
-# Select depth levels within the upper 30 m
-idx_depth_Lt = z <= depth_avg_max
+if option_depth_avg:
 
-# Extract depths and decorrelation scales
-z_sel       = z[idx_depth_Lt]
-Lt_sel      = np.ma.masked_invalid(Lt[:, idx_depth_Lt])
-Lt_stdm_sel = np.ma.masked_invalid(Lt_stdm[:, idx_depth_Lt])
+    # Select depth levels within the upper 30 m
+    idx_depth_Lt = z <= depth_avg_max
 
-# Initialize depth-averaged decorrelation scale
-Lt_depth_avg = np.ma.masked_all(len(dist))
-Lt_stdm_depth_avg = np.ma.masked_all(len(dist))
+    # Extract depths and decorrelation scales
+    z_sel       = z[idx_depth_Lt]
+    Lt_sel      = np.ma.masked_invalid(Lt[:, idx_depth_Lt])
+    Lt_stdm_sel = np.ma.masked_invalid(Lt_stdm[:, idx_depth_Lt])
 
-# Loop through distance offshore
-for idist in range(len(dist)):
+    # Initialize depth-averaged decorrelation scale
+    Lt_plot = np.ma.masked_all(len(dist))
+    Lt_stdm_plot = np.ma.masked_all(len(dist))
 
-    # Extract vertical profile
-    Lt_prof      = Lt_sel[idist, :]
-    Lt_stdm_prof = Lt_stdm_sel[idist, :]
+    # Loop through distance offshore
+    for idist in range(len(dist)):
 
-    # Identify valid depth levels
-    valid = ~np.ma.getmaskarray(Lt_prof) & ~np.ma.getmaskarray(Lt_stdm_prof)
+        # Extract vertical profile
+        Lt_prof      = Lt_sel[idist, :]
+        Lt_stdm_prof = Lt_stdm_sel[idist, :]
 
-    # Require at least two valid depth levels
-    if np.sum(valid) < 2:
-        continue
+        # Identify valid depth levels
+        valid = ~np.ma.getmaskarray(Lt_prof) & ~np.ma.getmaskarray(Lt_stdm_prof)
 
-    # Obtain valid depths and decorrelation scales
-    z_valid       = z_sel[valid]
-    Lt_valid      = Lt_prof[valid]
-    Lt_stdm_valid = Lt_stdm_prof[valid]
+        # Require at least two valid depth levels
+        if np.sum(valid) < 2:
+            continue
 
-    # Compute depth range
-    H = z_valid[-1] - z_valid[0]
+        # Obtain valid depths and decorrelation scales
+        z_valid       = z_sel[valid]
+        Lt_valid      = Lt_prof[valid]
+        Lt_stdm_valid = Lt_stdm_prof[valid]
 
-    # Compute depth-averaged decorrelation scale
-    if H > 0:
-        Lt_depth_avg[idist] = (
-            np.trapezoid(Lt_valid, z_valid) / H
-        )
-        Lt_stdm_depth_avg[idist] = (
-            np.trapezoid(Lt_stdm_valid, z_valid) / H
-        )
+        # Compute depth range
+        H = z_valid[-1] - z_valid[0]
+
+        # Compute depth-averaged decorrelation scale
+        if H > 0:
+            Lt_plot[idist] = (
+                np.trapezoid(Lt_valid, z_valid) / H
+            )
+            Lt_stdm_plot[idist] = (
+                np.trapezoid(Lt_stdm_valid, z_valid) / H
+            )
+
+else: 
+
+    # Find the index of the depth closest to the specified depth limit
+    idx_depth_Lt = np.argmin(np.abs(z - depth_sel))
+
+    # Obtain the decorrelation scale and standard error at the specified depth
+    Lt_plot      = Lt[:, idx_depth_Lt]
+    Lt_stdm_plot = Lt_stdm[:, idx_depth_Lt]
 
 # -----------------------------------------------------------------------------
-# Plot depth average decorrelation time scale, velocity, and FVE  
+# Plot depth average decorrelation time scale, velocity, and SVF  
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
 levels_vel = np.arange(-0.15, 0.15 + 0.005, 0.005)
-ticks_vel = np.arange(-0.15, 0.15 + 0.05, 0.05)
-levels_fve = np.arange(60, 92.5+0.5, 0.5)
-ticks_fve  = np.arange(60, 90+5, 5)
-cmap_vel = cmo.balance
-cmap_fve = cmo.rain
+ticks_vel  = np.arange(-0.15, 0.15 + 0.05, 0.05)
+levels_svf = np.arange(60, 92.5+0.5, 0.5)
+ticks_svf  = np.arange(60, 90+5, 5)
+cmap_vel   = cmo.balance
+cmap_svf   = cmo.rain
 arrow_length_x,arrow_length_y = 0.015, 0.08  
 x0, y0 = 0.075, 0.78 
 
@@ -308,17 +321,20 @@ ax = fig.add_subplot(gs[0])
 ax1 = ax
 
 # Plot uncertainty envelope
-ax.fill_between(dist, Lt_depth_avg - Lt_stdm_depth_avg, Lt_depth_avg + Lt_stdm_depth_avg, color='k', alpha=0.15, linewidth=0, zorder=2)
+ax.fill_between(dist, Lt_plot - Lt_stdm_plot, Lt_plot + Lt_stdm_plot, color='k', alpha=0.15, linewidth=0, zorder=2)
 
 # Plot depth-averaged decorrelation scale
-ax.plot(dist, Lt_depth_avg, color='k', linewidth=2, zorder=3)
+ax.plot(dist, Lt_plot, color='k', linewidth=2, zorder=3)
 
 # Set axis attributes
-ax.set_ylabel(r'$\langle\overline{\mathcal{T}}\rangle_z$ (days)')
-ax.set_xlim(0, dist[-1])
-ax.set_ylim(5,25) 
+if option_depth_avg:
+    ax.set_ylabel(r'$\langle\overline{\mathcal{T}}\rangle_z$ (days)') 
+else: 
+    ax.set_ylabel(r'$\overline{\mathcal{T}}$ (days)')
 ax.set_xticks(np.arange(0,250+25,25))
 ax.set_yticks(np.arange(5,25+5,5)) 
+ax.set_xlim(0, dist[-1])
+ax.set_ylim(4,25)
 ax.invert_xaxis()
 ax.tick_params(top=True, bottom=True, left=True, right=False, direction='out', length=3.5)
 ax.grid(linestyle='--', alpha=0.1,color='k') 
@@ -525,7 +541,7 @@ ax = fig.add_subplot(gs[3])
 ax4 = ax
 
 # Plot the time-mean along-shore velocity 
-cf = ax.contourf(dist,abs(depth),fve[:,:,0].T, levels=levels_fve, cmap=cmap_fve, extend='both')
+cf = ax.contourf(dist,abs(depth),svf[:,:,0].T, levels=levels_svf, cmap=cmap_svf, extend='both')
 
 # Plot the ocean bottom depth 
 ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
@@ -544,8 +560,8 @@ ax.grid(linestyle='--',alpha=0.1,color='k')
 # Set colorbar
 cax = fig.add_axes([0.915, 0.115, 0.02, 0.23])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
-cbar.set_label(r'FVE ($\%$)')
-cbar.set_ticks(ticks_fve)
+cbar.set_label(r'$\phi_\mathrm{low}$ ($\%$)')
+cbar.set_ticks(ticks_svf)
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()
