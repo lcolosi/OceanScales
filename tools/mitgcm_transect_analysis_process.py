@@ -57,7 +57,7 @@ option_proc          = 'vel'
 option_depth_mask    = True      
 
 # Set physical parameters 
-vel_depth_thresh = 400   
+vel_depth_thresh = 500   
 R_earth          = 6371 
 phi              = 100
 
