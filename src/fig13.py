@@ -134,6 +134,17 @@ nc = Dataset(filename_mitgcm, 'r')
 # Extract data variables
 svf = nc.variables['FVE'][:]
 
+# --- Mixed Layer Depth --- # 
+
+# Obtain filename path
+filename_mld = PATH_processed / f"mitgcm_proc_density_hrly_trans.nc"
+
+# Generate the nc data structure
+nc = Dataset(filename_mld, 'r')
+
+# Extract data variables
+mld = nc.variables['MLD'][:]
+
 # --- Velocity --- # 
 
 # Obtain filename path
@@ -171,6 +182,13 @@ water_depth[0] = 0
 # --- CCE Mooring Locations --- # 
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
 lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
+
+# -----------------------------------------------------------------------------
+# Compute the time mean and standard deviation mixed layer depth 
+# -----------------------------------------------------------------------------
+
+mld_mean = np.ma.mean(mld,axis=1)
+mld_std = np.ma.std(mld,axis=1,ddof=1)
 
 # -----------------------------------------------------------------------------
 # Change the velocity naming convention from transect relative to shore relative
@@ -236,6 +254,39 @@ u_along_mean = np.mean(u_along, axis=1)
 v_cross_mean = np.mean(v_cross, axis=1) 
 u_along_bar_mean = np.mean(u_along_bar, axis=1) 
 v_cross_bar_mean = np.mean(v_cross_bar, axis=1) 
+
+# -----------------------------------------------------------------------------
+# Obtain the CU-CC boundary location 
+# -----------------------------------------------------------------------------
+
+# Convert masked array to NumPy array
+u = np.ma.filled(u_along_bar_mean, np.nan)
+
+# Identify valid points
+valid = np.isfinite(u) & np.isfinite(dist)
+
+# Find indices where alongshore velocity changes sign
+idx_cross = np.where(
+    valid[:-1] & valid[1:] & (u[:-1] * u[1:] < 0)
+)[0]
+
+# Define list to store the distances of zero-crossings
+dist_cross = []
+
+# Loop through indices of zero-crossings
+for i in idx_cross:
+
+    # Obtain the distances and velocities at the zero-crossing points
+    d0, d1 = dist[i], dist[i+1]
+    u0, u1 = u[i], u[i+1]
+
+    # Linearly Interpolate to find the distance where the alongshore velocity is zero
+    d_cross = d0 - u0 * (d1 - d0) / (u1 - u0)
+    dist_cross.append(d_cross)
+
+# Include any points where velocity is exactly zero
+idx_zero = np.where(valid & (u == 0))[0]
+dist_cross.extend(dist[idx_zero])
 
 # -----------------------------------------------------------------------------
 # Compute the depth average of the decorrelation scale and the standard error
@@ -323,8 +374,14 @@ ax1 = ax
 # Plot uncertainty envelope
 ax.fill_between(dist, Lt_plot - Lt_stdm_plot, Lt_plot + Lt_stdm_plot, color='k', alpha=0.15, linewidth=0, zorder=2)
 
-# Plot depth-averaged decorrelation scale
+# Plot decorrelation scale
 ax.plot(dist, Lt_plot, color='k', linewidth=2, zorder=3)
+
+# Loop through zero-crossings
+for d_cross in dist_cross[:1]:
+
+    # Plot the zero-crossing points of the alongshore velocity
+    ax.axvline(d_cross, ls='--', color='k', alpha=0.7, lw=1.5)
 
 # Set axis attributes
 if option_depth_avg:
@@ -376,11 +433,6 @@ add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.05, y_text=1.035, ms= 4, fo
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.05, y_text=1.035, ms =4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.05, y_text=1.035, ms =4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
-
 # Remove bottom x-axis ticklabels
 ax.set_xticklabels([])
 
@@ -390,6 +442,12 @@ ax2 = ax
 
 # Plot the time-mean velocity vectors in the cross and along-shore coordinates 
 q = ax.quiver(dist_vel[idx_dist], np.zeros_like(dist_vel[idx_dist]), v_cross_bar_mean, u_along_bar_mean, angles='uv', scale=1.3, width=0.001)
+
+# Loop through zero-crossings
+for d_cross in dist_cross[:1]:
+
+    # Plot the zero-crossing points of the alongshore velocity
+    ax.axvline(d_cross, ls='--', color='k', alpha=0.7, lw=1.5)
 
 # Set axis attributes
 ax.set_xlim(0, dist[-1])
@@ -452,11 +510,6 @@ add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.05, y_text=1.035, ms=4, fon
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.05, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.05, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
-
 # Remove top and bottom x-axis ticklabels
 ax_top.set_xticklabels([])
 ax.set_xticklabels([])
@@ -473,6 +526,26 @@ ax.contour(dist,abs(depth),u_along_mean.T, levels=[0], colors='black', linewidth
 
 # Plot the ocean bottom depth 
 ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
+
+# Loop through zero-crossings
+for d_cross in dist_cross[:1]:
+
+    # Plot the zero-crossing points of the alongshore velocity
+    ax.axvline(d_cross, ls='--', color='k', alpha=0.7, lw=1.5)
+
+    # Plot the text label
+    ax.annotate(
+        f'{d_cross:.1f} km',
+        xy=(d_cross, 0.125),
+        xycoords=ax.get_xaxis_transform(),
+        xytext=(5, 0),
+        textcoords='offset points',
+        rotation=90,
+        va='center',
+        ha='left',
+        fontsize=10,
+        color='k',
+    )
 
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
@@ -527,11 +600,6 @@ add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,ms=4, font
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
-
 # Remove top and bottom x-axis ticklabels
 ax_top.set_xticklabels([])
 ax.set_xticklabels([])
@@ -543,8 +611,18 @@ ax4 = ax
 # Plot the time-mean along-shore velocity 
 cf = ax.contourf(dist,abs(depth),svf[:,:,0].T, levels=levels_svf, cmap=cmap_svf, extend='both')
 
+# Plot the seasonal mean mixed layer depth
+ax.plot(dist_wd, mld_mean, '--', color='k', linewidth=1.2, label=r"$\overline{z}_{mld}$")
+ax.fill_between(dist_wd, mld_mean - mld_std, mld_mean + mld_std, color='k', alpha=0.1, label=r"$\sigma_{z_{mld}}$")
+
 # Plot the ocean bottom depth 
 ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
+
+# Loop through zero-crossings
+for d_cross in dist_cross[:1]:
+
+    # Plot the zero-crossing points of the alongshore velocity
+    ax.axvline(d_cross, ls='--', color='k', alpha=0.7, lw=1.5)
 
 # Set axis attributes
 ax.set_xlabel('Distance from shore (km)')
@@ -599,11 +677,6 @@ dist3 = np.interp(lon3, lon_sorted, dist_sorted)
 add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
-
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
 
 # Remove top x-axis ticklabels
 ax_top.set_xticklabels([])

@@ -149,7 +149,7 @@ for k in range(0,len(T_months_p)):
     idx_T_p = np.where(np.isclose(T_months_ac, T_months_p[k]))[0][0]
 
     # Plot the ith autocorrelation function for the ith T value 
-    ax.plot(tau, rho[:,idx_T_p,idx_alpha_ac], '-', lw = 2, label=f"T = {int(round(T_months_ac[idx_T_p]))} months", color=colors_decor[k]) 
+    ax.plot(tau, rho[:,idx_T_p,idx_alpha_ac], '-', lw = 2, label=rf"$T$ = {int(round(T_months_ac[idx_T_p]))} months", color=colors_decor[k]) 
 
 # Set axis attributes 
 ax.set_xlabel(r'$\tau$ (days)')
@@ -175,7 +175,7 @@ for k, iT in enumerate(T_months_p):
     idx_T = np.argmin(np.abs(T_months_ac - iT))
 
     # Plot the decorrelation scale as a function of spectral slope
-    ax.plot(alpha_values_ac[::2], T_tilde[idx_T,::2], '.-', lw = 2, label=f"T = {int(T_months_ac[idx_T])} months", color=colors_decor[k]) 
+    ax.plot(alpha_values_ac[::2], T_tilde[idx_T,::2], '.-', lw = 2, label=rf"$T$ = {int(T_months_ac[idx_T])} months", color=colors_decor[k]) 
 
 # Plot markers for decorrelation scales for alpha = 1.5, 2, 3, 4 and T = 12 months
 idx_t = np.argmin(np.abs(T_months_ac - 12))

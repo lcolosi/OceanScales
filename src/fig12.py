@@ -107,7 +107,7 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm autocorrelation and spectral data
+# Load MITgcm and CCE autocorrelation and spectral data
 # -----------------------------------------------------------------------------
 
 # --- MITgcm Autocorrelation Data --- # 

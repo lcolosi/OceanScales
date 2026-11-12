@@ -265,7 +265,7 @@ def add_corner_label(
 
     return
 
-# --- Figure corner labeling --- #
+# --- Month ticks labeler --- #
 def month_fmt(
     x,
     pos,
@@ -547,6 +547,157 @@ def plot_spectral_slope(
             va='center',
         )
 
+
+# --- Plotting CalCOFI Transect ticks
+def plot_transect_distance_axis(
+    ax,
+    dist_tr,
+    lon_tr,
+    lat_tr,
+    tick_spacing=25,
+    label_spacing=50,
+    tick_length=2.0,
+    angle_adjust=0.0,
+    fontsize=13,
+    color='k',
+    linewidth=1.5,
+    show_labels=True,
+    max_tick_distance=None,
+):
+    """
+    Plot distance tick marks and labels along a geographic transect.
+
+    Parameters
+    ----------
+    ax : cartopy.mpl.geoaxes.GeoAxes
+        Cartopy axes on which to plot the distance axis.
+    dist_tr : array-like
+        Distance along transect (km), increasing from shore.
+    lon_tr, lat_tr : array-like
+        Geographic coordinates along the transect (degrees).
+    tick_spacing : float, optional
+        Spacing between tick marks (km).
+    label_spacing : float, optional
+        Spacing between labeled ticks (km).
+    tick_length : float, optional
+        Half-length of each tick mark (km).
+    angle_adjust : float, optional
+        Rotation of tick marks from perpendicular (degrees).
+    fontsize : int, optional
+        Font size of distance labels.
+    color : str, optional
+        Color of tick marks and labels.
+    linewidth : float, optional
+        Line width of tick marks.
+    show_labels : bool, optional
+        Whether to display distance labels (default True).
+    max_tick_distance : float or None, optional
+        Maximum distance for plotting tick marks (km).
+        If None, use the maximum transect distance.
+
+    Returns
+    -------
+    None
+    """
+
+    # Convert inputs to arrays
+    dist_tr = np.asarray(dist_tr)
+    lon_tr = np.asarray(lon_tr)
+    lat_tr = np.asarray(lat_tr)
+
+    # Define maximum tick distance
+    if max_tick_distance is None:
+        max_tick_distance = dist_tr.max()
+    else:
+        max_tick_distance = min(max_tick_distance, dist_tr.max())
+
+    # Define tick locations
+    dist_ticks = np.arange(
+        0, max_tick_distance + 1e-9, tick_spacing
+    )
+
+    # Loop through distance ticks
+    for d in dist_ticks:
+
+        # Skip distances outside the transect
+        if d < dist_tr.min() or d > dist_tr.max():
+            continue
+
+        # Interpolate geographic coordinates
+        lon_tick = np.interp(d, dist_tr, lon_tr)
+        lat_tick = np.interp(d, dist_tr, lat_tr)
+
+        # Find nearby points to estimate transect orientation
+        d0 = max(d - 2.0, dist_tr.min())
+        d1 = min(d + 2.0, dist_tr.max())
+
+        # Compute local tangent along the transect
+        dx = (
+            np.interp(d1, dist_tr, lon_tr)
+            - np.interp(d0, dist_tr, lon_tr)
+        )
+    
+        dy = (
+            np.interp(d1, dist_tr, lat_tr)
+            - np.interp(d0, dist_tr, lat_tr)
+        )
+
+        # Compute unit normal perpendicular to the transect
+        norm = np.hypot(dx, dy)
+        nx, ny = -dy / norm, dx / norm
+
+        # Apply optional rotation
+        theta = np.deg2rad(angle_adjust)
+
+        nx_rot = nx * np.cos(theta) - ny * np.sin(theta)
+        ny_rot = nx * np.sin(theta) + ny * np.cos(theta)
+
+        # Convert tick length from kilometers to degrees
+        km_per_degree = 111.32 * np.hypot(
+                nx_rot * np.cos(np.deg2rad(lat_tick)),
+                ny_rot,
+            )
+        
+        dlon = tick_length * nx_rot / km_per_degree
+        dlat = tick_length * ny_rot / km_per_degree
+
+        # Plot perpendicular tick marks
+        ax.plot(
+            [lon_tick - dlon, lon_tick + dlon],
+            [lat_tick - dlat, lat_tick + dlat],
+            color=color,
+            linewidth=linewidth,
+            transform=ccrs.PlateCarree(),
+            zorder=11,
+        )
+
+        # Determine northern end of tick mark
+        sign = 1.5 if dlat >= 0 else -1.5
+        lon_label = lon_tick + sign * dlon
+        lat_label = lat_tick + sign * dlat
+
+        # Add distance labels at specified intervals
+        if show_labels and np.isclose(d % label_spacing, 0.0):
+
+            ax.annotate(
+                f'{d:.0f} km',
+                xy=(lon_label, lat_label),
+                xycoords=ccrs.PlateCarree()._as_mpl_transform(ax),
+                xytext=(0, 6),
+                textcoords='offset points',
+                fontsize=fontsize,
+                ha='center',
+                va='bottom',
+                color=color,
+                bbox=dict(
+                    boxstyle='round,pad=0.3',
+                    facecolor='white',
+                    edgecolor='k',
+                    linewidth=0.8,
+                    alpha=0.5,
+                ),
+                zorder=12,
+            )
 
 # --- Status Message --- # 
 def status(message):

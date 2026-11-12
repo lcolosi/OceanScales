@@ -1,5 +1,5 @@
 # =============================================================================
-# Figure S11
+# Figure S12
 # =============================================================================
 #
 # Caption:
@@ -376,7 +376,7 @@ plt.subplots_adjust(hspace=0.1, wspace=0.1)
 
 # Save figure in high resolution 
 fig.savefig(
-    PATH_figs / "figS11.png",
+    PATH_figs / "figS12.png",
     dpi=300,
     facecolor='white',
     bbox_inches='tight',

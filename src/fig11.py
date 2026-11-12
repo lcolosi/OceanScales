@@ -120,10 +120,10 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scales, bathymetry, and velocity data
+# Load MITgcm and CCEdecorrelation scales, bathymetry, and velocity data
 # -----------------------------------------------------------------------------
 
-# --- Decorrelation Time Scales --- # 
+# --- MITgcmDecorrelation Time Scales --- # 
 
 # Set path to processed regional MITgcm data
 PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
@@ -142,7 +142,7 @@ lat     = nc.variables['LAT'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 
-# --- Spectral data --- # 
+# --- MITgcmSpectral data --- # 
 
 # Obtain filename path
 filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_trans_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
@@ -173,6 +173,56 @@ water_depth[0] = 0
 # --- CCE Mooring Locations --- # 
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
 lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
+
+# --- CCE Autocorrelation Data --- # 
+
+# Set path to processed regional MITgcm data
+PATH_processed_cce1 = PATH_data / "cce" / "cce1" / "processed"
+PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
+
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
+
+# Extract data variables
+depth_cce1    = nc_cce1.variables['depth'][:]
+Lt_cce1       = nc_cce1.variables['decor_scale'][:]
+Lt_stdm_cce1  = nc_cce1.variables['decor_scale_stdm'][:]
+
+depth_cce2    = nc_cce2.variables['depth'][:]
+Lt_cce2       = nc_cce2.variables['decor_scale'][:]
+Lt_stdm_cce2  = nc_cce2.variables['decor_scale_stdm'][:]
+
+# Close the netcdf file
+nc_cce1.close()
+nc_cce2.close()
+
+# --- CCE Spectral Data --- # 
+
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_spectra_{option_data}_hrly_mooring_gaussian_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_spectra_{option_data}_hrly_mooring_gaussian_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
+
+# Extract data variables
+freq_cce1     = nc_cce1.variables['freq'][:]
+psd_cce1      = nc_cce1.variables['PSD'][:]
+psd_CI_cce1   = nc_cce1.variables['PSD_CI'][:]
+
+freq_cce2     = nc_cce2.variables['freq'][:]
+psd_cce2      = nc_cce2.variables['PSD'][:]
+psd_CI_cce2   = nc_cce2.variables['PSD_CI'][:]
+
+# Close the netcdf file
+nc_cce1.close()
+nc_cce2.close()
 
 # -----------------------------------------------------------------------------
 # Find the 200 m and 2000 m isobath locations along the transect
@@ -236,20 +286,27 @@ if option_depth_average:
     Lt_depth = np.ma.mean(Lt[:, depth_idx], axis=1)
     Lt_stdm_depth = np.ma.mean(Lt_stdm[:, depth_idx], axis=1)
     psd_depth = np.ma.mean(psd[:, depth_idx, :], axis=1)
-    psd_CI_depth = np.ma.mean(psd_CI[:, depth_idx, :], axis=1)
 
 # --- Single Depth --- #   
 else: 
 
     # Find the depth levels closest to the specified depth 
     idx_depth = np.argmin(np.abs(depth - option_depth))
+    idx_depth_cce1 = np.argmin(np.abs(depth_cce1 - option_depth))
+    idx_depth_cce2 = np.argmin(np.abs(depth_cce2 - option_depth))
 
     # Extract data at the specified depth
     Lt_depth      = Lt[:, idx_depth]
+    Lt_depth_cce1 = Lt_cce1[idx_depth_cce1]
+    Lt_depth_cce2 = Lt_cce2[idx_depth_cce2]
+
     Lt_stdm_depth = Lt_stdm[:, idx_depth]
+    Lt_stdm_depth_cce1 = Lt_stdm_cce1[idx_depth_cce1]
+    Lt_stdm_depth_cce2 = Lt_stdm_cce2[idx_depth_cce2]
 
     psd_depth    = psd[:, idx_depth, :]
-    psd_CI_depth = psd_CI[:, idx_depth, :]
+    psd_depth_cce1 = psd_cce1[idx_depth_cce1, :]
+    psd_depth_cce2 = psd_cce2[idx_depth_cce2, :]
 
 # -----------------------------------------------------------------------------
 # Compute the spectral variance fraction in the spectral bands
@@ -272,6 +329,8 @@ def integrate_spectral_band(frequency, spectrum, low_frequency, high_frequency):
     var_band = np.trapezoid(s_band, f_band)
 
     return var_band
+
+# --- MITgcm --- # 
 
 # Define arrays filled with NaN values
 freq_array = np.asarray(np.ma.filled(freq, np.nan), dtype=float)
@@ -304,6 +363,74 @@ for idist, spectrum in enumerate(psd_array):
 
         # Compute the spectral variance fraction (svf) in the spectral band
         svf[band][idist] = 100.0 * band_variance / total_variance    
+
+# --- CCE1 --- # 
+
+# Define arrays filled with NaN values
+freq_array_cce1 = np.asarray(np.ma.filled(freq_cce1, np.nan), dtype=float)
+psd_array_cce1 = np.asarray(np.ma.filled(psd_depth_cce1, np.nan), dtype=float)
+
+# Create a boolean mask to identify valid (finite and positive) frequency values
+valid_freq = np.isfinite(freq_array_cce1) & (freq_array_cce1 > 0)
+
+# Apply mask to data arrays
+freq_array_cce1 = freq_array_cce1[valid_freq]
+psd_array_cce1 = psd_array_cce1[valid_freq]
+
+# Initialize dictionary 
+svf_cce1 = {band: np.nan for band in period_bands}
+
+# Extract the spectrum at the specified depth
+spectrum = psd_array_cce1
+
+# Compute total variance of the spectrum
+total_variance = np.trapezoid(spectrum, freq_array_cce1)
+
+# Loop though spectral bands
+for band, (period_short, period_long) in period_bands.items():
+
+    # Set the low and high frequency limits of the band
+    low, high = 1.0 / period_long, 1.0 / period_short
+
+    # Compute the variance in the spectral band
+    band_variance = integrate_spectral_band(freq_array_cce1, spectrum, low, high)
+
+    # Compute the spectral variance fraction (SVF) in the spectral band
+    svf_cce1[band] = 100.0 * band_variance / total_variance   
+
+# --- CCE2 --- # 
+
+# Define arrays filled with NaN values
+freq_array_cce2 = np.asarray(np.ma.filled(freq_cce2, np.nan), dtype=float)
+psd_array_cce2 = np.asarray(np.ma.filled(psd_depth_cce2, np.nan), dtype=float)
+
+# Create a boolean mask to identify valid (finite and positive) frequency values
+valid_freq = np.isfinite(freq_array_cce2) & (freq_array_cce2 > 0)
+
+# Apply mask to data arrays
+freq_array_cce2 = freq_array_cce2[valid_freq]
+psd_array_cce2 = psd_array_cce2[valid_freq]
+
+# Initialize dictionary 
+svf_cce2 = {band: np.nan for band in period_bands}
+
+# Extract the spectrum at the specified depth
+spectrum = psd_array_cce2
+
+# Compute total variance of the spectrum
+total_variance = np.trapezoid(spectrum, freq_array_cce2)
+
+# Loop though spectral bands
+for band, (period_short, period_long) in period_bands.items():
+
+    # Set the low and high frequency limits of the band
+    low, high = 1.0 / period_long, 1.0 / period_short
+
+    # Compute the variance in the spectral band
+    band_variance = integrate_spectral_band(freq_array_cce2, spectrum, low, high)
+
+    # Compute the spectral variance fraction (SVF) in the spectral band
+    svf_cce2[band] = 100.0 * band_variance / total_variance  
 
 # -----------------------------------------------------------------------------
 # Plot decorrelation time scale, SVF and frequency spectra   
@@ -344,7 +471,7 @@ ax = fig.add_subplot(gs[0])
 ax1 = ax
 
 # Plot the decorrelation scale
-lt_line, =ax.plot(dist, Lt_depth, color='k', linewidth=2, zorder=3, label=r'$\overline{\mathcal{T}}$')
+lt_line, = ax.plot(dist, Lt_depth, color='k', linewidth=2, zorder=3, label=r'$\overline{\mathcal{T}}$')
 
 # Plot the uncertainty envelope (+/- 1 standard deviation) of the decorrelation scale
 lt_error = ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_depth, color='k', alpha=0.15, linewidth=0, zorder=2, label=r'$\sigma_{\overline{\mathcal{T}}}$')
@@ -352,7 +479,7 @@ lt_error = ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_de
 # Set axis attributes
 ax.set_ylabel('Decorrelation Scale (days)')
 ax.set_xlim(0, dist[-1])
-ax.set_ylim(0,20) 
+ax.set_ylim(0,20.25) 
 ax.set_xticks(np.arange(0,250+25,25))
 ax.set_yticks(np.arange(0,20+5,5)) 
 ax.invert_xaxis()
@@ -377,20 +504,8 @@ for (band, values), color in zip(svf.items(), svf_colors):
 
 # Set axis attributes for SVF
 ax_svf.set_ylabel(r'$\phi$ ($\%$)')
-ax_svf.set_ylim(0, 80)
-ax_svf.set_yticks(np.arange(0, 81, 10))
-
-# Combine decorrelation scale and SVF legend handles
-legend_handles = [lt_line, lt_error] + svf_handles
-
-# Keep the legend compact to avoid obscuring the decorrelation curve.
-ax_svf.legend(handles=legend_handles, 
-              loc='center', 
-              bbox_to_anchor=(0.55, 0.79), 
-              fontsize=11,
-              frameon=True, 
-              framealpha=0.85, 
-              title_fontsize=11,)
+ax_svf.set_ylim(0, 70)
+ax_svf.set_yticks(np.arange(0, 71, 10))
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()
@@ -450,6 +565,83 @@ ax.text(
 
 # Remove bottom x-axis ticklabels
 ax.set_xticklabels([])
+
+# --- Plot observational decorrelation scales and SVF --- #
+
+# Organize observational data
+moorings = [
+    {
+        'name': 'CCE1',
+        'dist': dist1,
+        'Lt': Lt_depth_cce1,
+        'Lt_err': Lt_stdm_depth_cce1,
+        'svf': svf_cce1,
+        'marker': '^',
+        'color': 'tab:green',
+    },
+    {
+        'name': 'CCE2',
+        'dist': dist2,
+        'Lt': Lt_depth_cce2,
+        'Lt_err': Lt_stdm_depth_cce2,
+        'svf': svf_cce2,
+        'marker': 's',
+        'color': 'tab:red',
+    },
+]
+
+# Initialize list for observational legend handles
+obs_handles = []
+
+# Loop through moorings
+for mooring in moorings:
+
+    # Plot decorrelation scales with error bars
+    handle = ax.errorbar(
+        mooring['dist'],
+        mooring['Lt'],
+        yerr=mooring['Lt_err'],
+        fmt=mooring['marker'],
+        color='k',
+        markersize=7,
+        markeredgecolor='k',
+        markeredgewidth=0.5,
+        capsize=4,
+        elinewidth=1.25,
+        linestyle='none',
+        zorder=10,
+        label=mooring['name'],
+    )
+
+    obs_handles.append(handle)
+
+    # Plot spectral variance fraction for each band
+    for (band, color) in zip(svf.keys(), svf_colors):
+
+        ax_svf.scatter(
+            mooring['dist'],
+            mooring['svf'][band],
+            marker=mooring['marker'],
+            color=color,
+            s=65,
+            edgecolor='k',
+            linewidth=0.5,
+            zorder=10,
+            alpha=0.8
+        )
+
+# Combine decorrelation scale and SVF legend handles
+legend_handles = svf_handles + [lt_line, lt_error] + obs_handles
+
+# Keep the legend compact to avoid obscuring the decorrelation curve.
+ax_svf.legend(handles=legend_handles, 
+              loc='center', 
+              bbox_to_anchor=(0.55, 0.86), 
+              fontsize=11,
+              frameon=True, 
+              framealpha=0.85, 
+              title_fontsize=11,
+              ncol=3)
 
 #--- Subplot 2 ---# 
 ax = fig.add_subplot(gs[1])

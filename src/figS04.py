@@ -36,7 +36,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar
+from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar, plot_transect_distance_axis
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -109,26 +109,25 @@ bathy  = nc_bathy.variables['BATHY'][:]
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
 lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
 
-# --- CalCOFI Line 80.0 Positions --- # 
+# --- CalCOFI line 80.0 Positions --- # 
 
 # Obtain filename path
-filename = PATH_data / "calcofi" / "CalCOFIStationOrder.csv"
+filename = PATH_data / "mitgcm" / "transect" / "processed" / "mitgcm_proc_vel_hrly_trans.nc"
 
-# Load csv file 
-calCOFI_data = np.genfromtxt(
-    filename,
-    delimiter=",",
-    skip_header=1,
-    usecols=(1, 3, 7, 11),
-    invalid_raise=False
-)
+# Load transect coordinates
+with Dataset(filename, 'r') as nc:
+    dist_tr = np.asarray(nc.variables['dist'][:])
+    lon_tr  = np.asarray(nc.variables['LON'][:])
+    lat_tr  = np.asarray(nc.variables['LAT'][:])
 
-# Grab stations on line 80.0
-calCOFI_line80 = calCOFI_data[calCOFI_data[:, 0] == 80.0] 
+# Convert longitude to -180 to 180 degrees
+lon_tr = ((lon_tr + 180) % 360) - 180
 
-# Parse data into separate arrays
-calCOFI_lat   = calCOFI_line80[:, 1]
-calCOFI_lon   = calCOFI_line80[:, 2]
+# Sort coordinates by distance from shore
+idx = np.argsort(dist_tr)
+dist_tr = dist_tr[idx]
+lon_tr  = lon_tr[idx]
+lat_tr  = lat_tr[idx]
 
 # -----------------------------------------------------------------------------
 # Plot regional advective time scales  
@@ -251,14 +250,29 @@ ct4 = ax.contour(
     linestyles='solid'
 )
 
-# Plot Line 80 CalCOFI Stations
+# Plot Line 80 CalCOFI transect
 ax.plot(
-    calCOFI_lon % 360, 
-    calCOFI_lat,
+    lon_tr,
+    lat_tr,
     color='k',
-    linestyle=(0, (5, 3)),  
+    linestyle= (0, (3, 2)),
     linewidth=1.5,
     transform=ccrs.PlateCarree(),
+    zorder=9,
+)
+
+# Plot distance axis along CalCOFI Line 80.0 
+plot_transect_distance_axis(
+    ax,
+    dist_tr,
+    lon_tr,
+    lat_tr,
+    tick_spacing=25,
+    label_spacing=50,
+    tick_length=2.0,
+    linewidth = 1.25,
+    show_labels=False,
+    max_tick_distance=275,
 )
 
 # Set grid ticks 

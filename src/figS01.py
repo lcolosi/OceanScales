@@ -41,7 +41,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox 
-from plotting import add_corner_label, add_x_axis_marker, set_coastlines, set_grid_ticks
+from plotting import add_corner_label, add_x_axis_marker, set_coastlines, set_grid_ticks, plot_transect_distance_axis
 
 # -----------------------------------------------------------------------------
 # Set processing and plotting parameters
@@ -71,11 +71,12 @@ from plotting import add_corner_label, add_x_axis_marker, set_coastlines, set_gr
 option_data        = 'density'    
 option_depth       = 9   
 option_interannual = 'linear' 
-option_detrend_seg = True
+option_detrend_seg = "detrend"
+option_averaging   = "weighted" 
 segment_months     = 6
 
-# Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+# Label segment processing method 
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set uncertainty estimate parameters
 sn_threshold = 1
@@ -99,7 +100,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_reg_depth_{option_depth}m_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -115,7 +116,7 @@ fve_r = nc.variables['FVE'][:]
 PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
 
 # Obtain filename path
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_trans_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_trans_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -135,9 +136,9 @@ PATH_processed_cce1 = PATH_data / "cce" / "cce1" / "processed"
 PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
 
 # Obtain filename paths
-filename_m    = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_seg_duration_{segment_months}mo.nc"
-filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_gaussian_{seg_proc}_seg_duration_{segment_months}mo.nc"
-filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_gaussian_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_m    = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc_m    = Dataset(filename_m, 'r')
@@ -198,26 +199,25 @@ water_depth[0] = 0
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
 lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
 
-# --- CalCOFI Line 80.0 Positions --- # 
+# --- CalCOFI line 80.0 Positions --- # 
 
 # Obtain filename path
-filename = PATH_data / "calcofi" / "CalCOFIStationOrder.csv"
+filename = PATH_data / "mitgcm" / "transect" / "processed" / "mitgcm_proc_vel_hrly_trans.nc"
 
-# Load csv file 
-calCOFI_data = np.genfromtxt(
-    filename,
-    delimiter=",",
-    skip_header=1,
-    usecols=(1, 3, 7, 11),
-    invalid_raise=False
-)
+# Load transect coordinates
+with Dataset(filename, 'r') as nc:
+    dist_tr = np.asarray(nc.variables['dist'][:])
+    lon_tr  = np.asarray(nc.variables['LON'][:])
+    lat_tr  = np.asarray(nc.variables['LAT'][:])
 
-# Grab stations on line 80.0
-calCOFI_line80 = calCOFI_data[calCOFI_data[:, 0] == 80.0] 
+# Convert longitude to -180 to 180 degrees
+lon_tr = ((lon_tr + 180) % 360) - 180
 
-# Parse data into separate arrays
-calCOFI_lat   = calCOFI_line80[:, 1]
-calCOFI_lon   = calCOFI_line80[:, 2]
+# Sort coordinates by distance from shore
+idx = np.argsort(dist_tr)
+dist_tr = dist_tr[idx]
+lon_tr  = lon_tr[idx]
+lat_tr  = lat_tr[idx]
 
 # -----------------------------------------------------------------------------
 # Compute the time mean and standard deviation mixed layer depth 
@@ -288,7 +288,7 @@ axes.append(ax)
 ax.axhline(mld_m_mean[0], ls='--', lw=1.5, color='k', alpha=1, label=r"$\overline{z}_{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 100], mld_m_mean[0] - mld_m_std[0], mld_m_mean[0] + mld_m_std[0], color='k', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
+ax.fill_between([0, 100], mld_m_mean[0] - mld_m_std[0], mld_m_mean[0] + mld_m_std[0], color='k', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
 
 # Plot the FVE for model and observations at CCE1 
 ax.plot(fve_m[0,:], depth_m_pos, '.-', color='tab:green', linewidth=1,label='Model')
@@ -304,7 +304,7 @@ ax.set_yticks(np.arange(0,200+25,25))
 ax.invert_yaxis()
 ax.tick_params(top=False, bottom=True, left=True, right=True, direction='out', length=3.5)
 ax.grid(True,linestyle='--',alpha=0.3)
-ax.legend(loc='right', fontsize=fontsize_legend-3, framealpha=0.9, edgecolor='black')
+ax.legend(loc='center', bbox_to_anchor=(0.8, 0.4), fontsize=fontsize_legend-3, framealpha=0.9, edgecolor='black')
 
 # --- Subplot 2 --- # 
 ax = fig.add_subplot(gs[0, 1])
@@ -541,14 +541,29 @@ ct4 = ax.contour(
     linestyles='solid'
 )
 
-# Plot Line 80 CalCOFI Stations
+# Plot Line 80 CalCOFI transect
 ax.plot(
-    calCOFI_lon % 360, 
-    calCOFI_lat,
+    lon_tr,
+    lat_tr,
     color='k',
-    linestyle=(0, (5, 3)),  
+    linestyle= (0, (3, 2)),
     linewidth=1.5,
     transform=ccrs.PlateCarree(),
+    zorder=9,
+)
+
+# Plot distance axis along CalCOFI Line 80.0 
+plot_transect_distance_axis(
+    ax,
+    dist_tr,
+    lon_tr,
+    lat_tr,
+    tick_spacing=25,
+    label_spacing=50,
+    tick_length=2.0,
+    linewidth = 1.25,
+    show_labels=False,
+    max_tick_distance=275,
 )
 
 # Set grid ticks 
