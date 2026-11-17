@@ -103,11 +103,16 @@ nc = Dataset(filename_mitgcm, 'r')
 lon             = nc.variables['lon'][:]
 lat             = nc.variables['lat'][:]
 spec_slope      = nc.variables['SPEC_slope'][:]
-spec_slope_stdm = nc.variables['SPEC_slope_stde'][:]
-svf             = nc.variables['FVE'][:]
+spec_slope_stdm = nc.variables['SPEC_slope_stdm'][:]
+svf             = nc.variables['SVF'][:]
+svf_stdm        = nc.variables['SVF_stdm'][:]
 
 # Convert spectral slope to slope parameter alpha 
 alpha = np.abs(spec_slope)
+
+# Obtain the low-frequency band spectral variance fraction and its uncertainty
+svf_low      = svf[:,:,0]
+svf_stdm_low = svf_stdm[:,:,0]
 
 # --- Bathymetry --- # 
 
@@ -147,8 +152,10 @@ lon_tr  = lon_tr[idx]
 lat_tr  = lat_tr[idx]
 
 # -----------------------------------------------------------------------------
-# Compute the relative uncertainty of the spectral slope
+# Compute the relative uncertainty of the spectral slope and spectral variance fraction
 # -----------------------------------------------------------------------------
+
+# --- Spectral Slope --- # 
 
 # Compute spatial median
 slope_reg_median = np.ma.median(spec_slope)
@@ -157,19 +164,39 @@ slope_reg_median = np.ma.median(spec_slope)
 slope_sn_ratio = np.abs(spec_slope - slope_reg_median) / spec_slope_stdm
 
 # Mask not statistically significant grid points
-slope_mask = np.ma.getmask(np.ma.masked_less_equal(slope_sn_ratio, sn_threshold))
+nonsig_mask = np.ma.getmask(np.ma.masked_less_equal(slope_sn_ratio, sn_threshold))
 
 # Get land mask from spectral slope
 land_mask = np.ma.getmaskarray(spec_slope)
 
 # Combine statistical significance and land masks
-slope_mask = slope_mask & ~land_mask
+combine_mask = nonsig_mask & ~land_mask
 
 # Create a mask array where non-significant ocean points = 1, others = NaN
-data_mask = np.where(slope_mask, 1, np.nan)
+slope_mask = np.where(combine_mask, 1, np.nan)
+
+# --- Spectral Variance Fraction --- # 
+
+# Compute spatial median
+svf_reg_median = np.ma.median(svf_low)
+    
+# Compute the signal-to-noise ratio (with respect to the regional mean)
+svf_sn_ratio = np.abs(svf_low - svf_reg_median) / svf_stdm_low
+
+# Mask not statistically significant grid points
+nonsig_mask = np.ma.getmask(np.ma.masked_less_equal(svf_sn_ratio, sn_threshold))
+
+# Get land mask from spectral slope
+land_mask = np.ma.getmaskarray(svf_low)
+
+# Combine statistical significance and land masks
+combine_mask = nonsig_mask & ~land_mask
+
+# Create a mask array where non-significant ocean points = 1, others = NaN
+svf_mask = np.where(combine_mask, 1, np.nan)
 
 # -----------------------------------------------------------------------------
-# Plot regional spectral slope and FVE 
+# Plot regional spectral slope and spectral variance fraction for low frequencies 
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
@@ -223,7 +250,7 @@ ct = ax.contourf(
 ax.contourf(
     lon,
     lat,
-    data_mask,
+    slope_mask,
     levels=[0.5, 1.5],      
     hatches=['....'],   
     colors='none',          
@@ -389,11 +416,23 @@ set_coastlines(
 ct = ax.contourf(
     lon, 
     lat, 
-    svf[:,:,0], 
+    svf_low, 
     levels=levels_svf,
     transform=ccrs.PlateCarree(),
     cmap=cmap_svf, 
     extend='both'
+)
+
+# Overlay a contourf with hatching for the non-significant regions
+ax.contourf(
+    lon,
+    lat,
+    svf_mask,
+    levels=[0.5, 1.5],      
+    hatches=['....'],   
+    colors='none',          
+    zorder=10,              
+    transform=ccrs.PlateCarree()
 )
 
 # Plot the CCE1 mooring point

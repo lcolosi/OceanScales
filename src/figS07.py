@@ -43,7 +43,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import plotting toolbox for cartopy figures
-from plotting import set_coastlines, set_grid_ticks, add_corner_label
+from plotting import set_coastlines, set_grid_ticks, add_corner_label, plot_transect_distance_axis
 
 # -----------------------------------------------------------------------------
 # Set processing parameters
@@ -75,11 +75,13 @@ from plotting import set_coastlines, set_grid_ticks, add_corner_label
 option_data        = 'density'    
 option_depth       = 9   
 option_interannual = 'linear' 
-option_detrend_seg = True
+option_detrend_seg = 'detrend'
+option_averaging   = "weighted" 
 option_var         = 'mean'
+segment_months     = 6
 
 # Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set uncertainty estimate parameters
 sn_threshold = 1
@@ -193,7 +195,7 @@ elif option_var == 'std':
     }
 
 # -----------------------------------------------------------------------------
-# Load bathymetry, CCE, and CalCOFI and analytic data
+# Load bathymetry, CCE, CalCOFI and analytic data
 # -----------------------------------------------------------------------------
 
 # Set path to processed regional MITgcm data
@@ -214,25 +216,25 @@ with Dataset(filename_bathy, "r") as nc_bathy:
 lat1, lat2, lat3 = 33.457, 34.3075, 34.44825228022894
 lon1, lon2, lon3 = -122.52233, -120.8042, -120.53825701527784
 
+# --- CalCOFI line 80.0 Positions --- # 
 
-# --- CalCOFI Line 80.0 Positions --- #
+# Obtain filename path
+filename = PATH_data / "mitgcm" / "transect" / "processed" / "mitgcm_proc_vel_hrly_trans.nc"
 
-filename = PATH_data / "calcofi" / "CalCOFIStationOrder.csv"
+# Load transect coordinates
+with Dataset(filename, 'r') as nc:
+    dist_tr = np.asarray(nc.variables['dist'][:])
+    lon_tr  = np.asarray(nc.variables['LON'][:])
+    lat_tr  = np.asarray(nc.variables['LAT'][:])
 
-calCOFI_data = np.genfromtxt(
-    filename,
-    delimiter=",",
-    skip_header=1,
-    usecols=(1, 3, 7, 11),
-    invalid_raise=False,
-)
+# Convert longitude to -180 to 180 degrees
+lon_tr = ((lon_tr + 180) % 360) - 180
 
-# Grab stations on line 80.0
-calCOFI_line80 = calCOFI_data[calCOFI_data[:, 0] == 80.0]
-
-# Parse data into separate arrays
-calCOFI_lat = calCOFI_line80[:, 1]
-calCOFI_lon = calCOFI_line80[:, 2]
+# Sort coordinates by distance from shore
+idx = np.argsort(dist_tr)
+dist_tr = dist_tr[idx]
+lon_tr  = lon_tr[idx]
+lat_tr  = lat_tr[idx]
 
 # --- Analytic Data --- # 
 
@@ -246,15 +248,11 @@ filename = PATH_analytic_processed / f"analytic_decor_scale.nc"
 with Dataset(filename, "r") as nc:
 
     # Load analytic autocorrelation and decorrelation scale
-    autocorr_analytic    = nc.variables["autocorr"][:]
-    decor_scale_analytic = nc.variables["decor_scale"][:]
+    decor_scale_analytic = nc.variables["decor_scale_maxI"][:]
 
     # Load coordinates
-    lag_analytic = nc.variables["lag"][:]
     duration_ac  = nc.variables["duration_ac"][:]
-    duration_ds  = nc.variables["duration_ds"][:]
     slope_ac     = nc.variables["slope_ac"][:]
-    slope_ds     = nc.variables["slope_ds"][:]
 
 # -----------------------------------------------------------------------------
 # Plot regional decorrelation time scales
@@ -266,8 +264,8 @@ q25 = np.zeros(len(segment_months))
 q75 = np.zeros(len(segment_months))
 
 # Set plotting parameters
-duration_ds = duration_ds * (12 / 365.25) 
-slope_p     = [1.25]
+duration_ac = duration_ac * (12 / 365.25) 
+slope_p     = [1.5]
 
 # Create figure
 fig, axes = plt.subplots(
@@ -293,13 +291,13 @@ for i, months in enumerate(segment_months):
     levels = np.arange(vmin,vmax+step,step,)
 
     #------------------------------------------#
-    # Load decorrelation-scale data
+    # Load decorrelation scale data
     #------------------------------------------#
 
     filename_mitgcm = (
         PATH_processed
         / f"mitgcm_decor_scale_{option_data}_hrly_reg_"
-          f"depth_{option_depth}m_{option_interannual}_{seg_proc}_"
+          f"depth_{option_depth}m_{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{months}mo.nc"
     )
 
@@ -379,7 +377,7 @@ for i, months in enumerate(segment_months):
         lat,
         data_mask,
         levels=[0.5, 1.5],
-        hatches=["..."],
+        hatches=['....'],
         colors="none",
         zorder=10,
         transform=ccrs.PlateCarree(),
@@ -460,14 +458,29 @@ for i, months in enumerate(segment_months):
         linestyles="solid",
     )
 
-    # Plot CalCOFI Line 80
+    # Plot Line 80 CalCOFI transect
     ax.plot(
-        calCOFI_lon % 360,
-        calCOFI_lat,
-        color="k",
-        linestyle=(0, (5, 3)),
-        linewidth=1,
+        lon_tr,
+        lat_tr,
+        color='k',
+        linestyle= (0, (3, 2)),
+        linewidth=1.5,
         transform=ccrs.PlateCarree(),
+        zorder=9,
+    )
+
+    # Plot distance axis along CalCOFI Line 80.0 
+    plot_transect_distance_axis(
+        ax,
+        dist_tr,
+        lon_tr,
+        lat_tr,
+        tick_spacing=25,
+        label_spacing=50,
+        tick_length=2.0,
+        linewidth = 1.25,
+        show_labels=False,
+        max_tick_distance=275,
     )
 
 
@@ -549,15 +562,15 @@ ax_med = fig.add_axes([
 for k, ialpha in enumerate(slope_p): 
 
     # Find index value
-    idx_alpha = np.argmin(np.abs(np.array(slope_ds) - ialpha))
+    idx_alpha = np.argmin(np.abs(np.array(slope_ac) - ialpha))
 
     # Plot the decorrelation scale as a function of window duration
-    ax_med.plot(duration_ds, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
+    ax_med.plot(duration_ac, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
 
 # Label cruves
 ax_med.annotate(
-    rf'$\alpha = {round(slope_ds[idx_alpha],1)}$',
-    xy=(0.81, 0.87),
+    rf'$\alpha = {round(slope_ac[idx_alpha],1)}$',
+    xy=(0.25, 0.2),
     xycoords='axes fraction',
     fontsize=11,
     color='k',
@@ -615,7 +628,7 @@ ax_med.grid(
 # Add legend
 ax_med.legend(
     loc='upper left',
-    fontsize=12
+    fontsize=10
 )
 
 # Label subplot

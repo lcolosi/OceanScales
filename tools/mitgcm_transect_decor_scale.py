@@ -248,7 +248,7 @@ for idist in tqdm(range(ndist), desc="Computing Least-Squares Fit", unit="distan
                                                       linear_trend=linear_trend,
                                                      )
     
-        # Compute the residual time series 
+        # Remove seasonal cycles (and interannual variability if a global linear trend is fit)
         data_res[idist,:,idepth] = data_ts - fit[idist,:,idepth]
 
 # Apply Gaussian low-pass filtering when selected
@@ -263,8 +263,8 @@ if option_interannual == 'gaussian':
         # Loop over each depth
         for idepth in range(ndepth):
 
-            # Set the time series 
-            data_ts = np.ma.masked_invalid(data[idist,:,idepth])
+            # Set the ith residual time series 
+            data_ts = np.ma.masked_invalid(data_res[idist,:,idepth])
 
             # Skip grid points containing only masked data
             if np.ma.getmaskarray(data_ts).all():
@@ -278,8 +278,8 @@ if option_interannual == 'gaussian':
                                                                         truncate=4,
                                                                        )
 
-    # Remove seasonal and interannual variability
-    data_res = data - fit - data_interannual
+    # Remove interannual variability from the seasonal residual
+    data_res = data_res - data_interannual
 
 # Set the model for the interannual and seasonal cycles 
 if option_interannual == 'gaussian': 

@@ -70,11 +70,13 @@ from plotting import add_corner_label
 # Set processing parameters
 option_data        = 'density'    
 option_interannual = 'linear' 
-option_detrend_seg = True
+option_detrend_seg = 'detrend'
+option_averaging   = "weighted" 
 option_var         = 'mean'
+segment_months     = 6
 
 # Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set uncertainty estimate parameters
 sn_threshold = 1
@@ -202,15 +204,11 @@ filename = PATH_analytic_processed / f"analytic_decor_scale.nc"
 with Dataset(filename, "r") as nc:
 
     # Load analytic autocorrelation and decorrelation scale
-    autocorr_analytic    = nc.variables["autocorr"][:]
-    decor_scale_analytic = nc.variables["decor_scale"][:]
+    decor_scale_analytic = nc.variables["decor_scale_maxI"][:]
 
     # Load coordinates
-    lag_analytic = nc.variables["lag"][:]
     duration_ac  = nc.variables["duration_ac"][:]
-    duration_ds  = nc.variables["duration_ds"][:]
     slope_ac     = nc.variables["slope_ac"][:]
-    slope_ds     = nc.variables["slope_ds"][:]
 
 # -----------------------------------------------------------------------------
 # Plot regional decorrelation time scales
@@ -222,8 +220,8 @@ q25 = np.zeros(len(segment_months))
 q75 = np.zeros(len(segment_months))
 
 # Set plotting parameters
-duration_ds = duration_ds * (12 / 365.25) 
-slope_p     = [1.3]
+duration_ac = duration_ac * (12 / 365.25) 
+slope_p     = [1.5]
 
 # Define processed data path
 PATH_processed = PATH_data / "mitgcm" / "transect" / "processed"
@@ -257,7 +255,7 @@ for i, months in enumerate(segment_months):
     filename_mitgcm = (
         PATH_processed
         / f"mitgcm_decor_scale_{option_data}_hrly_trans_"
-          f"{option_interannual}_{seg_proc}_"
+          f"{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{months}mo.nc"
     )
 
@@ -327,7 +325,7 @@ for i, months in enumerate(segment_months):
         abs(depth),
         data_mask.T,
         levels=[0.5, 1.5],
-        hatches=["..."],
+        hatches=["...."],
         colors="none",
     )
 
@@ -453,15 +451,15 @@ ax_med = fig.add_axes([
 for k, ialpha in enumerate(slope_p): 
 
     # Find index value
-    idx_alpha = np.argmin(np.abs(np.array(slope_ds) - ialpha))
+    idx_alpha = np.argmin(np.abs(np.array(slope_ac) - ialpha))
 
     # Plot the decorrelation scale as a function of window duration
-    ax_med.plot(duration_ds, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
+    ax_med.plot(duration_ac, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
 
 # Label cruves
 ax_med.annotate(
-    rf'$\alpha = {round(slope_ds[idx_alpha],1)}$',
-    xy=(0.75, 0.9),
+    rf'$\alpha = {round(slope_ac[idx_alpha],1)}$',
+    xy=(0.25, 0.2),
     xycoords='axes fraction',
     fontsize=11,
     color='k',
@@ -524,7 +522,7 @@ ax_med.grid(
 # Add legend
 ax_med.legend(
     loc="upper left",
-    fontsize=12,
+    fontsize=10,
 )
 
 # Label subplot

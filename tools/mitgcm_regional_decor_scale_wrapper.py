@@ -240,7 +240,7 @@ def run_analysis(segment_duration):
                                                     linear_trend=linear_trend,
                                                     )
         
-            # Compute the residual time series 
+            # Remove seasonal cycles (and interannual variability if a global linear trend is fit)
             data_res[:,ilat,ilon] = data_ts - fit[:,ilat,ilon]
 
     # Apply Gaussian low-pass filtering when selected
@@ -255,7 +255,7 @@ def run_analysis(segment_duration):
             # Loop through latitude
             for ilat in range(nlat):
 
-                # Set the time series 
+                # Set the ith residual time series 
                 data_ts = np.ma.masked_invalid(data[:, ilat, ilon])
 
                 # Skip grid points containing only masked data
@@ -270,8 +270,8 @@ def run_analysis(segment_duration):
                                                                         truncate=4,
                                                                         )
 
-        # Remove seasonal and interannual variability
-        data_res = data - fit - data_interannual
+        # Remove interannual variability from the seasonal residual
+        data_res = data_res - data_interannual
 
     # Set the model for the interannual and seasonal cycles 
     if option_interannual == 'gaussian': 

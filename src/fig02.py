@@ -176,7 +176,7 @@ for isite in range(nsite):
                                            linear_trend=linear_trend
                                            )
 
-    # Compute the residual time series 
+    # Remove seasonal cycles (and interannual variability if a global linear trend is fit)
     sig_res[isite,:] = data_ts - fit[isite,:]
 
 # Apply Gaussian low-pass filtering when selected
@@ -188,22 +188,23 @@ if option_interannual == 'gaussian':
     # Loop through mooring sites
     for isite in range(nsite):
 
-        # Set the ith time series 
-        data_ts = np.ma.masked_invalid(sig_depth[isite, :])
+        # Set the ith residual time series 
+        data_ts = np.ma.masked_invalid(sig_res[isite,:])
 
-        # Remove the time mean
-        data_anomaly = data_ts - np.ma.mean(data_ts)
+        # Skip grid points containing only masked data
+        if np.ma.getmaskarray(data_ts).all():
+            continue
 
-        # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-        sig_interannual[isite, :] = gaussian_low_pass_filter(data_anomaly,
+        # Estimate interannual variability using 365-day FWHM Gaussian low-pass applied to the residual time series
+        sig_interannual[isite, :] = gaussian_low_pass_filter(data_ts,
                                                              fwhm_days=365,
                                                              dt_hours=1,
                                                              mode='constant',
                                                              truncate=4,
                                                             )
 
-    # Remove seasonal and interannual variability
-    sig_res = sig_depth - fit - sig_interannual
+    # Remove interannual variability from the seasonal residual
+    data_res = sig_res - sig_interannual
 
 # Set the model for the interannual and seasonal cycles 
 if option_interannual == 'gaussian': 

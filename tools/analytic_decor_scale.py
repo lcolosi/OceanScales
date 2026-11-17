@@ -67,7 +67,7 @@ T_months_ac = T_ac / days_per_month
 tau = np.arange(0, max(T_ac) + dt/2, dt)
 
 # Set precision for complex special functions
-mp.dps = 25
+mp.mp.dps = 25
 
 # -----------------------------------------------------------------------------
 # Compute autocorrelation and its associated decorrelation scale
@@ -189,10 +189,9 @@ decor_scale_upper = xr.DataArray(data=T_tilde_upper,
                                 dims=['duration_ds','slope_ds'],
                                 coords=dict(duration_ds=T_ds,slope_ds=alpha_values_ds),
                                 attrs=dict(
-                                    description=(f'The upper bound of the decorrelation scale computed from ' + 
-                                                 'the analytic autocorrelation solution ' + 
-                                                 'using the maximum I(tau) method for ' + 
-                                                 'a range of window durations and spectral slopes.'),
+                                    description=(f'Theoretical upper bound on the decorrelation scale '
+                                                    'derived from the inverse-frequency spectral moment '
+                                                    'of a finite-band power-law spectrum.'),
                                     units='days'
                                 )
 )
@@ -205,7 +204,7 @@ M_lag = xr.DataArray(data=M_lag,
                                       'the analytic autocorrelation solution ' + 
                                       'using the maximum I(tau) method for ' + 
                                       'a range of window durations and spectral slopes.'),
-                        units='days'
+                        units='lag number'
                     )
 )
 

@@ -42,7 +42,7 @@ import gsw
 
 # Set processing parameters
 option_proc  = 'density' 
-option_depth = 9   
+option_depth = 0.5   
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]

@@ -3,7 +3,7 @@
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale of potential density (solid curve) as a function
+#  Decorrelation time scale of potential density (solid curve) as a function
 #  of depth from model data at (a) CCE1, (b) CCE2, and (c) CCE3, and observations
 #  at (d) CCE1 and (e) CCE2. Decorrelation time scales computed from 1-month,
 #  2-month, 3-month, 4-month, 6-month, 8-month, and 12-month window durations are
@@ -66,7 +66,8 @@ from plotting import add_corner_label
 # Set processing parameters
 option_data        = 'density'    
 option_interannual = 'gaussian' 
-option_detrend_seg = True
+option_detrend_seg = 'detrend'
+option_averaging   = "weighted" 
 option_var         = 'mean'
 
 # Label segment processing 
@@ -104,7 +105,7 @@ for seg_duration in seg_durations:
 
     filename = (
         PATH_processed
-        / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
+        / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{seg_duration}mo.nc"
     )
 
@@ -149,7 +150,7 @@ for seg_duration in seg_durations:
 
     filename1 = (
         PATH_cce1_processed
-        / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
+        / f"cce1_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{seg_duration}mo.nc"
     )
 
@@ -168,7 +169,7 @@ for seg_duration in seg_durations:
 
     filename2 = (
         PATH_cce2_processed
-        / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
+        / f"cce2_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_"
             f"seg_duration_{seg_duration}mo.nc"
     )
 
@@ -250,7 +251,7 @@ for j, seg_duration in enumerate(seg_durations):
 ax.axhline(mld_mean[0], ls='--', lw=1.5, color='dimgray', alpha=1, label=r"$\overline{z}_{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='dimgray', alpha=0.15, label=r"$\sigma_{\overline{z}_{mld}}$")
+ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='dimgray', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
 
 # Set left edge x-position
 x_right = ax.get_xlim()[0] + 2.25  

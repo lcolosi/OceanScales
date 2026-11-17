@@ -75,24 +75,12 @@ from plotting import add_corner_label
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'gaussian' 
+option_interannual = 'linear' 
 option_detrend_seg = "detrend"
 option_averaging   = "weighted"
-option_plot        = "linear"
 segment_months     = 6
-option_depth       = 10 
-option_slope_range = [182.5, 4.0]
-
-# Set the spectral bands by their period limits (days)
-period_bands = {
-    r"$\phi_\mathrm{high}$": (2/24, 4.0),
-    r"$\phi_\mathrm{mid}$": (4.0, 30.0),
-    r"$\phi_\mathrm{low}$": (30.0, 182.5),
-}
-
-# Set time and space parameters
-fmin_slope = [1/182.5]
-fmax_slope = [1/4.0]       
+option_depth       = 9.6
+option_slope_range = [182.5, 4.0]      
 
 # Label segment processing 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -116,7 +104,7 @@ plt.rcParams.update({
 PATH_processed = PATH_data / "mitgcm" / "mooring" / "processed"
 
 # Obtain filename paths
-filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_mitgcm = PATH_processed / f"mitgcm_decor_scale_{option_data}_hrly_mooring_linear_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
 # Generate the nc data structure
 nc = Dataset(filename_mitgcm, 'r')
@@ -139,9 +127,11 @@ filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_mooring_{
 nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
-freq   = nc.variables['freq'][:]
-psd    = nc.variables['PSD'][:]
-psd_CI = nc.variables['PSD_CI'][:]
+freq     = nc.variables['freq'][:]
+psd      = nc.variables['PSD'][:]
+psd_CI   = nc.variables['PSD_CI'][:]
+svf      = nc.variables['SVF'][:]
+svf_stdm = nc.variables['SVF_stdm'][:]
 
 # Close the netcdf file
 nc.close()
@@ -168,97 +158,29 @@ mld_mean = np.ma.mean(mld,axis=1)
 mld_std = np.ma.std(mld,axis=1,ddof=1)
 
 # -----------------------------------------------------------------------------
-# Compute spectral variance fraction (SVF) in the spectral bands
-# -----------------------------------------------------------------------------
-
-# Set helper function 
-def integrate_spectral_band(frequency, spectrum, low_frequency, high_frequency):
-    """Integrate one-sided PSD over a band, interpolating at its boundaries."""
-
-    # Obtain indices of frequencies within the specified band
-    inside = (frequency > low_frequency) & (frequency < high_frequency)
-
-    # Extract the frequencies within the band and concatinate the low and high frequency boundaries
-    f_band = np.r_[low_frequency, frequency[inside], high_frequency]
-
-    # Interpolate the spectrum at the low and high frequency boundaries and concatinate with the spectrum within the band
-    s_band = np.interp(f_band, frequency, spectrum)
-
-    # Integrate the spectrum over the band using the trapezoidal rule
-    var_band = np.trapezoid(s_band, f_band)
-
-    return var_band
-
-# Define arrays filled with NaN values
-freq_array = np.asarray(np.ma.filled(freq, np.nan), dtype=float)
-psd_array = np.asarray(np.ma.filled(psd, np.nan), dtype=float)
-
-# Create a boolean mask to identify valid (finite and positive) frequency values
-valid_freq = np.isfinite(freq_array) & (freq_array > 0)
-
-# Apply mask to data arrays
-freq_array = freq_array[valid_freq]
-psd_array = psd_array[:, :, valid_freq]
-
-# Initialize dictionary 
-svf = {band: np.full((len(site), len(depth)), np.nan) for band in period_bands}
-
-# Loop through mooring sites 
-for isite in range(len(site)):
-
-    # Loop through water depths
-    for idepth in range(len(depth)):
-
-        # Extract the spectrum at the specified site and depth
-        spectrum = psd_array[isite, idepth, :]
-
-        # Compute total variance of the spectrum
-        total_variance = np.trapezoid(spectrum, freq_array)
-
-        # Loop though spectral bands
-        for band, (period_short, period_long) in period_bands.items():
-
-            # Set the low and high frequency limits of the band
-            low, high = 1.0 / period_long, 1.0 / period_short
-
-            # Compute the variance in the spectral band
-            band_variance = integrate_spectral_band(freq_array, spectrum, low, high)
-
-            # Compute the spectral variance fraction (SVF) in the spectral band
-            svf[band][isite, idepth] = 100.0 * band_variance / total_variance   
-
-# -----------------------------------------------------------------------------
 # Plot decorrelation time scale, SVF and frequency spectra   
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
+levels = np.logspace(np.log10(7e-7), np.log10(5e0), num=45) 
+norm   = mcolors.LogNorm(vmin=7e-7, vmax=5e0)
+label  = r'PSD (kg$^2$/m$^6$/cycles/day)'
 cmap          = cmo.deep_r 
 period_bounds = [4.0, 30.0, 182.5]
-svf_colors    = ['tab:blue', 'tab:red', 'tab:green']
+svf_bands = ['low', 'mid', 'high']
+svf_colors = {
+    'low': 'tab:green',
+    'mid': 'tab:red',
+    'high': 'tab:blue',
+}
+svf_labels = {
+    'low': r'$\phi_\mathrm{low}$',
+    'mid': r'$\phi_\mathrm{mid}$',
+    'high': r'$\phi_\mathrm{high}$',
+}
 
 # Set the positive depth values for plotting
 depth_pos = np.abs(depth)
-
-# Set the plotting parameters based on the option_plot
-if option_plot == "log": 
-    
-    # Compute variance per unit logarithmic frequency 
-    psd_plot = psd_array * freq_array[np.newaxis, np.newaxis, :]
-
-    # Set plotting parameters 
-    levels = np.logspace(np.log10(1e-5), np.log10(3e-2), num=60)  
-    norm   = mcolors.LogNorm(vmin=1e-5, vmax=3e-2) 
-    label  = r'$f\mathrm{S}(f)$ (kg$^2$/m$^6$)'
-
-else: 
-
-    # Set psd_plot variable 
-    psd_plot = psd_array
-
-    # Set plotting parameters 
-    levels = np.logspace(np.log10(7e-7), np.log10(5e0), num=45) 
-    norm   = mcolors.LogNorm(vmin=7e-7, vmax=5e0)
-    label  = r'PSD (kg$^2$/m$^6$/cycles/day)'
 
 # Create figure
 fig, axes = plt.subplots(3,2,figsize=(13,12),gridspec_kw={'width_ratios': [1.5, 1]}) 
@@ -267,11 +189,11 @@ fig, axes = plt.subplots(3,2,figsize=(13,12),gridspec_kw={'width_ratios': [1.5, 
 ax = axes[0,0]
 
 # Plot the depth spectrogram at CCE1
-ax.contourf(freq_array, depth_pos, psd_plot[0,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
+ax.contourf(freq, depth_pos, psd[0,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
 
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(freq_array[0],freq_array[-1])
+ax.set_xlim(freq[1],freq[-1])
 ax.set_ylim(0,200)
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xscale('log')
@@ -333,12 +255,35 @@ ax.grid(axis='y',linestyle='--',alpha=0.3)
 ax_svf = ax.twiny()
 
 # Loop through spectral bands
-for (band, values), color in zip(svf.items(), svf_colors):
+for iband, band in enumerate(svf_bands):
 
-    # Plot SVF as a function of depth for site 0
-    line, = ax_svf.plot(values[0, :], np.abs(depth), '-',
-                        color=color, linewidth=1.8,
-                        label=band, zorder=3)
+    # Extract SVF and its uncertainty for CCE1
+    values = svf[0, :, iband]
+    errors = svf_stdm[0, :, iband]
+
+    # Set color
+    color = svf_colors[band]
+
+    # Plot spectral variance fraction as a function of depth
+    line, = ax_svf.plot(
+        values,
+        np.abs(depth),
+        color=color,
+        linewidth=1.8,
+        label=svf_labels[band],
+        zorder=4,
+    )
+
+    # Plot uncertainty envelope (+/- 1 standard error)
+    ax_svf.fill_betweenx(
+        np.abs(depth),
+        values - errors,
+        values + errors,
+        color=color,
+        alpha=0.15,
+        linewidth=0.5,
+        zorder=3,
+    )
 
 # Set axis attributes for SVF
 ax_svf.set_xlim(0,90)
@@ -359,11 +304,11 @@ ax_svf.invert_yaxis()
 ax = axes[1,0]
 
 # Plot the depth spectrogram at CCE1
-ax.contourf(freq_array, depth_pos, psd_plot[1,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
+ax.contourf(freq, depth_pos, psd[1,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
 
 # Set axis attributes
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(freq_array[0],freq_array[-1])
+ax.set_xlim(freq[1],freq[-1])
 ax.set_ylim(0,200)
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xscale('log')
@@ -425,12 +370,35 @@ ax.grid(axis='y',linestyle='--',alpha=0.3)
 ax_svf = ax.twiny()
 
 # Loop through spectral bands
-for (band, values), color in zip(svf.items(), svf_colors):
+for iband, band in enumerate(svf_bands):
 
-    # Plot SVF as a function of depth for site 0
-    line, = ax_svf.plot(values[1, :], np.abs(depth), '-',
-                        color=color, linewidth=1.8,
-                        label=band, zorder=3)
+    # Extract SVF and its uncertainty for CCE2
+    values = svf[1, :, iband]
+    errors = svf_stdm[1, :, iband]
+
+    # Set color
+    color = svf_colors[band]
+
+    # Plot spectral variance fraction as a function of depth
+    line, = ax_svf.plot(
+        values,
+        np.abs(depth),
+        color=color,
+        linewidth=1.8,
+        label=svf_labels[band],
+        zorder=4,
+    )
+
+    # Plot uncertainty envelope (+/- 1 standard error)
+    ax_svf.fill_betweenx(
+        np.abs(depth),
+        values - errors,
+        values + errors,
+        color=color,
+        alpha=0.15,
+        linewidth=0,
+        zorder=3,
+    )
 
 # Set axis attributes for SVF
 ax_svf.set_xlim(0,90)
@@ -451,12 +419,12 @@ ax_svf.set_xticklabels([])
 ax = axes[2,0]
 
 # Plot the depth spectrogram at CCE1
-cf = ax.contourf(freq_array, depth_pos, psd_plot[2,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
+cf = ax.contourf(freq, depth_pos, psd[2,:,:], levels=levels, norm=norm, cmap=cmap, extend='both')
 
 # Set axis attributes
 ax.set_xlabel('Frequency (cycles/day)')
 ax.set_ylabel('Depth (m)')
-ax.set_xlim(freq_array[0],freq_array[-1])
+ax.set_xlim(freq[1],freq[-1])
 ax.set_ylim(0,200)
 ax.set_yticks(np.arange(0,200+25,25))
 ax.set_xscale('log')
@@ -531,12 +499,37 @@ ax_svf = ax.twiny()
 svf_handles = []
 
 # Loop through spectral bands
-for (band, values), color in zip(svf.items(), svf_colors):
+for iband, band in enumerate(svf_bands):
 
-    # Plot SVF as a function of depth for site 0
-    line, = ax_svf.plot(values[2, :], np.abs(depth), '-',
-                        color=color, linewidth=1.8,
-                        label=band, zorder=3)
+    # Extract SVF and its uncertainty for CCE3
+    values = svf[2, :, iband]
+    errors = svf_stdm[2, :, iband]
+
+    # Set color
+    color = svf_colors[band]
+
+    # Plot spectral variance fraction as a function of depth
+    line, = ax_svf.plot(
+        values,
+        np.abs(depth),
+        color=color,
+        linewidth=1.8,
+        label=svf_labels[band],
+        zorder=4,
+    )
+
+    # Plot uncertainty envelope (+/- 1 standard error)
+    ax_svf.fill_betweenx(
+        np.abs(depth),
+        values - errors,
+        values + errors,
+        color=color,
+        alpha=0.15,
+        linewidth=0,
+        zorder=3,
+    )
+
+    # Append line handle for legend
     svf_handles.append(line)
 
 # Set axis attributes for SVF
@@ -640,38 +633,66 @@ fig.savefig(
 # Find the depth where phi_low first exceeds phi_mid at CCE2 and CCE3
 # -----------------------------------------------------------------------------
 
+
+# --- Find the depth where phi_low first exceeds phi_mid --- #
+
+# Identify spectral band indices
+iband_low = svf_bands.index('low')
+iband_mid = svf_bands.index('mid')
+
+# Loop through mooring sites
 for site_name, site_index in [("CCE2", 1), ("CCE3", 2)]:
 
-    # Extract the spectral variance fractions at this mooring
-    phi_low = svf[r"$\phi_\mathrm{low}$"][site_index, :]
-    phi_mid = svf[r"$\phi_\mathrm{mid}$"][site_index, :]
+    # Extract spectral variance fractions at this mooring
+    phi_low = svf[site_index, :, iband_low]
+    phi_mid = svf[site_index, :, iband_mid]
 
     # Compute their difference, ordered from shallowest to deepest
     z = np.asarray(np.ma.filled(depth_pos, np.nan), dtype=float)
-    difference = phi_low - phi_mid
+    difference = np.asarray(
+        np.ma.filled(phi_low - phi_mid, np.nan),
+        dtype=float,
+    )
+
     valid = np.isfinite(z) & np.isfinite(difference)
     z, difference = z[valid], difference[valid]
+
     order = np.argsort(z)
     z, difference = z[order], difference[order]
 
     if z.size == 0:
         print(f"{site_name}: No valid spectral variance fraction data available.")
+
     elif difference[0] > 0:
-        print(f"{site_name}: phi_low already exceeds phi_mid at the shallowest sampled depth ({z[0]:.2f} m).")
+        print(
+            f"{site_name}: phi_low already exceeds phi_mid at the "
+            f"shallowest sampled depth ({z[0]:.2f} m)."
+        )
+
     else:
-        # Find the first transition from phi_low <= phi_mid to phi_low > phi_mid
-        crossings = np.flatnonzero((difference[:-1] <= 0) & (difference[1:] > 0))
+        # Find first transition from phi_low <= phi_mid to phi_low > phi_mid
+        crossings = np.flatnonzero(
+            (difference[:-1] <= 0) & (difference[1:] > 0)
+        )
 
         if crossings.size:
             i = crossings[0]
-            # Linearly interpolate the depth where phi_low equals phi_mid
-            z_cross = z[i] - difference[i] * (z[i + 1] - z[i]) / (difference[i + 1] - difference[i])
-            print(f"{site_name}: phi_low first exceeds phi_mid below approximately {z_cross:.2f} m.")
-        else:
-            print(f"{site_name}: phi_low does not exceed phi_mid within the sampled depth range.")
 
-print(Lt[2,:])
-print(depth_pos)
+            # Linearly interpolate depth where phi_low equals phi_mid
+            z_cross = z[i] - difference[i] * (
+                z[i + 1] - z[i]
+            ) / (difference[i + 1] - difference[i])
+
+            print(
+                f"{site_name}: phi_low first exceeds phi_mid "
+                f"below approximately {z_cross:.2f} m."
+            )
+
+        else:
+            print(
+                f"{site_name}: phi_low does not exceed phi_mid "
+                f"within the sampled depth range."
+            )
 
 
 

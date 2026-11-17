@@ -1,9 +1,9 @@
 # =============================================================================
-# Compute spectrograms at mooring locations from MITgcm data 
+# Compute power spectra and their diagnotics at mooring locations from MITgcm data 
 # =============================================================================
 #
 # Description:
-#   Computes spectrograms at mooring locations from
+#   Computes power spectra and their diagnostics at mooring locations from
 #   MITgcm data and saves the results to a NetCDF file.
 #
 # Author:
@@ -34,7 +34,7 @@ PATH_tools = ROOT / "tools"
 sys.path.append(str(PATH_tools))
 
 # Import analysis functions 
-from spectra import compute_spectrum1D, spectral_slope, spectral_diags, spectral_uncertainty
+from spectra import compute_spectrum1D, spectral_slope, spectral_diags, spectral_uncertainty, compute_spectral_var_frac
 from autocorr import segment_time_series
 from lsf import unweighted_lsf
 from filter import gaussian_low_pass_filter  
@@ -72,9 +72,9 @@ from filter import gaussian_low_pass_filter
 
 # Set processing parameters
 option_data        = 'density'    
-option_interannual = 'gaussian' 
+option_interannual = 'linear' 
 option_harmonics   = 2      
-option_detrend_seg = True
+option_detrend_seg = "detrend"
 
 # Set time and space parameters
 seconds_per_day  = 24 * 60 * 60
@@ -83,9 +83,14 @@ T_annual         = 365.25 * seconds_per_day
 segment_overlap  = 0.5                                        
 segment_duration = 0.5   
 depth_lim        = -220 
-f_cut            = 1 / (14 * seconds_per_day)
 fmin_slope       = (1/182.5) / seconds_per_day
 fmax_slope       = (1/4) / seconds_per_day 
+period_bands     = {
+                    "low": (30.0, 182.5),
+                    "mid": (4.0, 30.0),
+                    "high": (2 / 24, 4.0),
+                   }
+band_labels      = list(period_bands)
 
 # Parameter verification
 if option_data not in ("temp", "salt", "density", "uvel", "vvel"):
@@ -99,8 +104,13 @@ if option_interannual not in ("linear", "gaussian"):
         "Choose 'linear' or 'gaussian'."
     )
 
+if option_detrend_seg not in ("detrend", "demean", None):
+    raise ValueError(
+        "option_detrend_seg must be 'detrend', 'demean', or None."
+    )
+
 # Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # -----------------------------------------------------------------------------
 # Load MITgcm data
@@ -220,7 +230,7 @@ for isite in tqdm(range(nsite), desc="Computing Least-Squares Fit", unit="moorin
                                                     linear_trend=linear_trend,
                                                     )
     
-        # Compute the residual time series 
+        # Remove seasonal cycles (and interannual variability if a global linear trend is fit)
         data_res[isite,:,idepth] = data_ts - fit[isite,:,idepth]
 
 # Apply Gaussian low-pass filtering when selected
@@ -235,29 +245,26 @@ if option_interannual == 'gaussian':
         # Loop over each depth
         for idepth in range(ndepth):
 
-            # Set the time series 
-            data_ts = np.ma.masked_invalid(data[isite,:,idepth])
-
-            # Remove the time mean
-            data_anomaly = data_ts - np.ma.mean(data_ts)
+            # Set the ith residual time series 
+            data_ts = np.ma.masked_invalid(data_res[isite,:,idepth])
 
             # Skip grid points containing only masked data
-            if np.ma.getmaskarray(data_anomaly).all():
+            if np.ma.getmaskarray(data_ts).all():
                 continue
 
             # Estimate interannual variability using 365-day FWHM Gaussian low-pass
-            data_interannual[isite,:,idepth] = gaussian_low_pass_filter(data_anomaly,
+            data_interannual[isite,:,idepth] = gaussian_low_pass_filter(data_ts,
                                                                        fwhm_days=365,
                                                                        dt_hours=1,
                                                                        mode='constant',
                                                                        truncate=4,
                                                                        )
 
-    # Remove seasonal and interannual variability
-    data_res = data - fit - data_interannual
+    # Remove interannual variability from the seasonal residual
+    data_res = data_res - data_interannual
 
 # -----------------------------------------------------------------------------
-# Compute depth spectrogram and their diagnostics
+# Compute power spectra and their diagnostics
 # -----------------------------------------------------------------------------
 
 # Create reference segments to determine the segment length
@@ -283,20 +290,59 @@ if len(segment_lengths) != 1:
 nseg = len(segments_ref)
 ntime_seg = segment_lengths.pop()
 
-# Compute expected cyclic frequency vector for each segment
-f = np.fft.rfftfreq(ntime_seg, d=dt)
+# Compute expected cyclic frequency vector for each segment and convert to cycles per day
+f     = np.fft.rfftfreq(ntime_seg, d=dt)
+f_cpd = f * seconds_per_day
 
 # Set number of non-negative frequency bins
 nfreq = len(f)
+
+# --- Create non-overlapping band masks --- #
+
+# Initialize mask list 
+band_masks = []
+
+# Loop through frequency bands 
+for iband, (band_name, (period_min, period_max)) in enumerate(period_bands.items()):
+
+    # Set low and high frequency bounds of band
+    f_lo = 1.0 / period_max
+    f_hi = 1.0 / period_min
+
+    # Define the band mask for the ith frequency band (shared boundary belongs to the higher-frequency band)
+    band_mask = (f_cpd >= f_lo) & (f_cpd < f_hi)
+
+    # For the high-frequency band, let the nyquist frequency be included in the frequency band
+    if iband == len(period_bands) - 1:
+        band_mask = (f_cpd >= f_lo) & (f_cpd <= f_hi)
+
+    # Error if no frequencies are contained in the frequency band
+    if not np.any(band_mask):
+        raise ValueError(f"The {band_name} band contains no FFT frequencies.")
+
+    # Add band mask to list
+    band_masks.append(band_mask)
+
+# Define the mask for the union of all frequency bands
+total_mask = np.logical_or.reduce(band_masks)
+
+# Check if any frequency bands overlap 
+if np.any(np.sum(band_masks, axis=0) > 1):
+    raise ValueError("The variance frequency bands overlap.")
+
+# Check if we have enough windows to estimate uncertainties
+if nseg < 2:
+    raise ValueError("At least two time segments are needed for uncertainty estimates.")
 
 # Initialize arrays 
 psd_mean        = np.ma.masked_all((nsite,ndepth,nfreq))
 psd_CI          = np.ma.masked_all((nsite,ndepth,nfreq,2))
 spec_slope      = np.ma.masked_all((nsite,ndepth))
-spec_slope_stde = np.ma.masked_all((nsite,ndepth))
+spec_slope_stdm = np.ma.masked_all((nsite,ndepth))
 moments         = np.ma.masked_all((nsite,ndepth,4))
-var_band        = np.ma.masked_all((nsite,ndepth,2))
-fve             = np.ma.masked_all((nsite,ndepth,2))
+var_band        = np.ma.masked_all((nsite,ndepth,3))
+phi_mean        = np.ma.masked_all((nsite,ndepth,3))
+phi_stdm        = np.ma.masked_all((nsite,ndepth,3))
 mean_period     = np.ma.masked_all((nsite,ndepth))
 
 # Loop over each site
@@ -363,23 +409,47 @@ for isite in tqdm(range(nsite), desc="Computing power spectra", unit="mooring si
                                                         )
 
         # Compute the spectral slope 
-        spec_slope[isite,idepth], spec_slope_stde[isite,idepth], *_ = spectral_slope(f,
+        spec_slope[isite,idepth], spec_slope_stdm[isite,idepth], *_ = spectral_slope(f,
                                                                                      psd_mean[isite,idepth,:], 
                                                                                      fmin_slope, 
                                                                                      fmax_slope,
                                                                                      )
 
-        # Compute spectral moments, FVE and mean period
-        moments[isite,idepth,:], var_band[isite,idepth,:], fve[isite,idepth,:], mean_period[isite,idepth] = spectral_diags(psd_mean[isite,idepth,:], 
-                                                                                                                            f, 
-                                                                                                                            f_cutoff=f_cut
-                                                                                                                            )
+        # Compute spectral moments and mean period
+        moments[isite,idepth,:], _, _, mean_period[isite,idepth] = spectral_diags(psd_mean[isite,idepth,:], 
+                                                                                f, 
+                                                                                f_cutoff=1 / (30 * seconds_per_day)
+                                                                                )
+
+        # Loop through frequency bands 
+        for iband, band_mask in enumerate(band_masks):
+
+            # Compute the spectral variance fraction and its uncertainty
+            var_band[isite,idepth,iband], phi_mean[isite,idepth,iband], phi_stdm[isite,idepth,iband], _, _ = compute_spectral_var_frac(psd_mean[isite,idepth,:],
+                                                                                                                                       psd_seg,
+                                                                                                                                       f,
+                                                                                                                                       band_mask,
+                                                                                                                                       total_mask,
+                                                                                                                                       overlap=segment_overlap,
+                                                                                                                                       )
+
+        # Check if the svf in the three bands sum to 1 
+        phi_sum = np.sum(phi_mean[isite, idepth, :])
+
+        if not np.isclose(phi_sum, 1.0, atol=1e-6):
+            raise ValueError(
+                f"Spectral variance fractions do not sum to 1 at "
+                f"site={isite}, depth={idepth}."
+            )
 
 # Convert mean period to units of days
 mean_period_days = mean_period/(24*60*60) 
 
-# Convert frequency and psd to units of cycles per day 
-f_cpd      = f * seconds_per_day
+# Convert spectral variance fraction to percentage
+phi_mean *= 100
+phi_stdm *= 100
+
+# Convert psd to units of cycles per day 
 psd_cpd    = psd_mean / seconds_per_day 
 psd_CI_cpd = psd_CI / seconds_per_day 
 
@@ -390,8 +460,7 @@ psd_CI_cpd = psd_CI / seconds_per_day
 # Set coordinates
 CI_coord      = ['lower', 'upper']
 moments_coord = ["m0", "m1", "m2", "m3"]
-var_coord     = ['low_freq_var', 'high_freq_var']
-fve_coord     = ['low_FVE', 'high_FVE']
+band_coord    = band_labels
 
 # --- Spectral analysis diagnostics --- # 
 PSD = xr.DataArray(data=psd_cpd,
@@ -426,7 +495,7 @@ SPEC_slope = xr.DataArray(data=spec_slope,
                            )
 )
 
-SPEC_slope_stde = xr.DataArray(data=spec_slope_stde,
+SPEC_slope_stdm = xr.DataArray(data=spec_slope_stdm,
                         dims=['site','depth'],
                         coords=dict(site=site,depth=depth),
                         attrs=dict(
@@ -447,8 +516,8 @@ MOMENTS = xr.DataArray(data=moments,
 )
 
 VAR = xr.DataArray(data=var_band,
-                   dims=['site','depth','var_coord'],
-                   coords=dict(site=site,depth=depth,var_coord=var_coord),
+                   dims=['site','depth','band_coord'],
+                   coords=dict(site=site,depth=depth,band_coord=band_coord),
                    attrs=dict(
                        description=('Absolute variance contained in the ' +
                                     'low and high frequency bands.'),
@@ -456,14 +525,24 @@ VAR = xr.DataArray(data=var_band,
                     )
 )
 
-FVE = xr.DataArray(data=fve,
-                   dims=['site','depth','fve_coord'],
-                   coords=dict(site=site,depth=depth,fve_coord=fve_coord),
+SVF = xr.DataArray(data=phi_mean,
+                   dims=['site','depth','band_coord'],
+                   coords=dict(site=site,depth=depth,band_coord=band_coord),
                    attrs=dict(
-                       description=('Fraction of variance explained by the ' +
-                                    'low and high frequency bands.'),
+                       description=('Spectral variance fraction of the mean PSD in the ' +
+                                    'low, mid, and high frequency bands.'),
                        units='precent'
                     )
+)
+
+SVF_stdm = xr.DataArray(data=phi_stdm,
+                        dims=['site', 'depth', 'band'],
+                        coords=dict(site=site, depth=depth, band=band_coord),
+                        attrs=dict(
+                            description=('Standard error of spectral variance fraction using ' 
+                                        'segment-wise delta-method residuals with overlap correction.'),
+                            units='percent',
+                        ),
 )
 
 MEAN_PERIOD_days = xr.DataArray(data=mean_period_days,
@@ -478,7 +557,7 @@ MEAN_PERIOD_days = xr.DataArray(data=mean_period_days,
 )
 
 # Create data set from data arrays 
-data = xr.Dataset({'PSD':PSD,'PSD_CI':PSD_CI,'SPEC_slope':SPEC_slope,'SPEC_slope_stde':SPEC_slope_stde,'MOMENTS':MOMENTS,'VAR':VAR,'FVE':FVE,'MEAN_PERIOD_days':MEAN_PERIOD_days})
+data = xr.Dataset({'PSD':PSD,'PSD_CI':PSD_CI,'SPEC_slope':SPEC_slope,'SPEC_slope_stdm':SPEC_slope_stdm,'MOMENTS':MOMENTS,'VAR':VAR,'SVF':SVF,'SVF_stdm':SVF_stdm,'MEAN_PERIOD_days':MEAN_PERIOD_days})
 
 # Set global variables to document the processing parameters used 
 data.attrs.update({
@@ -489,6 +568,7 @@ data.attrs.update({
     "segment_overlap": segment_overlap,
     "segment_processing": seg_proc,
     "sampling_interval_seconds": dt,
+    "band_period_bounds_days": str(period_bands),
 })
 
 # Set segment duration in months

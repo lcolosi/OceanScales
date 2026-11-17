@@ -156,7 +156,7 @@ ax_flat = axes.flatten()
 # Loop through seasons
 for i, season in enumerate(['DJF', 'MAM', 'JJA', 'SON']):
 
-    # --- Subplot 1 --- #  
+    # Set axis handle 
     ax = ax_flat[i]
 
     # Plot coastlines and land 

@@ -55,15 +55,16 @@ from plotting import add_corner_label
 # ------------#
 
 # Set processing parameters
-option_data        = 'density'    
+option_data        = 'density'   
+option_depth       = 9  
 option_interannual = 'gaussian' 
-option_detrend_seg = True
-segment_months     = 6
-option_depth       = 10 
+option_detrend_seg = 'detrend'
+option_averaging   = "weighted"
+option_analytic    = 'biased'
 option_slope       = 1
 
 # Label segment processing 
-seg_proc = "detrend" if option_detrend_seg else "demean"
+seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
 
 # Set plotting parameters
 seg_durations = [1, 2, 3, 4, 6, 8, 12]
@@ -88,7 +89,7 @@ plt.rcParams.update({
 # --- Analytic Data --- # 
 
 # Set filename to saved the netcdf file
-filename = PATH_analytic_processed / f"analytic_decor_scale.nc"
+filename = PATH_analytic_processed / f"analytic_decor_scale_{option_analytic}.nc"
 
 # Load in data
 with Dataset(filename, "r") as nc:
@@ -100,9 +101,7 @@ with Dataset(filename, "r") as nc:
     # Load coordinates
     lag_analytic = nc.variables["lag"][:]
     duration_ac  = nc.variables["duration_ac"][:]
-    duration_ds  = nc.variables["duration_ds"][:]
     slope_ac     = nc.variables["slope_ac"][:]
-    slope_ds     = nc.variables["slope_ds"][:]
 
 # --- MITgcm --- # 
 
@@ -117,7 +116,7 @@ for seg_duration in seg_durations:
 
     filename = (
         PATH_processed
-        / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{seg_proc}_"
+        / f"mitgcm_decor_scale_{option_data}_hrly_mooring_{option_interannual}_{option_averaging}_{seg_proc}_"
           f"seg_duration_{seg_duration}mo.nc"
     )
 
@@ -227,8 +226,8 @@ autocorr_analytic_slope = autocorr_analytic[:,:,slope_m_index]
 # Set plotting parameters 
 depth_m_pos = abs(depth_m)
 duration_m  = np.asarray(seg_durations)
-duration_ds = duration_ds * (12 / 365.25) 
-slope_p     = [1, 1.5, 2]
+duration_ac = duration_ac * (12 / 365.25) 
+slope_p     = [1, 1.25, 2]
 x_min       = -3
 x_max       = 60
 dx          = 10
@@ -350,15 +349,15 @@ ax = ax_flat[3]
 for k, ialpha in enumerate(slope_p): 
 
     # Find index value
-    idx_alpha = np.argmin(np.abs(np.array(slope_ds) - ialpha))
+    idx_alpha = np.argmin(np.abs(np.array(slope_ac) - ialpha))
 
     # Plot the decorrelation scale as a function of window duration
-    ax.plot(duration_ds, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
+    ax.plot(duration_ac, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
 
 # Label cruves
 ax.annotate(
     r'$\alpha = 2$',
-    xy=(0.83, 0.95),
+    xy=(0.74, 0.95),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -367,8 +366,8 @@ ax.annotate(
 )
 
 ax.annotate(
-    r'$\alpha = 1.5$',
-    xy=(0.85, 0.69),
+    r'$\alpha = 1.25$',
+    xy=(0.825, 0.43),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -378,7 +377,7 @@ ax.annotate(
 
 ax.annotate(
     r'$\alpha = 1$',
-    xy=(0.88, 0.25),
+    xy=(0.88, 0.23),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -409,9 +408,9 @@ ax.fill_between(
 ax.set_xlabel(r'Duration $T$ (months)')
 ax.set_ylabel('Decorrelation Scale (days)')
 ax.set_xticks(duration_m)
-ax.set_yticks(np.arange(0,60+10,10))
+ax.set_yticks(np.arange(0,40+5,5))
 ax.set_xlim(0,12.1)
-ax.set_ylim(0,60)
+ax.set_ylim(0,40)
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)
 ax.grid(True,linestyle='--',alpha=0.3)
@@ -423,15 +422,15 @@ ax = ax_flat[4]
 for k, ialpha in enumerate(slope_p): 
 
     # Find index value
-    idx_alpha = np.argmin(np.abs(np.array(slope_ds) - ialpha))
+    idx_alpha = np.argmin(np.abs(np.array(slope_ac) - ialpha))
 
     # Plot the decorrelation scale as a function of window duration
-    ax.plot(duration_ds, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
+    ax.plot(duration_ac, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
 
 # Label cruves
 ax.annotate(
     r'$\alpha = 2$',
-    xy=(0.83, 0.95),
+    xy=(0.74, 0.95),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -440,8 +439,8 @@ ax.annotate(
 )
 
 ax.annotate(
-    r'$\alpha = 1.5$',
-    xy=(0.85, 0.69),
+    r'$\alpha = 1.25$',
+    xy=(0.825, 0.43),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -451,7 +450,7 @@ ax.annotate(
 
 ax.annotate(
     r'$\alpha = 1$',
-    xy=(0.88, 0.25),
+    xy=(0.88, 0.23),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -481,9 +480,9 @@ ax.fill_between(
 # Set axis attributes 
 ax.set_xlabel(r'Duration $T$ (months)')
 ax.set_xticks(duration_m)
-ax.set_yticks(np.arange(0,60+10,10))
+ax.set_yticks(np.arange(0,40+5,5))
 ax.set_xlim(0,12.1)
-ax.set_ylim(0,60)
+ax.set_ylim(0,40)
 ax.set_yticklabels([])
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)
@@ -496,15 +495,15 @@ ax = ax_flat[5]
 for k, ialpha in enumerate(slope_p): 
 
     # Find index value
-    idx_alpha = np.argmin(np.abs(np.array(slope_ds) - ialpha))
+    idx_alpha = np.argmin(np.abs(np.array(slope_ac) - ialpha))
 
     # Plot the decorrelation scale as a function of window duration
-    ax.plot(duration_ds, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
+    ax.plot(duration_ac, decor_scale_analytic[:,idx_alpha], '--', color='k', lw = 1.5) 
 
 # Label cruves
 ax.annotate(
     r'$\alpha = 2$',
-    xy=(0.83, 0.95),
+    xy=(0.74, 0.95),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -513,8 +512,8 @@ ax.annotate(
 )
 
 ax.annotate(
-    r'$\alpha = 1.5$',
-    xy=(0.85, 0.69),
+    r'$\alpha = 1.25$',
+    xy=(0.825, 0.43),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -524,7 +523,7 @@ ax.annotate(
 
 ax.annotate(
     r'$\alpha = 1$',
-    xy=(0.88, 0.25),
+    xy=(0.88, 0.23),
     xycoords='axes fraction',
     fontsize=13,
     color='k',
@@ -554,22 +553,21 @@ ax.fill_between(
 # Set axis attributes 
 ax.set_xlabel(r'Duration $T$ (months)')
 ax.set_xticks(duration_m)
-ax.set_yticks(np.arange(0,60+10,10))
+ax.set_yticks(np.arange(0,40+5,5))
 ax.set_xlim(0,12.1)
-ax.set_ylim(0,60)
+ax.set_ylim(0,40)
 ax.set_yticklabels([])
 ax.tick_params(top=False, bottom=True, left=True, right=True,
             direction='out', length=3.5)
 ax.grid(True,linestyle='--',alpha=0.3)
 
 # Label each subplot
-pos = [0.94, 0.07]
-add_corner_label(ax_flat[0], pos, 'A', fontsize = 16)
-add_corner_label(ax_flat[1], pos, 'B', fontsize = 16)
-add_corner_label(ax_flat[2], pos, 'C', fontsize = 16)
-add_corner_label(ax_flat[3], pos, 'D', fontsize = 16)
-add_corner_label(ax_flat[4], pos, 'E', fontsize = 16)
-add_corner_label(ax_flat[5], pos, 'F', fontsize = 16)
+add_corner_label(ax_flat[0], [0.94, 0.07], 'A', fontsize = 16)
+add_corner_label(ax_flat[1], [0.94, 0.07], 'B', fontsize = 16)
+add_corner_label(ax_flat[2], [0.94, 0.07], 'C', fontsize = 16)
+add_corner_label(ax_flat[3], [0.94, 0.07], 'D', fontsize = 16)
+add_corner_label(ax_flat[4], [0.94, 0.07], 'E', fontsize = 16)
+add_corner_label(ax_flat[5], [0.94, 0.07], 'F', fontsize = 16)
 
 # Adjust figure spacing
 plt.subplots_adjust(hspace=0.2, wspace=0.1)

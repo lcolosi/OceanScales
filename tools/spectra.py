@@ -596,7 +596,7 @@ def spectral_diags(
 ):
 
     """
-    Compute spectral moments, partitioned variance ratios, and mean period.
+    Compute spectral moments, spectral variance fraction, and mean period.
 
     Parameters
     ----------
@@ -644,7 +644,7 @@ def spectral_diags(
 
         Units are the squared units of the original data.
 
-    FVE : ndarray
+    svf : ndarray
         Percentage of variance contained in the low- and high-frequency
         bands relative to the variance in [f_min, f_max]:
 
@@ -657,7 +657,8 @@ def spectral_diags(
             var_high = integral from f_cutoff to f_max of PSD(f) df
             var_band = var_low + var_high
 
-        If f_cutoff is None, both values are NaN.
+        Quantity is known as the spectral variance fraction. If f_cutoff is None,
+        both values are NaN.
 
         When f_min and f_max are omitted, the fractions are computed
         relative to the total resolved variance.
@@ -743,8 +744,8 @@ def spectral_diags(
     # Compute partitioned variance and variance ratio
     # -------------------------------------------------------------------------
 
-    # Initialize fraction of variance explained
-    FVE = np.full(2, np.nan)
+    # Initialize the spectral variance fraction 
+    svf = np.full(2, np.nan)
 
     # Initialize absolute variance in each frequency band
     variance_band = np.full(2, np.nan)
@@ -782,8 +783,8 @@ def spectral_diags(
 
         # Normalize by variance in selected frequency range
         if var_band > 0:
-            FVE[0] = (var_low / var_band) * 100
-            FVE[1] = (var_high / var_band) * 100
+            svf[0] = (var_low / var_band) * 100
+            svf[1] = (var_high / var_band) * 100
             
     elif f_min is not None or f_max is not None:
             raise ValueError(
@@ -806,7 +807,195 @@ def spectral_diags(
 
         mean_period = np.nan
 
-    return moments, variance_band, FVE, mean_period
+    return moments, variance_band, svf, mean_period
+
+# --- Compute the Spectral Variance Fraction and its uncertainty --- #
+def compute_spectral_var_frac(
+    spectrum_mean,
+    spectrum_seg,
+    freq,
+    band_mask,
+    total_mask,
+    overlap=0.5,
+):
+    """
+     Compute the frequency-band variance, spectral variance fraction, and
+    its uncertainty from the ensemble-mean frequency spectrum using
+    the delta method.
+
+    Parameters
+    ----------
+    spectrum_mean : array-like
+        Ensemble-mean frequency spectrum. May have shape (nfreq,),
+        (nfreq, 1), or (1, nfreq).
+
+    spectrum_seg : array-like
+        Frequency spectra from individual time-series segments.
+        May have shape (nfreq, nseg) or (nseg, nfreq).
+
+    freq : array-like
+        Uniformly spaced frequency array corresponding to the spectra.
+            
+    band_mask : array-like of bool
+        Boolean mask identifying the selected frequency band.
+
+    total_mask : array-like of bool
+        Boolean mask identifying the total frequency range used
+        to normalize the spectral variance fraction.
+
+    overlap : float, optional
+        Fractional overlap between adjacent segments. Must satisfy
+        0 <= overlap < 1. Default is 0.5.
+
+    Returns
+    -------
+    band_var_mean : float
+        Frequency-band variance computed from the ensemble-mean spectrum.
+
+    phi_mean : float
+        Spectral variance fraction computed from the ensemble-mean
+        frequency spectrum.
+
+    phi_stdm : float
+        Standard error of the ensemble-mean spectral variance fraction,
+        accounting approximately for dependence between overlapping
+        segments.
+
+    phi_std : float
+        Linearized standard deviation of the spectral variance fraction
+        across individual segments.
+
+    phi_stds : float
+        Approximate standard error of the standard deviation.
+    """
+
+    # Convert inputs to arrays, preserving masked values as NaNs
+    spectrum_mean = np.ma.asarray(spectrum_mean, dtype=float).squeeze().filled(np.nan)
+    spectrum_seg  = np.ma.asarray(spectrum_seg, dtype=float).filled(np.nan)
+    freq          = np.asarray(freq, dtype=float).squeeze()
+    band_mask     = np.asarray(band_mask, dtype=bool)
+    total_mask    = np.asarray(total_mask, dtype=bool)
+
+    # Check dimensions
+    if spectrum_mean.ndim != 1:
+        raise ValueError(
+            "spectrum_mean must contain a single frequency spectrum."
+        )
+
+    if spectrum_seg.ndim != 2:
+        raise ValueError("spectrum_seg must be a 2D array.")
+
+    # Check overlap
+    if not 0 <= overlap < 1:
+        raise ValueError("overlap must satisfy 0 <= overlap < 1.")
+
+    # Number of frequencies
+    nfreq = spectrum_mean.size
+
+    # Check frequency array
+    if freq.ndim != 1 or freq.size != nfreq:
+        raise ValueError(
+            "freq must be a 1D array with the same length as spectrum_mean."
+        )
+
+    # Compute frequency resolution
+    if nfreq < 2:
+        raise ValueError("At least two frequency bins are required.")
+
+    df = freq[1] - freq[0]
+
+    if df <= 0 or not np.allclose(np.diff(freq), df):
+        raise ValueError(
+            "freq must be strictly increasing and uniformly spaced."
+        )
+        
+    # Ensure spectrum_seg has dimensions (nfreq, nseg)
+    if spectrum_seg.shape[0] == nfreq:
+        pass
+    elif spectrum_seg.shape[1] == nfreq:
+        spectrum_seg = spectrum_seg.T
+    else:
+        raise ValueError(
+            "Neither dimension of spectrum_seg matches the length "
+            "of spectrum_mean."
+        )
+
+    # Determine number of segments
+    nseg = spectrum_seg.shape[1]
+
+    if nseg < 2:
+        raise ValueError(
+            "At least two segments are required to estimate uncertainty."
+        )
+
+    # Check frequency masks
+    if band_mask.shape != (nfreq,) or total_mask.shape != (nfreq,):
+        raise ValueError(
+            "Frequency masks must have the same length as spectrum_mean."
+        )
+
+    if not np.any(band_mask) or not np.any(total_mask):
+        raise ValueError("Frequency masks cannot be empty.")
+
+    if np.any(band_mask & ~total_mask):
+        raise ValueError(
+            "The selected frequency band must lie within the total band."
+        )
+
+    # Require valid spectral values over the integration range
+    if (
+        not np.all(np.isfinite(spectrum_mean[total_mask]))
+        or not np.all(np.isfinite(spectrum_seg[total_mask, :]))
+    ):
+        raise ValueError(
+            "Spectra contain missing or nonfinite values in the "
+            "selected frequency range."
+        )
+
+    # Compute band-integrated and total variances from the mean spectrum
+    band_var_mean  = np.sum(spectrum_mean[band_mask]) * df
+    total_var_mean = np.sum(spectrum_mean[total_mask]) * df
+
+    if total_var_mean <= 0:
+        raise ValueError("Total spectral variance must be positive.")
+
+    # Compute spectral variance fraction from the ensemble-mean spectrum
+    phi_mean = band_var_mean / total_var_mean
+
+    # Compute band-integrated and total variances for each segment
+    band_var_seg  = np.sum(spectrum_seg[band_mask, :], axis=0) * df
+    total_var_seg = np.sum(spectrum_seg[total_mask, :], axis=0) * df
+
+    # Compute delta-method segment deviations for ratio-of-means estimator
+    q = (band_var_seg - phi_mean * total_var_seg) / total_var_mean
+
+    # Compute the variance and standard deviation across segments
+    projected_var = np.var(q, ddof=1)
+    phi_std = np.sqrt(projected_var)
+
+    # Approximate effective number of independent segments for the mean
+    nseg_eff_mean = nseg / (
+        1.0
+        + 2.0
+        * (1.0 - 1.0 / nseg)
+        * overlap
+    )
+
+    # Approximate effective number of independent segments for the variance/std
+    nseg_eff_var = nseg / (
+        1.0
+        + 2.0
+        * (1.0 - 1.0 / nseg)
+        * overlap**2
+    )
+
+    # Compute standard error of the spectral variance fraction
+    phi_stdm = phi_std / np.sqrt(nseg_eff_mean)
+
+    # Compute standard error of the standard deviation
+    phi_stds = phi_std / np.sqrt(2 * (nseg_eff_var - 1))
+
+    return band_var_mean, phi_mean, phi_stdm, phi_std, phi_stds
 
 
 #--- Generate 1D data from a power law spectrum ---# 
