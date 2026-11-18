@@ -582,7 +582,7 @@ ct = ax.contourf(
     levels=np.linspace(0, 20, 43),
     transform=ccrs.PlateCarree(),
     cmap=cmap, 
-    extend='both'
+    extend='max'
 )
 
 # Overlay a contourf with hatching for the non-significant regions
@@ -736,7 +736,7 @@ cbar = set_cbar(
     cax,
     fig,
     orientation="vertical",
-    extend="both",
+    extend="max",
     label=r'$\phi_\mathrm{high}$ ($\%$)',
     fontsize=fontsize_g,
     ticks=np.linspace(0, 20, 5), 

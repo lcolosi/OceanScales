@@ -493,7 +493,7 @@ ax_top.set_xticklabels([])
 ax = axes[2]
 
 # Plot the time-mean along-shore velocity 
-cf = ax.contourf(dist,abs(depth),svf_high.T, levels=np.arange(0, 20+0.25, 0.25), cmap=cmap_svf, extend='both')
+cf = ax.contourf(dist,abs(depth),svf_high.T, levels=np.arange(0, 20+0.25, 0.25), cmap=cmap_svf, extend='max')
 
 # Overlay a contourf with hatching for the non-significant regions
 ax.contourf(
@@ -531,7 +531,7 @@ ax.grid(linestyle='--',alpha=0.1,color='k')
 
 # Set colorbar
 cax = fig.add_axes([0.915, 0.115, 0.02, 0.23])
-cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
+cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='max')
 cbar.set_label(r'$\phi_\mathrm{high}$ ($\%$)')
 cbar.set_ticks(np.arange(0, 20+5, 5))
 
