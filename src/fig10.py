@@ -125,7 +125,7 @@ nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
 spec_slope      = nc.variables['SPEC_slope'][:]
-spec_slope_stdm = nc.variables['SPEC_slope_stde'][:]
+spec_slope_stdm = nc.variables['SPEC_slope_stdm'][:]
 
 # --- CCE Autocorrelation Data --- # 
 
@@ -162,10 +162,10 @@ nc_cce2 = Dataset(filename_cce2, 'r')
 
 # Extract data variables
 spec_slope_cce1      = nc_cce1.variables['SPEC_slope'][:]
-spec_slope_stdm_cce1 = nc_cce1.variables['SPEC_slope_stde'][:]
+spec_slope_stdm_cce1 = nc_cce1.variables['SPEC_slope_stdm'][:]
 
 spec_slope_cce2      = nc_cce2.variables['SPEC_slope'][:]
-spec_slope_stdm_cce2 = nc_cce2.variables['SPEC_slope_stde'][:]
+spec_slope_stdm_cce2 = nc_cce2.variables['SPEC_slope_stdm'][:]
 
 # --- Water Depth --- # 
 
@@ -193,9 +193,8 @@ filename = PATH_data / "analytic" / f"analytic_decor_scale_{option_analytic_est}
 with Dataset(filename, "r") as nc:
 
     # Load analytic autocorrelation and decorrelation scale
-    T_tilde      = nc.variables["decor_scale"][:]
-    T_tilde_maxI = nc.variables["decor_scale_maxI"][:]
-    #T_tilde_upper = nc.variables["decor_scale_upper"][:]
+    T_tilde       = nc.variables["decor_scale"][:]
+    T_tilde_upper = nc.variables["decor_scale_upper"][:]
 
     # Load coordinates
     T_ac            = nc.variables["duration_ac"][:]
@@ -436,8 +435,8 @@ idx_T_ds = T_months_ds == segment_months
 idx_T_ac = T_months_ac == segment_months
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
-#ax.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label=r'$\langle T_f \rangle/\pi$')
-ax.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5, label='Analytic')
+#ax.plot(alpha_values_ds, np.squeeze(T_tilde_upper[idx_T_ds,:]), '--', color='gray', linewidth=1.5, label=r'$\langle T_f \rangle/\pi$')
+ax.plot(alpha_values_ac, np.squeeze(T_tilde[idx_T_ac,:]), '--', color='k', linewidth=1.5, label='Analytic')
 
 # Set axis attributes
 ax.set_xlabel(r'Spectral Slope $\alpha$')
@@ -471,8 +470,8 @@ for mask, color, label in regions:
     )
 
 # Plot the theoretical decorrelation scale and spectral slope relationship
-#axins.plot(alpha_values_ds, np.squeeze(T_tilde[idx_T_ds,:]), '--', color='gray', linewidth=1.5)
-axins.plot(alpha_values_ac, np.squeeze(T_tilde_maxI[idx_T_ac,:]), '--', color='k', linewidth=1.5)
+#axins.plot(alpha_values_ds, np.squeeze(T_tilde_upper[idx_T_ds,:]), '--', color='gray', linewidth=1.5)
+axins.plot(alpha_values_ac, np.squeeze(T_tilde[idx_T_ac,:]), '--', color='k', linewidth=1.5)
 
 # Plot observations
 axins.plot(

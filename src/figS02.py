@@ -580,7 +580,7 @@ ax = axes[0,0]
 ax.plot(time1_dt, data1_depth, color='tab:green', linewidth=1.5)
 
 # Plot the seasonal cycles fit and interannual variability
-ax.plot(time1_dt, model1, color='k', ls='--', linewidth=1.5, label='Least-Squares Fit')
+ax.plot(time1_dt, model1, color='k', ls='--', linewidth=1.5, label='Least-Squares Fit + Low-pass Gaussian filter')
 
 # Set axis attributes
 ax.set_title('CCE1')

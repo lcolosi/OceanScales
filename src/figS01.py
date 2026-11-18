@@ -285,10 +285,10 @@ ax = fig.add_subplot(gs[0, 0])
 axes.append(ax)
 
 # Plot the mean mixed layer depth 
-ax.axhline(mld_m_mean[0], ls='--', lw=1.5, color='k', alpha=1, label=r"$\overline{z}_{mld}$")
+ax.axhline(mld_m_mean[0], ls='--', lw=1.5, color='k', alpha=1, label=r"$\overline{z}_\mathrm{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 100], mld_m_mean[0] - mld_m_std[0], mld_m_mean[0] + mld_m_std[0], color='k', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
+ax.fill_between([0, 100], mld_m_mean[0] - mld_m_std[0], mld_m_mean[0] + mld_m_std[0], color='k', alpha=0.15, label=r"$\sigma_{z_\mathrm{mld}}$")
 
 # Plot the FVE for model and observations at CCE1 
 ax.plot(fve_m[0,:], depth_m_pos, '.-', color='tab:green', linewidth=1,label='Model')

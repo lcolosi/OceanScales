@@ -3,11 +3,7 @@
 # =============================================================================
 #
 # Caption:
-#   (a) Decorrelation time scale depth-averaged from the surface to 30 meters
-#   water depth along the CalCOFI line 80.0 transect. Gray shading represents
-#   $\pm1$ standard error of the mean depth averaged over the same depth range.
-#   Vertical dashed lines show the position of CCE1 (green), CCE2 (red), and 
-#   CCE3 (blue) moorings. (b) 
+#    
 #   
 # Author:
 #   Luke Colosi
@@ -22,7 +18,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt 
 from netCDF4 import Dataset
-import cmocean.cm as cmo
+from matplotlib.colors import to_rgba
+import matplotlib.gridspec as gridspec
 
 # Set path to project root directory
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,11 +67,11 @@ option_interannual = 'linear'
 option_detrend_seg = "detrend"
 option_averaging   = "weighted" 
 option_slope_range = [182.5, 4.0] 
+option_depth         = 9.6 
 segment_months     = 6
 depth_lim          = -220 
 lat_bnds           = [33.0, 35.0]                                          
 lon_bnds           = [237.0, 240.0]
-depth_avg_max      = 30
 
 # Label segment processing method 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -92,7 +89,7 @@ plt.rcParams.update({
 })
 
 # -----------------------------------------------------------------------------
-# Load MITgcm decorrelation scales, bathymetry, and velocity data
+# Load MITgcm and CCE decorrelation scales, bathymetry, and velocity data
 # -----------------------------------------------------------------------------
 
 # --- Decorrelation Time Scales --- # 
@@ -123,141 +120,234 @@ filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_trans_{op
 nc = Dataset(filename_mitgcm, 'r')
 
 # Extract data variables
-var_band = nc.variables['VAR'][:]
-fve      = nc.variables['FVE'][:]
+var      = nc.variables['VAR'][:]
+svf      = nc.variables['SVF'][:]
+svf_stdm = nc.variables['SVF_stdm'][:]
 
-# Set low and high frequency components of variance and fve
-var_low  = var_band[:,:,0]
-var_high = var_band[:,:,1]
-fve_low  = fve[:,:,0]
+# --- Bathymetry --- # 
+
+# Obtain filename path
+filename_bathy = PATH_data / "mitgcm" / "transect" / "DEPTH_CCS_trans.nc"
+
+# Generate the nc data structure
+nc_bathy = Dataset(filename_bathy, 'r')
+
+# Extract data variables
+water_depth = nc_bathy.variables['water_depth'][:]
+
+# Set the depth at the coast to zero 
+water_depth[0] = 0
 
 # --- CCE Mooring Locations --- # 
 lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
 lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
 
-# -----------------------------------------------------------------------------
-# Compute the depth average of the decorrelation scale and variance
-# -----------------------------------------------------------------------------
+# --- CCE Autocorrelation Data --- # 
 
-# Convert depth to positive-downward coordinates
-z = np.abs(depth)
+# Set path to processed regional MITgcm data
+PATH_processed_cce1 = PATH_data / "cce" / "cce1" / "processed"
+PATH_processed_cce2 = PATH_data / "cce" / "cce2" / "processed"
 
-# Select depth levels within the upper 30 m
-idx_depth = z <= depth_avg_max
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_decor_scale_{option_data}_hrly_mooring_gaussian_{option_averaging}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
-# Extract depths and data
-z_sel        = z[idx_depth]
-Lt_sel       = np.ma.masked_invalid(Lt[:, idx_depth])
-Lt_stdm_sel  = np.ma.masked_invalid(Lt_stdm[:, idx_depth])
-var_low_sel  = np.ma.masked_invalid(var_low[:, idx_depth])
-var_high_sel = np.ma.masked_invalid(var_high[:, idx_depth])
-fve_low_sel  = np.ma.masked_invalid(fve_low[:, idx_depth])
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
 
-# Initialize depth-averaged decorrelation scale
-Lt_depth_avg = np.ma.masked_all(len(dist))
-Lt_stdm_depth_avg = np.ma.masked_all(len(dist))
-var_low_depth_avg  = np.ma.masked_all(len(dist))
-var_high_depth_avg = np.ma.masked_all(len(dist))
-fve_low_depth_avg  = np.ma.masked_all(len(dist))
+# Extract data variables
+depth_cce1    = nc_cce1.variables['depth'][:]
+Lt_cce1       = nc_cce1.variables['decor_scale'][:]
+Lt_stdm_cce1  = nc_cce1.variables['decor_scale_stdm'][:]
 
-# Loop through distance offshore
-for idist in range(len(dist)):
+depth_cce2    = nc_cce2.variables['depth'][:]
+Lt_cce2       = nc_cce2.variables['decor_scale'][:]
+Lt_stdm_cce2  = nc_cce2.variables['decor_scale_stdm'][:]
 
-    # Extract vertical profile
-    Lt_prof       = Lt_sel[idist, :]
-    Lt_stdm_prof  = Lt_stdm_sel[idist, :]
-    var_low_prof  = var_low_sel[idist, :]
-    var_high_prof = var_high_sel[idist, :]
-    fve_low_prof  = fve_low_sel[idist, :]
+# Close the netcdf file
+nc_cce1.close()
+nc_cce2.close()
 
-    # Identify valid depth levels
-    valid = (~np.ma.getmaskarray(Lt_prof) 
-             & ~np.ma.getmaskarray(Lt_stdm_prof) 
-             & ~np.ma.getmaskarray(var_low_prof) 
-             & ~np.ma.getmaskarray(var_high_prof)
-             & ~np.ma.getmaskarray(fve_low_prof)
-    )
+# --- CCE Spectral Data --- # 
 
-    # Require at least two valid depth levels
-    if np.sum(valid) < 2:
-        continue
+# Obtain filename paths
+filename_cce1 = PATH_processed_cce1 / f"cce1_spectra_{option_data}_hrly_mooring_gaussian_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+filename_cce2 = PATH_processed_cce2 / f"cce2_spectra_{option_data}_hrly_mooring_gaussian_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
 
-    # Obtain valid depths and decorrelation scales
-    z_valid        = z_sel[valid]
-    Lt_valid       = Lt_prof[valid]
-    Lt_stdm_valid  = Lt_stdm_prof[valid]
-    var_low_valid  = var_low_prof[valid]    
-    var_high_valid = var_high_prof[valid]
-    fve_low_valid  = fve_low_prof[valid]
+# Generate the nc data structure
+nc_cce1 = Dataset(filename_cce1, 'r')
+nc_cce2 = Dataset(filename_cce2, 'r')
 
-    # Compute depth range
-    H = z_valid[-1] - z_valid[0]
+# Extract data variables
+var_cce1      = nc_cce1.variables['VAR'][:]
+svf_cce1      = nc_cce1.variables['SVF'][:]
+svf_stdm_cce1 = nc_cce1.variables['SVF_stdm'][:]
 
-    # Compute depth-averaged decorrelation scale
-    if H > 0:
-        Lt_depth_avg[idist] = (
-            np.trapezoid(Lt_valid, z_valid) / H
-        )
-        Lt_stdm_depth_avg[idist] = (
-            np.trapezoid(Lt_stdm_valid, z_valid) / H
-        )
-        var_low_depth_avg[idist] = (
-            np.trapezoid(var_low_valid, z_valid) / H
-        )
-        var_high_depth_avg[idist] = (
-            np.trapezoid(var_high_valid, z_valid) / H
-        )
-        fve_low_depth_avg[idist] = (
-            np.trapezoid(fve_low_valid, z_valid) / H
-        )
+var_cce2      = nc_cce2.variables['VAR'][:]
+svf_cce2      = nc_cce2.variables['SVF'][:]
+svf_stdm_cce2 = nc_cce2.variables['SVF_stdm'][:]
+
+# Close the netcdf file
+nc_cce1.close()
+nc_cce2.close()
 
 # -----------------------------------------------------------------------------
-# Plot depth average decorrelation time scale, velocity, and FVE  
+# Find the 200 m and 2000 m isobath locations along the transect
+# -----------------------------------------------------------------------------
+
+# Set helper function
+def find_isobath_distance(distances, bathy, target_depth):
+    """
+    Return the distance from shore where the transect crosses a target isobath.
+    Uses the first crossing moving offshore. If no sign change is found,
+    returns the location of the closest bathymetric value.
+    """
+    distances = np.asarray(distances, dtype=float)
+    bathy = np.abs(np.asarray(bathy, dtype=float))
+
+    # Difference from target depth
+    diff = bathy - target_depth
+
+    # Find crossings between adjacent grid cells
+    idx = np.where(diff[:-1] * diff[1:] <= 0)[0]
+
+    if idx.size > 0:
+        i = idx[0]
+        return np.interp(
+            target_depth,
+            [bathy[i], bathy[i+1]],
+            [distances[i], distances[i+1]]
+        )
+    else:
+        # Fallback: use nearest point
+        return distances[np.nanargmin(np.abs(bathy - target_depth))]
+
+# Find the distances corresponding to the 200 m and 2000 m isobaths
+dist_200m  = find_isobath_distance(dist, water_depth, 200.0)
+dist_2000m = find_isobath_distance(dist, water_depth, 2000.0)
+
+# -----------------------------------------------------------------------------
+# Extract data from the specified depth 
+# -----------------------------------------------------------------------------
+
+# Set depth to positive values 
+depth_pos = np.abs(depth)
+depth_cce1_pos = np.abs(depth_cce1)
+depth_cce2_pos = np.abs(depth_cce2)
+
+# Find the depth levels closest to the specified depth 
+idx_depth = np.argmin(np.abs(depth_pos - option_depth))
+idx_depth_cce1 = np.argmin(np.abs(depth_cce1_pos - option_depth))
+idx_depth_cce2 = np.argmin(np.abs(depth_cce2_pos - option_depth))
+
+# Extract data at the specified depth
+Lt_depth       = Lt[:, idx_depth]
+Lt_depth_cce1 = Lt_cce1[idx_depth_cce1]
+Lt_depth_cce2 = Lt_cce2[idx_depth_cce2]
+
+Lt_stdm_depth  = Lt_stdm[:, idx_depth]
+Lt_stdm_depth_cce1 = Lt_stdm_cce1[idx_depth_cce1]
+Lt_stdm_depth_cce2 = Lt_stdm_cce2[idx_depth_cce2]
+
+var_depth      = var[:,idx_depth, :]
+var_depth_cce1 = var_cce1[idx_depth_cce1, :]
+var_depth_cce2 = var_cce2[idx_depth_cce2, :]
+
+svf_depth      = svf[:,idx_depth, :]
+svf_depth_cce1 = svf_cce1[idx_depth_cce1, :]
+svf_depth_cce2 = svf_cce2[idx_depth_cce2, :]
+
+svf_stdm_depth = svf_stdm[:,idx_depth, :]
+svf_stdm_depth_cce1 = svf_stdm_cce1[idx_depth_cce1, :]
+svf_stdm_depth_cce2 = svf_stdm_cce2[idx_depth_cce2, :]
+
+# -----------------------------------------------------------------------------
+# Plot decorrelation time scale, absolute variance, and SVF  
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
-levels_vel = np.arange(-0.15, 0.15 + 0.005, 0.005)
-ticks_vel = np.arange(-0.15, 0.15 + 0.05, 0.05)
-levels_fve = np.arange(60, 92.5+0.5, 0.5)
-ticks_fve  = np.arange(60, 90+5, 5)
-cmap_vel = cmo.balance
-cmap_fve = cmo.rain
-arrow_length_x,arrow_length_y = 0.015, 0.08  
-x0, y0 = 0.075, 0.78 
+period_bounds = [4.0, 30.0, 182.5]
+svf_bands = ['low', 'mid', 'high']
+svf_colors = {
+    'low': 'tab:green',
+    'mid': 'tab:red',
+    'high': 'tab:blue',
+}
+svf_labels = {
+    'low': r'$\phi_\mathrm{low}$',
+    'mid': r'$\phi_\mathrm{mid}$',
+    'high': r'$\phi_\mathrm{high}$',
+}
 
 # Create figure
-fig, axes = plt.subplots(2,1,figsize=(10,8))
+fig = plt.figure(figsize=(13,10))
+gs = gridspec.GridSpec(2, 1, height_ratios=[1.4, 2]) 
 
 #--- Subplot 1 ---# 
-ax = axes[0]
+ax = fig.add_subplot(gs[0])
+ax1 = ax
 
-# Plot uncertainty envelope
-ax.fill_between(dist, Lt_depth_avg - Lt_stdm_depth_avg, Lt_depth_avg + Lt_stdm_depth_avg, color='k', alpha=0.15, linewidth=0, zorder=2)
+# Plot decorrelation time scale
+lt_line, = ax.plot(dist, Lt_depth, color='k', linewidth=2, zorder=3, label=r'$\overline{\mathcal{T}}$')
 
-# Plot depth-averaged decorrelation scale
-ax.plot(dist, Lt_depth_avg, color='k', linewidth=2, zorder=3)
+# Plot one standard error envelope of the decorrelation time scale
+lt_error = ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_depth, color='k', alpha=0.15, linewidth=0, zorder=2, label=r'$\sigma_{\overline{\mathcal{T}}}$')
 
 # Set axis attributes
-ax.set_ylabel(r'$\langle\overline{\mathcal{T}}\rangle_z$ (days)')
+ax.set_ylabel('Decorrelation Scale (days)')
 ax.set_xlim(0, dist[-1])
-ax.set_ylim(5,25) 
+ax.set_ylim(0,25) 
 ax.set_xticks(np.arange(0,250+25,25))
-ax.set_yticks(np.arange(5,25+5,5)) 
+ax.set_yticks(np.arange(0,25+5,5)) 
 ax.invert_xaxis()
 ax.tick_params(top=True, bottom=True, left=True, right=False, direction='out', length=3.5)
 ax.grid(axis='x', linestyle='--', alpha=0.1, color='k')
 
-# --- Create a left axis for FVE --- # 
-ax_lf = ax.twinx()
+# --- Create right axis for SVF --- #
+ax_svf = ax.twinx()
 
-# Plot the depth average fve 
-ax_lf.plot(dist, fve_low_depth_avg, color='tab:purple', linewidth=2, label='FVE')
+# Initialize list to hold handles for legend
+svf_handles = []
 
-# Set axis attributes 
-ax_lf.set_ylabel(r'$\langle\mathrm{FVE}\rangle_z$ ($\%$)', color='tab:purple')
-ax_lf.set_ylim(60, 92.5)
-ax_lf.set_yticks(np.arange(60, 92.5 + 5, 5))
-ax_lf.tick_params(axis='y', colors='tab:purple', direction='out', length=3.5)
+# Loop through spectral bands
+for iband, band in enumerate(svf_bands):
+
+    # Extract SVF and its uncertainty
+    values = svf_depth[:, iband]
+    errors = svf_stdm_depth[:, iband]
+
+    # Set color
+    color = svf_colors[band]
+
+    # Plot the spectral variance fraction
+    line, = ax_svf.plot(
+        dist,
+        values,
+        color=color,
+        linewidth=1.8,
+        label=svf_labels[band],
+        zorder=4,
+    )
+
+    # Plot uncertainty envelope (+/- 1 standard error)
+    ax_svf.fill_between(
+        dist,
+        values - errors,
+        values + errors,
+        color=color,
+        alpha=0.15,
+        linewidth=0,
+        zorder=3,
+    )
+
+    # Append line handle for legend
+    svf_handles.append(line)
+
+# Set axis attributes for SVF
+ax_svf.set_ylabel(r'$\phi$ ($\%$)')
+ax_svf.set_ylim(0, 90)
+ax_svf.set_yticks(np.arange(0, 91, 10))
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()
@@ -296,30 +386,135 @@ add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035, ms= 6, fo
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
+# Plot 200 m and 2000 m isobath markers
+ax.axvline(dist_200m,  color='k', linestyle='--',  lw=1.0, alpha=0.7, zorder=1)
+ax.axvline(dist_2000m, color='k', linestyle='--', lw=1.0, alpha=0.7, zorder=1)
+
+# Label isobaths near the top of panel A
+ax.text(
+    dist_200m, 0.97, '200 m',
+    transform=ax.get_xaxis_transform(),
+    rotation=90, ha='right', va='top',
+    fontsize=11, color='k',
+)
+
+ax.text(
+    dist_2000m, 0.97, '2000 m',
+    transform=ax.get_xaxis_transform(),
+    rotation=90, ha='right', va='top',
+    fontsize=11, color='k',
+)
 
 # Remove bottom x-axis ticklabels
 ax.set_xticklabels([])
 
-#--- Subplot 2 ---# 
-ax = axes[1]
+# --- Plot observational decorrelation scales and SVF --- #
 
-# Plot depth-averaged variances for low and high frequency bands 
-ax.semilogy(dist, var_low_depth_avg, '-', color='tab:red', linewidth=2, label='Low Frequency')
-ax.semilogy(dist, var_high_depth_avg, '-', color='tab:blue', linewidth=2, label='High Frequency')
+# Organize observational data
+moorings = [
+    {
+        'name': 'CCE1',
+        'dist': dist1,
+        'Lt': Lt_depth_cce1,
+        'Lt_err': Lt_stdm_depth_cce1,
+        'svf': svf_depth_cce1,
+        'svf_err': svf_stdm_depth_cce1,
+        'marker': '^',
+        'color': 'tab:green',
+    },
+    {
+        'name': 'CCE2',
+        'dist': dist2,
+        'Lt': Lt_depth_cce2,
+        'Lt_err': Lt_stdm_depth_cce2,
+        'svf': svf_depth_cce2,
+        'svf_err': svf_stdm_depth_cce2,
+        'marker': 's',
+        'color': 'tab:red',
+    },
+]
+
+# Initialize list for observational legend handles
+obs_handles = []
+
+# Loop through moorings
+for mooring in moorings:
+
+    # Plot decorrelation scales with error bars
+    handle = ax.errorbar(
+        mooring['dist'],
+        mooring['Lt'],
+        yerr=mooring['Lt_err'],
+        fmt=mooring['marker'],
+        color='k',
+        markersize=7,
+        markeredgecolor='k',
+        markeredgewidth=0.5,
+        capsize=4,
+        elinewidth=1.25,
+        linestyle='none',
+        zorder=10,
+        label=mooring['name'],
+    )
+
+    obs_handles.append(handle)
+
+    # Loop through spectral bands
+    for iband, band in enumerate(svf_bands):
+
+        # Set spectral band color
+        color = svf_colors[band]
+
+        # Plot observational SVF with uncertainty
+        ax_svf.errorbar(
+            mooring['dist'],
+            mooring['svf'][iband],
+            yerr=mooring['svf_err'][iband],
+            fmt=mooring['marker'],
+            color=color,
+            ecolor=to_rgba(color, alpha=0.7),
+            markersize=7,
+            markeredgecolor='none',
+            capsize=3,
+            elinewidth=1.25,
+            linestyle='none',
+            zorder=10,
+            alpha=0.7,
+        )
+
+# Combine decorrelation scale and SVF legend handles
+legend_handles = svf_handles + [lt_line, lt_error] + obs_handles
+
+# Place legend outside the axes on the right
+ax_svf.legend(
+    handles=legend_handles,
+    loc='center left',
+    bbox_to_anchor=(1.075, 0.5),
+    fontsize=11,
+    frameon=True,
+    framealpha=0.85,
+    ncol=1,
+)
+
+#--- Subplot 2 ---# 
+ax = fig.add_subplot(gs[1])
+ax2 = ax
+
+# Plot absolute variances for low, mid, and high frequency bands 
+ax.semilogy(dist, var_depth[:,0], '-', color='tab:green', linewidth=2, label=r'$\sigma^2_\mathrm{low}$')
+ax.semilogy(dist, var_depth[:,1], '-', color='tab:red', linewidth=2, label=r'$\sigma^2_\mathrm{mid}$')
+ax.semilogy(dist, var_depth[:,2], '-', color='tab:blue', linewidth=2, label=r'$\sigma^2_\mathrm{high}$')
 
 # Set axis attributes
 ax.set_xlabel('Distance from shore (km)')
-ax.set_ylabel(r'$\langle\sigma^2\rangle_z$ ($\mathrm{kg}^2/\mathrm{m}^6$)')
+ax.set_ylabel(r'$\sigma^2$ ($\mathrm{kg}^2/\mathrm{m}^6$)')
 ax.set_xlim(0, dist[-1])
+ax.set_ylim(10**(-4), 10**(-1))
 ax.set_xticks(np.arange(0,250+25,25))
 ax.invert_xaxis()
 ax.tick_params(top=True, bottom=True, left=True, right=False, direction='out', length=3.5)
-ax.grid(linestyle='--', alpha=0.1,color='k') 
-ax.legend(loc='lower right', fontsize=14)
+ax.grid(which='both', linestyle='--', alpha=0.1,color='k') 
+ax.legend(loc='upper center', fontsize=11, ncol=3)
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()
@@ -358,18 +553,61 @@ add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035, ms= 6, fo
 add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
 add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035, ms =6, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
-# Plot vertical lines at CCE1, CCE2, and CCE3 locations
-ax.axvline(dist1, color='tab:green', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist2, color='tab:red', linestyle='--', lw=1.5, alpha=0.7)
-ax.axvline(dist3, color='tab:blue', linestyle='--', lw=1.5, alpha=0.7)
+# Plot 200 m and 2000 m isobath markers
+ax.axvline(dist_200m,  color='k', linestyle='--',  lw=1.0, alpha=0.7, zorder=1)
+ax.axvline(dist_2000m, color='k', linestyle='--', lw=1.0, alpha=0.7, zorder=1)
 
 # Remove top x-axis ticklabels
 ax_top.set_xticklabels([])
 
+# --- Plot observational decorrelation scales and SVF --- #
+
+# Organize observational data
+moorings = [
+    {
+        'name': 'CCE1',
+        'dist': dist1,
+        'var': var_depth_cce1,
+        'marker': '^',
+        'color': 'tab:green',
+    },
+    {
+        'name': 'CCE2',
+        'dist': dist2,
+        'var': var_depth_cce2,
+        'marker': 's',
+        'color': 'tab:red',
+    },
+]
+
+# Initialize list for observational legend handles
+# obs_handles = []
+
+# Loop through moorings
+for mooring in moorings:
+
+    # Loop through spectral bands
+    for iband, band in enumerate(svf_bands):
+
+        # Set spectral band color
+        color = svf_colors[band]
+
+        # Plot observational SVF with uncertainty
+        ax.plot(
+            mooring['dist'],
+            mooring['var'][iband],
+            mooring['marker'],
+            color=color,
+            markersize=7,
+            markeredgecolor='none',
+            linestyle='none',
+            zorder=10,
+            alpha=0.7,
+        )
+
 # Label each subplot
-ax1, ax2 = axes.flatten()
-add_corner_label(ax1, [0.035,0.91], 'A', fontsize = fontsize)
-add_corner_label(ax2, [0.035,0.91], 'B', fontsize = fontsize)
+add_corner_label(ax1, [0.0225,0.075], 'A', fontsize = fontsize)
+add_corner_label(ax2, [0.0225,0.95], 'B', fontsize = fontsize)
 
 # Adjust figure spacing
 plt.subplots_adjust(hspace=0.1, wspace=0.1)

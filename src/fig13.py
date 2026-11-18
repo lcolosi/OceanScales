@@ -74,15 +74,13 @@ from plotting import add_x_axis_marker, add_corner_label
 option_data        = 'density'    
 option_interannual = 'linear' 
 option_detrend_seg = "detrend"
-option_averaging   = "weighted" 
-option_slope_range = [182.5, 4.0] 
-option_depth_avg   = False
+option_averaging   = "weighted"
+option_slope_range = [182.5, 4.0]  
+option_depth       = 9.6
 segment_months     = 6
 depth_lim          = -220 
 lat_bnds           = [33.0, 35.0]                                          
 lon_bnds           = [237.0, 240.0]
-depth_avg_max      = 30
-depth_sel          = 9.6
 
 # Label segment processing method 
 seg_proc = "none" if option_detrend_seg is None else option_detrend_seg
@@ -122,17 +120,6 @@ lat     = nc.variables['LAT'][:]
 Lt      = nc.variables['decor_scale'][:]
 Lt_stdm = nc.variables['decor_scale_stdm'][:]
 Lt_std  = nc.variables['decor_scale_std'][:]
-
-# --- Spectral data --- # 
-
-# Obtain filename path
-filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_trans_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
-
-# Generate the nc data structure
-nc = Dataset(filename_mitgcm, 'r')
-
-# Extract data variables
-svf = nc.variables['FVE'][:]
 
 # --- Mixed Layer Depth --- # 
 
@@ -266,9 +253,7 @@ u = np.ma.filled(u_along_bar_mean, np.nan)
 valid = np.isfinite(u) & np.isfinite(dist)
 
 # Find indices where alongshore velocity changes sign
-idx_cross = np.where(
-    valid[:-1] & valid[1:] & (u[:-1] * u[1:] < 0)
-)[0]
+idx_cross = np.where(valid[:-1] & valid[1:] & (u[:-1] * u[1:] < 0))[0]
 
 # Define list to store the distances of zero-crossings
 dist_cross = []
@@ -292,90 +277,40 @@ dist_cross.extend(dist[idx_zero])
 # Compute the depth average of the decorrelation scale and the standard error
 # -----------------------------------------------------------------------------
 
-# Convert depth to positive-downward coordinates
-z = np.abs(depth)
+# Define positive depth coordinate
+depth_pos = np.abs(depth)
 
-if option_depth_avg:
+# Find the index of the depth closest to the specified depth limit
+idx_depth_Lt = np.argmin(np.abs(depth_pos - option_depth))
 
-    # Select depth levels within the upper 30 m
-    idx_depth_Lt = z <= depth_avg_max
-
-    # Extract depths and decorrelation scales
-    z_sel       = z[idx_depth_Lt]
-    Lt_sel      = np.ma.masked_invalid(Lt[:, idx_depth_Lt])
-    Lt_stdm_sel = np.ma.masked_invalid(Lt_stdm[:, idx_depth_Lt])
-
-    # Initialize depth-averaged decorrelation scale
-    Lt_plot = np.ma.masked_all(len(dist))
-    Lt_stdm_plot = np.ma.masked_all(len(dist))
-
-    # Loop through distance offshore
-    for idist in range(len(dist)):
-
-        # Extract vertical profile
-        Lt_prof      = Lt_sel[idist, :]
-        Lt_stdm_prof = Lt_stdm_sel[idist, :]
-
-        # Identify valid depth levels
-        valid = ~np.ma.getmaskarray(Lt_prof) & ~np.ma.getmaskarray(Lt_stdm_prof)
-
-        # Require at least two valid depth levels
-        if np.sum(valid) < 2:
-            continue
-
-        # Obtain valid depths and decorrelation scales
-        z_valid       = z_sel[valid]
-        Lt_valid      = Lt_prof[valid]
-        Lt_stdm_valid = Lt_stdm_prof[valid]
-
-        # Compute depth range
-        H = z_valid[-1] - z_valid[0]
-
-        # Compute depth-averaged decorrelation scale
-        if H > 0:
-            Lt_plot[idist] = (
-                np.trapezoid(Lt_valid, z_valid) / H
-            )
-            Lt_stdm_plot[idist] = (
-                np.trapezoid(Lt_stdm_valid, z_valid) / H
-            )
-
-else: 
-
-    # Find the index of the depth closest to the specified depth limit
-    idx_depth_Lt = np.argmin(np.abs(z - depth_sel))
-
-    # Obtain the decorrelation scale and standard error at the specified depth
-    Lt_plot      = Lt[:, idx_depth_Lt]
-    Lt_stdm_plot = Lt_stdm[:, idx_depth_Lt]
+# Obtain the decorrelation scale and standard error at the specified depth
+Lt_depth      = Lt[:, idx_depth_Lt]
+Lt_stdm_depth = Lt_stdm[:, idx_depth_Lt]
 
 # -----------------------------------------------------------------------------
-# Plot depth average decorrelation time scale, velocity, and SVF  
+# Plot decorrelation time scale and velocity
 # -----------------------------------------------------------------------------
 
 # Set plotting parameters
 levels_vel = np.arange(-0.15, 0.15 + 0.005, 0.005)
 ticks_vel  = np.arange(-0.15, 0.15 + 0.05, 0.05)
-levels_svf = np.arange(60, 92.5+0.5, 0.5)
-ticks_svf  = np.arange(60, 90+5, 5)
 cmap_vel   = cmo.balance
-cmap_svf   = cmo.rain
-arrow_length_x,arrow_length_y = 0.015, 0.08  
+arrow_length_x,arrow_length_y = 0.018, 0.08  
 x0, y0 = 0.075, 0.78 
 
 # Create figure
 fig = plt.figure(figsize=(10,10))
-gs = gridspec.GridSpec(4, 1, height_ratios=[1, 1, 2, 2]) 
+gs = gridspec.GridSpec(3, 1, height_ratios=[1.5, 1.25, 2]) 
 
 #--- Subplot 1 ---# 
 ax = fig.add_subplot(gs[0])
 ax1 = ax
 
 # Plot uncertainty envelope
-ax.fill_between(dist, Lt_plot - Lt_stdm_plot, Lt_plot + Lt_stdm_plot, color='k', alpha=0.15, linewidth=0, zorder=2)
+ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_depth, color='k', alpha=0.15, linewidth=0, zorder=2)
 
 # Plot decorrelation scale
-ax.plot(dist, Lt_plot, color='k', linewidth=2, zorder=3)
+ax.plot(dist, Lt_depth, color='k', linewidth=2, zorder=3)
 
 # Loop through zero-crossings
 for d_cross in dist_cross[:1]:
@@ -384,10 +319,7 @@ for d_cross in dist_cross[:1]:
     ax.axvline(d_cross, ls='--', color='k', alpha=0.7, lw=1.5)
 
 # Set axis attributes
-if option_depth_avg:
-    ax.set_ylabel(r'$\langle\overline{\mathcal{T}}\rangle_z$ (days)') 
-else: 
-    ax.set_ylabel(r'$\overline{\mathcal{T}}$ (days)')
+ax.set_ylabel('Decorrelation Scale (days)')
 ax.set_xticks(np.arange(0,250+25,25))
 ax.set_yticks(np.arange(5,25+5,5)) 
 ax.set_xlim(0, dist[-1])
@@ -429,9 +361,9 @@ dist2 = np.interp(lon2, lon_sorted, dist_sorted)
 dist3 = np.interp(lon3, lon_sorted, dist_sorted)
 
 # Add CCE1, CCE2, and CCE3 locations 
-add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.05, y_text=1.035, ms= 4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
-add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.05, y_text=1.035, ms =4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
-add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.05, y_text=1.035, ms =4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
+add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.03, y_text=1.035, ms= 4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
+add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.03, y_text=1.035, ms =4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
+add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.03, y_text=1.035, ms =4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
 # Remove bottom x-axis ticklabels
 ax.set_xticklabels([])
@@ -506,9 +438,9 @@ dist2 = np.interp(lon2, lon_sorted, dist_sorted)
 dist3 = np.interp(lon3, lon_sorted, dist_sorted)
 
 # Add CCE1, CCE2, and CCE3 locations 
-add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.05, y_text=1.035, ms=4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
-add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.05, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
-add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.05, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
+add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.035, y_text=1.035, ms=4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
+add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.035, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
+add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.035, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
 
 # Remove top and bottom x-axis ticklabels
 ax_top.set_xticklabels([])
@@ -536,93 +468,16 @@ for d_cross in dist_cross[:1]:
     # Plot the text label
     ax.annotate(
         f'{d_cross:.1f} km',
-        xy=(d_cross, 0.125),
+        xy=(d_cross, 0.115),
         xycoords=ax.get_xaxis_transform(),
         xytext=(5, 0),
         textcoords='offset points',
         rotation=90,
         va='center',
         ha='left',
-        fontsize=10,
+        fontsize=12,
         color='k',
     )
-
-# Set axis attributes
-ax.set_ylabel('Depth (m)')
-ax.set_xlim(0,dist[-1])
-ax.set_ylim(0,200)
-ax.set_xticks(np.arange(0,250+25,25))
-ax.set_yticks(np.arange(0,200+25,25))
-ax.invert_xaxis()
-ax.invert_yaxis()
-ax.grid(linestyle='--',alpha=0.1,color='k')
-
-# Set colorbar
-cax = fig.add_axes([0.915, 0.3725, 0.02, 0.23])
-cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
-cbar.set_label('Along-shore Velocity (m/s)')
-cbar.set_ticks(ticks_vel)
-
-# --- Create top axis for longitude --- #
-ax_top = ax.twiny()
-
-# Make sure limits match
-ax_top.set_xlim(ax.get_xlim())
-
-# Choose where you want longitude ticks (same positions as distance ticks)
-dist_ticks = ax.get_xticks()
-
-# Interpolate longitude at those distance values
-lon_180 = ((lon + 180) % 360) - 180
-lon_ticks = np.interp(dist_ticks, dist, lon_180)
-
-# Create labels but only keep every other one
-labels = [
-    f"{abs(x):.1f}°W" if i % 2 == 0 else ""
-    for i, x in enumerate(lon_ticks)
-]
-
-# Set ticks and labels
-ax_top.set_xticks(dist_ticks)
-ax_top.set_xticklabels(labels) 
-
-sort_idx = np.argsort(lon_180)
-lon_sorted = lon_180[sort_idx]
-dist_sorted = dist[sort_idx]
-
-# Interpolate longtiude onto distance coordinates 
-dist1 = np.interp(lon1, lon_sorted, dist_sorted)
-dist2 = np.interp(lon2, lon_sorted, dist_sorted)
-dist3 = np.interp(lon3, lon_sorted, dist_sorted)
-
-# Add CCE1, CCE2, and CCE3 locations markers
-add_x_axis_marker(ax_top, dist1, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:green',markeredgecolor='tab:green')
-add_x_axis_marker(ax_top, dist2, 'v', '',y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:red',markeredgecolor='tab:red')
-add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,ms=4, fontsize=14,markerfacecolor='tab:blue',markeredgecolor='tab:blue')
-
-# Remove top and bottom x-axis ticklabels
-ax_top.set_xticklabels([])
-ax.set_xticklabels([])
-
-#--- Subplot 4 ---# 
-ax = fig.add_subplot(gs[3])
-ax4 = ax
-
-# Plot the time-mean along-shore velocity 
-cf = ax.contourf(dist,abs(depth),svf[:,:,0].T, levels=levels_svf, cmap=cmap_svf, extend='both')
-
-# Plot the seasonal mean mixed layer depth
-ax.plot(dist_wd, mld_mean, '--', color='k', linewidth=1.2, label=r"$\overline{z}_{mld}$")
-ax.fill_between(dist_wd, mld_mean - mld_std, mld_mean + mld_std, color='k', alpha=0.1, label=r"$\sigma_{z_{mld}}$")
-
-# Plot the ocean bottom depth 
-ax.fill_between(dist_wd, abs(water_depth), abs(depth[-1]), color='0.4') 
-
-# Loop through zero-crossings
-for d_cross in dist_cross[:1]:
-
-    # Plot the zero-crossing points of the alongshore velocity
-    ax.axvline(d_cross, ls='--', color='k', alpha=0.7, lw=1.5)
 
 # Set axis attributes
 ax.set_xlabel('Distance from shore (km)')
@@ -636,10 +491,10 @@ ax.invert_yaxis()
 ax.grid(linestyle='--',alpha=0.1,color='k')
 
 # Set colorbar
-cax = fig.add_axes([0.915, 0.115, 0.02, 0.23])
+cax = fig.add_axes([0.915, 0.1225, 0.02, 0.275])
 cbar = fig.colorbar(cf, cax=cax, orientation='vertical', extend='both')
-cbar.set_label(r'$\phi_\mathrm{low}$ ($\%$)')
-cbar.set_ticks(ticks_svf)
+cbar.set_label('Along-shore Velocity (m/s)')
+cbar.set_ticks(ticks_vel)
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()
@@ -682,10 +537,9 @@ add_x_axis_marker(ax_top, dist3, 'v', '', y_marker=1.02, y_text=1.035,ms=4, font
 ax_top.set_xticklabels([])
 
 # Label each subplot
-add_corner_label(ax1, [0.025,0.145], 'A', fontsize = 13)
-add_corner_label(ax2, [0.025,0.145], 'B', fontsize = 13)
-add_corner_label(ax3, [0.025,0.08], 'C', fontsize = 13)
-add_corner_label(ax4, [0.025,0.08], 'D', fontsize = 13)
+add_corner_label(ax1, [0.025,0.115], 'A', fontsize = 13)
+add_corner_label(ax2, [0.025,0.13], 'B', fontsize = 13)
+add_corner_label(ax3, [0.025,0.07], 'C', fontsize = 13)
 
 # Adjust figure spacing
 plt.subplots_adjust(hspace=0.1, wspace=0.1)

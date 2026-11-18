@@ -248,10 +248,10 @@ for j, seg_duration in enumerate(seg_durations):
     )
 
 # Plot the mean mixed layer depth 
-ax.axhline(mld_mean[0], ls='--', lw=1.5, color='dimgray', alpha=1, label=r"$\overline{z}_{mld}$")
+ax.axhline(mld_mean[0], ls='--', lw=1.5, color='dimgray', alpha=1, label=r"$\overline{z}_\mathrm{mld}$")
 
 # Plot the range of mixed layer depths (1 standard deviation)
-ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='dimgray', alpha=0.15, label=r"$\sigma_{z_{mld}}$")
+ax.fill_between([0, 45], mld_mean[0] - mld_std[0], mld_mean[0] + mld_std[0], color='dimgray', alpha=0.15, label=r"$\sigma_{z_\mathrm{mld}}$")
 
 # Set left edge x-position
 x_right = ax.get_xlim()[0] + 2.25  

@@ -77,8 +77,7 @@ with Dataset(filename, "r") as nc:
 
     # Load analytic autocorrelation and decorrelation scale
     rho        = nc.variables["autocorr"][:]
-    decor      = nc.variables["decor_scale_maxI"][:]
-    decor_maxI = nc.variables["decor_scale_maxI"][:]
+    decor      = nc.variables["decor_scale"][:]
 
     # Load coordinates
     tau      = nc.variables["lag"][:]
@@ -208,7 +207,7 @@ for k in range(0,len(T_months_p)):
     idx_T_p = np.where(np.isclose(T_ac_months, T_months_p[k]))[0][0]
 
     # Plot the ith autocorrelation function for the ith T value 
-    ax.plot(tau, rho[:,idx_T_p,idx_alpha_ac], '-', lw = 2, label=f"T = {int(round(T_ac_months[idx_T_p]))} months", color=colors_decor[k]) 
+    ax.plot(tau, rho[:,idx_T_p,idx_alpha_ac], '-', lw = 2, label=f"$T$ = {int(round(T_ac_months[idx_T_p]))} months", color=colors_decor[k]) 
 
 # --- Monte Carlo Simulation --- # 
 
@@ -265,7 +264,7 @@ for k, iT in enumerate(T_months_p):
     ax.fill_between(alpha_monte, decor_monte[idx_T_monte,:] - decor_stdm_monte[idx_T_monte,:], decor_monte[idx_T_monte,:] + decor_stdm_monte[idx_T_monte,:], color=colors_decor[k], alpha=0.3)
 
     # Plot the decorrelation scale as a function of spectral slope
-    ax.plot(alpha_ac[::2], decor_maxI[idx_T,::2], '.-', lw = 2, label=f"T = {int(T_ac_months[idx_T])} months", color=colors_decor[k]) 
+    ax.plot(alpha_ac[::2], decor[idx_T,::2], '.-', lw = 2, label=f"$T$ = {int(T_ac_months[idx_T])} months", color=colors_decor[k]) 
 
 # Plot markers for decorrelation scales for alpha = 1.5, 2, 3, 4 and T = 12 months
 idx_t = np.argmin(np.abs(T_ac_months - 12))
@@ -273,10 +272,10 @@ idx_a1 = np.argmin(np.abs(alpha_ac - 1.5))
 idx_a2 = np.argmin(np.abs(alpha_ac - 2))
 idx_a3 = np.argmin(np.abs(alpha_ac - 3))
 idx_a4 = np.argmin(np.abs(alpha_ac - 4))
-ax.plot(alpha_ac[idx_a1], decor_maxI[idx_t, idx_a1], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(alpha_ac[idx_a2], decor_maxI[idx_t, idx_a2], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(alpha_ac[idx_a3], decor_maxI[idx_t, idx_a3], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(alpha_ac[idx_a4], decor_maxI[idx_t, idx_a4], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_ac[idx_a1], decor[idx_t, idx_a1], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_ac[idx_a2], decor[idx_t, idx_a2], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_ac[idx_a3], decor[idx_t, idx_a3], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(alpha_ac[idx_a4], decor[idx_t, idx_a4], 'd', color='tab:purple', markersize=8, markeredgecolor='black', markeredgewidth=1)
 
 # Set axis attributes 
 ax.set_xlabel(r'Spectral Slope $\alpha$')
@@ -309,7 +308,7 @@ for k, ialpha in enumerate(alpha_p):
     ax.fill_between(T_monte_days, decor_monte[:,idx_alpha_monte] - decor_stdm_monte[:,idx_alpha_monte], decor_monte[:,idx_alpha_monte] + decor_stdm_monte[:,idx_alpha_monte], color=colors_decor[k], alpha=0.3)
 
     # Plot the decorrelation scale as a function of f_min
-    ax.plot(T_ac, decor_maxI[:,idx_alpha], '.-', lw = 2, label=rf"$\alpha =$ {np.round(alpha_ac[idx_alpha],1)}", color=colors_decor[k]) 
+    ax.plot(T_ac, decor[:,idx_alpha], '.-', lw = 2, label=rf"$\alpha =$ {np.round(alpha_ac[idx_alpha],1)}", color=colors_decor[k]) 
 
 # Plot markers for decorrelation scales for alpha = 3 and T = 3, 6, 8, 12 months
 idx_t3 = np.argmin(np.abs(T_ac_months - 3))
@@ -317,10 +316,10 @@ idx_t6 = np.argmin(np.abs(T_ac_months - 6))
 idx_t8 = np.argmin(np.abs(T_ac_months - 8))
 idx_t12 = np.argmin(np.abs(T_ac_months - 12))
 idx_a = np.argmin(np.abs(alpha_ac - 3))
-ax.plot(T_ac[idx_t3], decor_maxI[idx_t3, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(T_ac[idx_t6], decor_maxI[idx_t6, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(T_ac[idx_t8], decor_maxI[idx_t8, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
-ax.plot(T_ac[idx_t12], decor_maxI[idx_t12, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1, clip_on=False)
+ax.plot(T_ac[idx_t3], decor[idx_t3, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(T_ac[idx_t6], decor[idx_t6, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(T_ac[idx_t8], decor[idx_t8, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1)
+ax.plot(T_ac[idx_t12], decor[idx_t12, idx_a], 'd', color='tab:red', markersize=8, markeredgecolor='black', markeredgewidth=1, clip_on=False)
 
 # Set axis attributes 
 ax.set_xlabel(r'Duration $T$ (days)')

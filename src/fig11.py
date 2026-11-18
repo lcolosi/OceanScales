@@ -257,33 +257,35 @@ dist_2000m = find_isobath_distance(dist, water_depth, 2000.0)
 # -----------------------------------------------------------------------------
 
 # Set depth to positive values 
-depth_pos = np.abs(depth)
+depth_pos      = np.abs(depth)
+depth_cce1_pos = np.abs(depth_cce1)
+depth_cce2_pos = np.abs(depth_cce2)
 
 # Find the depth levels closest to the specified depth 
-idx_depth = np.argmin(np.abs(depth - option_depth))
-idx_depth_cce1 = np.argmin(np.abs(depth_cce1 - option_depth))
-idx_depth_cce2 = np.argmin(np.abs(depth_cce2 - option_depth))
+idx_depth = np.argmin(np.abs(depth_pos - option_depth))
+idx_depth_cce1 = np.argmin(np.abs(depth_cce1_pos - option_depth))
+idx_depth_cce2 = np.argmin(np.abs(depth_cce2_pos - option_depth))
 
 # Extract data at the specified depth
 Lt_depth      = Lt[:, idx_depth]
 Lt_depth_cce1 = Lt_cce1[idx_depth_cce1]
 Lt_depth_cce2 = Lt_cce2[idx_depth_cce2]
 
-Lt_stdm_depth = Lt_stdm[:, idx_depth]
+Lt_stdm_depth      = Lt_stdm[:, idx_depth]
 Lt_stdm_depth_cce1 = Lt_stdm_cce1[idx_depth_cce1]
 Lt_stdm_depth_cce2 = Lt_stdm_cce2[idx_depth_cce2]
 
-psd_depth    = psd[:, idx_depth, :]
+psd_depth      = psd[:, idx_depth, :]
 psd_depth_cce1 = psd_cce1[idx_depth_cce1, :]
 psd_depth_cce2 = psd_cce2[idx_depth_cce2, :]
 
 svf_depth      = svf[:,idx_depth, :]
-svf_depth_cce1 = svf_cce1[idx_depth, :]
-svf_depth_cce2 = svf_cce2[idx_depth, :]
+svf_depth_cce1 = svf_cce1[idx_depth_cce1, :]
+svf_depth_cce2 = svf_cce2[idx_depth_cce2, :]
 
 svf_stdm_depth      = svf_stdm[:,idx_depth, :]
-svf_stdm_depth_cce1 = svf_stdm_cce1[idx_depth, :]
-svf_stdm_depth_cce2 = svf_stdm_cce2[idx_depth, :]
+svf_stdm_depth_cce1 = svf_stdm_cce1[idx_depth_cce1, :]
+svf_stdm_depth_cce2 = svf_stdm_cce2[idx_depth_cce2, :]
 
 # -----------------------------------------------------------------------------
 # Plot decorrelation time scale, SVF and frequency spectra   
@@ -324,9 +326,9 @@ lt_error = ax.fill_between(dist, Lt_depth - Lt_stdm_depth, Lt_depth + Lt_stdm_de
 # Set axis attributes
 ax.set_ylabel('Decorrelation Scale (days)')
 ax.set_xlim(0, dist[-1])
-ax.set_ylim(0,20.25) 
+ax.set_ylim(0,25) 
 ax.set_xticks(np.arange(0,250+25,25))
-ax.set_yticks(np.arange(0,20+5,5)) 
+ax.set_yticks(np.arange(0,25+5,5)) 
 ax.invert_xaxis()
 ax.tick_params(top=True, bottom=True, left=True, right=False, direction='out', length=3.5)
 ax.grid(axis='x', linestyle='--', alpha=0.1, color='k')
@@ -373,8 +375,8 @@ for iband, band in enumerate(svf_bands):
 
 # Set axis attributes for SVF
 ax_svf.set_ylabel(r'$\phi$ ($\%$)')
-ax_svf.set_ylim(0, 80)
-ax_svf.set_yticks(np.arange(0, 81, 10))
+ax_svf.set_ylim(0, 90)
+ax_svf.set_yticks(np.arange(0, 91, 10))
 
 # --- Create top axis for longitude --- #
 ax_top = ax.twiny()

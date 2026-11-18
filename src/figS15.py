@@ -1,0 +1,801 @@
+# =============================================================================
+# Figure S15
+# =============================================================================
+#
+# Caption: 
+#   
+#   
+#
+# Author:
+#   Luke Colosi
+#
+# Created:
+#   2026-10-16
+# =============================================================================
+
+# Import libraries 
+import sys
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt 
+from netCDF4 import Dataset
+import cartopy.crs as ccrs
+import cmocean.cm as cmo
+import matplotlib as mpl
+
+# Set path to project root directory
+ROOT = Path(__file__).resolve().parents[1]
+
+# Set paths to project directories
+PATH_data = ROOT / "data"
+PATH_figs = ROOT / "figs"
+PATH_tools = ROOT / "tools"
+
+# Set path to access additional python functions
+sys.path.append(str(PATH_tools))
+
+# Import plotting toolbox 
+from plotting import set_coastlines, set_grid_ticks, set_cbar, add_scalebar, add_corner_label, plot_transect_distance_axis
+
+# -----------------------------------------------------------------------------
+# Set processing and plotting parameters
+# -----------------------------------------------------------------------------
+
+# ------------#
+# --- Note ---#
+# ------------#
+#
+# - option_data: Data variable to analyze.
+#                Options: "temp", "sal", "density", "uvel", or "vvel".
+# - option_interannual: Specifies the model of the interannual variability. 
+#                       Options include: 'linear' or 'gaussian'
+# - option_detrend_seg: Specifies whether each segment is detrended or not. 
+#                        Options: True or False
+# - segment_months : Specifies the window duration. 
+# - option_depth: Specifies the water depth which the data is extracted from 
+#                 at each mooring.
+#
+# ------------#
+
+# Set processing parameters
+option_data        = 'density'    
+option_interannual = 'linear' 
+option_detrend_seg = True
+segment_months     = 6
+option_depth       = 9 
+option_slope_range = [182.5, 4.0] 
+
+# Label segment processing 
+seg_proc = "detrend" if option_detrend_seg else "demean"
+
+# Set uncertainty estimate parameters
+sn_threshold = 1
+
+# Set font and fontsize using LaTeX 
+fontsize=16
+plt.rcParams.update({
+    "font.size": fontsize,         
+    "text.usetex": True,           
+    "font.family": "serif",       
+    "text.latex.preamble": r"\usepackage{amsmath}" 
+})
+
+# -----------------------------------------------------------------------------
+# Load MITgcm decorrelation scale and spectral data
+# -----------------------------------------------------------------------------
+
+# --- MITgcm Spectral Data --- # 
+
+# Set path to processed regional MITgcm data
+PATH_processed = PATH_data / "mitgcm" / "regional" / "processed"
+
+# Obtain filename paths
+filename_mitgcm = PATH_processed / f"mitgcm_spectra_{option_data}_hrly_reg_{option_interannual}_slope_{option_slope_range[0]}_{option_slope_range[1]}_{seg_proc}_seg_duration_{segment_months}mo.nc"
+
+# Generate the nc data structure
+nc = Dataset(filename_mitgcm, 'r')
+
+# Extract data variables
+lon             = nc.variables['lon'][:]
+lat             = nc.variables['lat'][:]
+svf             = nc.variables['SVF'][:]
+svf_stdm        = nc.variables['SVF_stdm'][:]
+
+# Obtain the low, mid and high frequency band spectral variance fraction and its uncertainty
+svf_low      = svf[:,:,0]
+svf_mid      = svf[:,:,1]
+svf_high     = svf[:,:,2]
+
+svf_stdm_low  = svf_stdm[:,:,0]
+svf_stdm_mid  = svf_stdm[:,:,1]
+svf_stdm_high = svf_stdm[:,:,2]
+
+# --- Bathymetry --- # 
+
+# Obtain filename path
+filename_bathy = PATH_data / "bathymetry" / "etopo1_point_conception.nc"
+
+# Generate the nc data structure
+nc_bathy = Dataset(filename_bathy, 'r')
+
+# Extract data variables
+lon_b  = nc_bathy.variables['lon'][:]
+lat_b  = nc_bathy.variables['lat'][:]
+bathy  = nc_bathy.variables['BATHY'][:]
+
+# --- CCE Mooring Locations --- # 
+lat1, lat2, lat3  = 33.457, 34.3075, 34.44825228022894           
+lon1, lon2, lon3  = -122.52233, -120.8042, -120.53825701527784 
+
+# --- CalCOFI line 80.0 Positions --- # 
+
+# Obtain filename path
+filename = PATH_data / "mitgcm" / "transect" / "processed" / "mitgcm_proc_vel_hrly_trans.nc"
+
+# Load transect coordinates
+with Dataset(filename, 'r') as nc:
+    dist_tr = np.asarray(nc.variables['dist'][:])
+    lon_tr  = np.asarray(nc.variables['LON'][:])
+    lat_tr  = np.asarray(nc.variables['LAT'][:])
+
+# Convert longitude to -180 to 180 degrees
+lon_tr = ((lon_tr + 180) % 360) - 180
+
+# Sort coordinates by distance from shore
+idx = np.argsort(dist_tr)
+dist_tr = dist_tr[idx]
+lon_tr  = lon_tr[idx]
+lat_tr  = lat_tr[idx]
+
+# -----------------------------------------------------------------------------
+# Compute the relative uncertainty of the spectral variance fraction
+# -----------------------------------------------------------------------------
+
+# Compute spatial median
+svf_reg_median_l = np.ma.median(svf_low)
+svf_reg_median_m = np.ma.median(svf_mid)
+svf_reg_median_h = np.ma.median(svf_high)
+    
+# Compute the signal-to-noise ratio (with respect to the regional mean)
+svf_sn_ratio_l = np.abs(svf_low - svf_reg_median_l) / svf_stdm_low
+svf_sn_ratio_m = np.abs(svf_mid - svf_reg_median_m) / svf_stdm_mid
+svf_sn_ratio_h = np.abs(svf_high - svf_reg_median_h) / svf_stdm_high
+
+# Mask not statistically significant grid points
+nonsig_mask_l = np.ma.getmask(np.ma.masked_less_equal(svf_sn_ratio_l, sn_threshold))
+nonsig_mask_m = np.ma.getmask(np.ma.masked_less_equal(svf_sn_ratio_m, sn_threshold))
+nonsig_mask_h = np.ma.getmask(np.ma.masked_less_equal(svf_sn_ratio_h, sn_threshold))
+
+# Get land mask from spectral slope
+land_mask_l = np.ma.getmaskarray(svf_low)
+land_mask_m = np.ma.getmaskarray(svf_mid)
+land_mask_h = np.ma.getmaskarray(svf_high)
+
+# Combine statistical significance and land masks
+combine_mask_l = nonsig_mask_l & ~land_mask_l
+combine_mask_m = nonsig_mask_m & ~land_mask_m
+combine_mask_h = nonsig_mask_h & ~land_mask_h
+
+# Create a mask array where non-significant ocean points = 1, others = NaN
+svf_low_mask  = np.where(combine_mask_l, 1, np.nan)
+svf_mid_mask  = np.where(combine_mask_m, 1, np.nan)
+svf_high_mask = np.where(combine_mask_h, 1, np.nan)
+
+# -----------------------------------------------------------------------------
+# Plot regional spectral slope and spectral variance fraction for low frequencies 
+# -----------------------------------------------------------------------------
+
+# Set plotting parameters
+projection = ccrs.PlateCarree(central_longitude=0.0)
+resolution = "10m"
+xticks = [-123, -122.5, -122, -121.5, -121, -120.5, -120]
+yticks = [33.25, 33.50, 33.75, 34.00, 34.25, 34.50, 34.75, 35.00]
+lon_min, lon_max = -123, -120
+lat_min, lat_max = 33, 35
+levels_is = np.arange(100,300+100,100)
+levels_ms = np.arange(1000,3000+500,500)
+fontsize_g = 15
+fontsize_c = 10
+cmap = cmo.rain
+mpl.rcParams["hatch.linewidth"] = 0.2 
+
+# Create figure
+fig, axes = plt.subplots(3, 1, figsize=(10, 14), subplot_kw={"projection": projection})
+
+# --- Subplot 1 --- # 
+ax = axes[0]
+
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
+
+# Plot the spectral slope 
+ct = ax.contourf(
+    lon, 
+    lat, 
+    svf_low, 
+    levels=np.linspace(40, 82, 43),
+    transform=ccrs.PlateCarree(),
+    cmap=cmap, 
+    extend='both'
+)
+
+# Overlay a contourf with hatching for the non-significant regions
+ax.contourf(
+    lon,
+    lat,
+    svf_low_mask,
+    levels=[0.5, 1.5],      
+    hatches=['....'],   
+    colors='none',          
+    zorder=10,              
+    transform=ccrs.PlateCarree()
+)
+
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
+
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
+
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
+
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+
+# Plot Line 80 CalCOFI transect
+ax.plot(
+    lon_tr,
+    lat_tr,
+    color='k',
+    linestyle= (0, (3, 2)),
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+    zorder=9,
+)
+
+# Plot distance axis along CalCOFI Line 80.0 
+plot_transect_distance_axis(
+    ax,
+    dist_tr,
+    lon_tr,
+    lat_tr,
+    tick_spacing=25,
+    label_spacing=50,
+    tick_length=2.0,
+    linewidth = 1.25,
+    show_labels=False,
+    max_tick_distance=275,
+)
+
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
+    xlabels=False,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
+
+# Create colormap
+cax = plt.axes([0.79, 0.6375, 0.02, 0.24])
+cbar = set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="vertical",
+    extend="both",
+    label=r'$\phi_\mathrm{low}$ ($\%$)',
+    fontsize=fontsize_g,
+    ticks=np.linspace(40, 80, 5), 
+    invert = False
+)
+
+# Set legend
+ax.legend(
+    loc='upper right',
+    bbox_to_anchor=(1.0, 0.905),
+    fontsize=8,
+    framealpha=0.9,
+    edgecolor='black'
+)
+
+# --- Subplot 2 --- # 
+ax = axes[1]
+
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
+
+# Plot the spectral slope 
+ct = ax.contourf(
+    lon, 
+    lat, 
+    svf_mid, 
+    levels=np.linspace(10, 50, 43),
+    transform=ccrs.PlateCarree(),
+    cmap=cmap, 
+    extend='both'
+)
+
+# Overlay a contourf with hatching for the non-significant regions
+ax.contourf(
+    lon,
+    lat,
+    svf_mid_mask,
+    levels=[0.5, 1.5],      
+    hatches=['....'],   
+    colors='none',          
+    zorder=10,              
+    transform=ccrs.PlateCarree()
+)
+
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
+
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
+
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
+
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+
+# Plot Line 80 CalCOFI transect
+ax.plot(
+    lon_tr,
+    lat_tr,
+    color='k',
+    linestyle= (0, (3, 2)),
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+    zorder=9,
+)
+
+# Plot distance axis along CalCOFI Line 80.0 
+plot_transect_distance_axis(
+    ax,
+    dist_tr,
+    lon_tr,
+    lat_tr,
+    tick_spacing=25,
+    label_spacing=50,
+    tick_length=2.0,
+    linewidth = 1.25,
+    show_labels=False,
+    max_tick_distance=275,
+)
+
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
+    xlabels=False,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
+
+# Show x-axis ticks on both the top and bottom axes,
+# but display tick labels only on the bottom axis
+ax.xaxis.set_ticks_position('both')
+
+# Create colormap
+cax = plt.axes([0.79, 0.375, 0.02, 0.24])
+cbar = set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="vertical",
+    extend="both",
+    label=r'$\phi_\mathrm{mid}$ ($\%$)',
+    fontsize=fontsize_g,
+    ticks=np.linspace(10, 50, 5), 
+    invert = False
+)
+
+# Add a 20-km scale bar
+add_scalebar(
+    ax, 
+    length_km=20, 
+    location=(0.925, 0.78),
+    linewidth=1, 
+    text_kwargs=dict(fontsize=10, color='white', weight='bold')
+)
+
+# --- Subplot 3 --- # 
+ax = axes[2]
+
+# Plot coastlines and land 
+set_coastlines(
+    ax, 
+    projection, 
+    resolution, 
+    lon_min=lon_min, 
+    lon_max=lon_max, 
+    lat_min=lat_min, 
+    lat_max=lat_max
+) 
+
+# Plot the spectral slope 
+ct = ax.contourf(
+    lon, 
+    lat, 
+    svf_high, 
+    levels=np.linspace(0, 20, 43),
+    transform=ccrs.PlateCarree(),
+    cmap=cmap, 
+    extend='both'
+)
+
+# Overlay a contourf with hatching for the non-significant regions
+ax.contourf(
+    lon,
+    lat,
+    svf_high_mask,
+    levels=[0.5, 1.5],      
+    hatches=['....'],   
+    colors='none',          
+    zorder=10,              
+    transform=ccrs.PlateCarree()
+)
+
+# Plot the CCE1 mooring point
+ax.scatter(
+    lon1, 
+    lat1, 
+    color='w',
+    edgecolor='black', 
+    marker='^', 
+    s=40, 
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE1'
+)
+
+# Plot the CCE2 mooring point
+ax.scatter(
+    lon2, 
+    lat2, 
+    color='w',  
+    edgecolor='black', 
+    marker='s', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE2'
+)
+
+# Plot the CCE3 mooring point
+ax.scatter(
+    lon3, 
+    lat3, 
+    color= 'w',  
+    edgecolor='black', 
+    marker='o', 
+    s=40,  
+    transform=ccrs.PlateCarree(),
+    zorder=10, 
+    label='CCE3'
+)
+
+# Plot depth contour lines
+ct1 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_ms, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct2 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[2000], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+ct3 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=levels_is, 
+    colors='black', 
+    linewidths=0.5, 
+    linestyles='dashed'
+)
+ct4 = ax.contour(
+    lon_b, 
+    lat_b, 
+    -1*(bathy),
+    levels=[200], 
+    colors='black', 
+    linewidths=1, 
+    linestyles='solid'
+)
+
+# Plot Line 80 CalCOFI transect
+ax.plot(
+    lon_tr,
+    lat_tr,
+    color='k',
+    linestyle= (0, (3, 2)),
+    linewidth=1.5,
+    transform=ccrs.PlateCarree(),
+    zorder=9,
+)
+
+# Plot distance axis along CalCOFI Line 80.0 
+plot_transect_distance_axis(
+    ax,
+    dist_tr,
+    lon_tr,
+    lat_tr,
+    tick_spacing=25,
+    label_spacing=50,
+    tick_length=2.0,
+    linewidth = 1.25,
+    show_labels=False,
+    max_tick_distance=275,
+)
+
+# Set grid ticks 
+set_grid_ticks(
+    ax,
+    xticks=xticks,
+    yticks=yticks,
+    xlabels=False,
+    ylabels=True,
+    grid=True,
+    fontsize=fontsize_g,
+    color='k',
+    lw=1,
+    ls='--',
+    alpha=0.1
+)
+
+# Show x-axis ticks on both the top and bottom axes,
+# but display tick labels only on the bottom axis
+ax.xaxis.set_ticks_position('both')
+
+ax.tick_params(
+    axis='x',
+    which='major',
+    top=True,
+    bottom=True,
+    labeltop=False,
+    labelbottom=True,
+    direction='out',
+    length=5,
+)
+
+# Create colormap
+cax = plt.axes([0.79, 0.113, 0.02, 0.24])
+cbar = set_cbar(
+    ct,
+    cax,
+    fig,
+    orientation="vertical",
+    extend="both",
+    label=r'$\phi_\mathrm{high}$ ($\%$)',
+    fontsize=fontsize_g,
+    ticks=np.linspace(0, 20, 5), 
+    invert = False
+)
+
+# Label each subplot
+pos = [0.96, 0.94]
+add_corner_label(axes[0], pos, 'A', fontsize = 12)
+add_corner_label(axes[1], pos, 'B', fontsize = 12)
+add_corner_label(axes[2], pos, 'C', fontsize = 12)
+
+# Adjust spacing 
+plt.subplots_adjust(hspace=0.075, wspace=0.05)
+
+# Save figure in high resolution 
+fig.savefig(
+    PATH_figs / "figS15.png",
+    dpi=300,
+    facecolor='white',
+    bbox_inches='tight',
+    pad_inches=0.1,
+    transparent=False
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

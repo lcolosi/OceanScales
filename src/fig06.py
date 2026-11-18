@@ -195,7 +195,7 @@ ax.contourf(
     abs(depth),
     data_mask.T,
     levels=[0.5, 1.5],      
-    hatches=['...'],       
+    hatches=['....'],       
     colors='none',          
     zorder=10,              
 )
