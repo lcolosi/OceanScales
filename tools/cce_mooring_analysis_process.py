@@ -81,7 +81,7 @@ if option_mooring == "cce1":
 
 elif option_mooring == "cce2":
 
-    depl_start = 4
+    depl_start = 3
     depl_end = 8
 
     time_bnds = [

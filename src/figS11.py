@@ -3,7 +3,7 @@
 # =============================================================================
 #
 # Caption:
-#   Decorrelation time scale in the study domain at (a) 0.5, (b) 9.6, (c) 52, (d) 99 meter depth. 
+#   Decorrelation time scale in the study domain at (a) 0.5, (b) 9.66, (c) 52.69, (d) 99.37 meter depth. 
 #   Black contour lines are the ocean topography with 200 and 2000 meter
 #   isobaths highlighted as solid black lines. Decorrelation scales that differ
 #   from the regional spatial medain by less than or equal to one standard error
